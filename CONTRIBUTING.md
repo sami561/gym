@@ -188,5 +188,8 @@ The reviewer also checks:
 
 Dependabot PRs (Mondays, into `sandbox`) are reviewed the same way: read the changelog for majors,
 open the app for mobile and web updates. In mobile it leaves Expo SDK upgrades, React and React
-Native alone: they move together with `npx expo install expo@^<sdk> --fix`. Security update PRs
-open on `main`: change their base to `sandbox`.
+Native alone: they move together with `npx expo install expo@^<sdk> --fix`. Packages that only work
+at the same major (Nest, ESLint, Jest, Vite, React, the `docker/*` actions) come in one PR, and
+TypeScript majors are left for a planned upgrade of the whole repo (`.github/dependabot.yml`). A
+`docker/*` action update is only exercised by the Deploy run on `sandbox`: watch that run. Security
+update PRs open on `main`: change their base to `sandbox`.
