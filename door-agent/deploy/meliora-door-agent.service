@@ -1,0 +1,28 @@
+# systemd unit — install with:
+#   sudo cp deploy/meliora-door-agent.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now meliora-door-agent
+#   journalctl -u meliora-door-agent -f
+[Unit]
+Description=Meliora Gym door agent (ZKTeco / relay controller)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=meliora
+WorkingDirectory=/opt/meliora/door-agent
+EnvironmentFile=/opt/meliora/door-agent/.env
+Environment=NODE_ENV=production SCAN_STDIN=false LOG_FORMAT=json TZ=Africa/Tunis
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=3
+TimeoutStopSec=10
+# Hardening: the agent only needs the network and its data directory
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/meliora/door-agent/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

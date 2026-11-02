@@ -1,0 +1,14 @@
+<!-- Événement payment.received — vars: firstName, receiptNumber, paidAt, amount, methodLabel, planName?, reference?, memberCode -->
+[[kicker:Reçu de paiement]]
+[[h1:Merci, {{firstName}} !]]
+<p>Nous avons bien reçu votre paiement. Conservez cet e-mail comme justificatif.</p>
+[[details]]
+[[row:Reçu n°|{{receiptNumber}}]]
+[[row:Date|{{paidAt}}]]
+[[row:Montant|{{amount}}]]
+[[row:Moyen de paiement|{{methodLabel}}]]
+{{#if planName}}[[row:Formule|{{planName}}]]{{/if}}
+{{#if reference}}[[row:Référence|{{reference}}]]{{/if}}
+[[row:Numéro de membre|{{memberCode}}]]
+[[/details]]
+<p style="color:#6b6b6b;font-size:14px;">Besoin d’une facture au nom de votre société ? Demandez-la à l’accueil.</p>

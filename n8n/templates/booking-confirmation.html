@@ -1,0 +1,13 @@
+<!-- Événement booking.created — vars: firstName, sessionTitle, date, timeRange, coachName?, room? -->
+[[kicker:Réservation confirmée]]
+[[h1:À bientôt au cours de {{sessionTitle}} !]]
+<p>Bonjour {{firstName}}, votre place est réservée.</p>
+[[details]]
+[[row:Cours|{{sessionTitle}}]]
+[[row:Date|{{date}}]]
+[[row:Horaire|{{timeRange}}]]
+{{#if coachName}}[[row:Coach|{{coachName}}]]{{/if}}
+{{#if room}}[[row:Salle|{{room}}]]{{/if}}
+[[/details]]
+<p>Arrivez 5 minutes en avance avec une serviette et une bouteille d’eau. Un empêchement ? Annulez depuis l’application pour libérer votre place.</p>
+[[button:Voir mes réservations|{{appUrl}}]]

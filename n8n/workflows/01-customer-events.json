@@ -1,0 +1,782 @@
+{
+  "name": "Meliora · 01 · E-mails clients (événements)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "meliora-events",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "510c7144-94c7-5568-a5f9-99c1c7e50d5d",
+      "name": "Événements Meliora",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "meliora-webhook-auth",
+          "name": "Meliora webhook (Authorization)"
+        }
+      },
+      "webhookId": "dc9d15d6-afc7-520f-b827-0db9337cf50b"
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "dataPropertyName": "signature",
+        "encoding": "hex"
+      },
+      "id": "7a4c715c-208d-5ec3-ade8-bb5d79e01be0",
+      "name": "Calculer la signature",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "credentials": {
+        "crypto": {
+          "id": "meliora-webhook-signature",
+          "name": "Meliora webhook signature"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e056e810-cba3-59f3-ad17-87cdce6713b8",
+              "leftValue": "={{ $json.headers['x-meliora-signature'] }}",
+              "rightValue": "=sha256={{ $json.signature }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "877e525a-1401-5f17-a0e2-25cf265992eb",
+      "name": "Signature valide ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "Signature HMAC invalide : événement ignoré (vérifiez WEBHOOK_SECRET des deux côtés)."
+      },
+      "id": "b3e2c02d-e08c-5470-8a8b-aeaae00beb8a",
+      "name": "Signature invalide",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        720,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "removeItemsSeenInPreviousExecutions",
+        "dedupeValue": "={{ $json.body.id }}",
+        "options": {
+          "historySize": 10000
+        }
+      },
+      "id": "1c486aab-730c-5d54-9bf0-3c57ba86b1fd",
+      "name": "Ignorer les doublons",
+      "type": "n8n-nodes-base.removeDuplicates",
+      "typeVersion": 2,
+      "position": [
+        720,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "05d56637-0a1c-5137-88dc-77e28e4e8cf4",
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "member.created",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Bienvenue"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c401ea11-1494-568c-8060-0e2307d7748d",
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "subscription.created",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Abonnement confirmé"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "af565e74-0c69-564b-a69f-334f4576beb9",
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "payment.received",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Reçu de paiement"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "1c08b9bb-fbda-5f47-8dea-6090c7b96a4e",
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "subscription.expiring",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Rappel d’expiration"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "20468315-a87e-5b70-af27-deda996f03b0",
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "subscription.expired",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Abonnement expiré"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a8c873a2-e26d-5e2b-ae01-7eb89bc798e4",
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "booking.created",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Réservation confirmée"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "b0932610-90a7-5309-9255-514365dda4c5",
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "lead.created",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Séance d’essai"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "2a321d22-4b7f-566c-8871-22ea12012244",
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "sale.completed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Reçu boutique"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "e79a245e-0e29-5d7d-84d0-f3936e3742fa",
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "stock.low",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Alerte stock"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "1f823a40-c03d-5245-b174-0ce3a8ee0eb1",
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "maintenance.opened",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Alerte maintenance"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fe591e8e-717e-5d1c-abde-aa019508f3c0",
+      "name": "Type d’événement",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        960,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $json.from }}",
+        "toEmail": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "html",
+        "html": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "d84fc9e0-50b3-568a-bb58-c47933f7927b",
+      "name": "Envoyer l’e-mail",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1520,
+        200
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "meliora-smtp",
+          "name": "Meliora SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Meliora Gym — e-mail « Bienvenue » (member.created)\n// Généré par n8n/scripts/build.mjs : modifiez n8n/templates/*.html ou n8n/scripts/n8n-code.mjs,\n// puis `npm run build` et réimportez le workflow.\nconst TEMPLATES = {\"welcome\":\"<!DOCTYPE html>\\n<html lang=\\\"fr\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1\\\">\\n<meta name=\\\"color-scheme\\\" content=\\\"light only\\\">\\n<meta name=\\\"supported-color-schemes\\\" content=\\\"light only\\\">\\n<title>{{subject}}</title>\\n<style>\\n  @media (max-width: 620px) {\\n    .container { width: 100% !important; }\\n    .px { padding-left: 22px !important; padding-right: 22px !important; }\\n    .h1 { font-size: 25px !important; }\\n  }\\n  a { color: #E10600; }\\n</style>\\n</head>\\n<body style=\\\"margin:0;padding:0;background:#f1f1f1;-webkit-text-size-adjust:100%;\\\">\\n<div style=\\\"display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;\\\">{{preheader}}</div>\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"background:#f1f1f1;\\\">\\n  <tr>\\n    <td align=\\\"center\\\" style=\\\"padding:24px 12px;\\\">\\n      <table role=\\\"presentation\\\" class=\\\"container\\\" width=\\\"600\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"width:600px;max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;\\\">\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:20px 32px;\\\">\\n            <table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\">\\n              <tr>\\n                <td style=\\\"vertical-align:middle;\\\">\\n                  <a href=\\\"{{websiteUrl}}\\\" style=\\\"text-decoration:none;\\\"><img src=\\\"{{logoUrl}}\\\" width=\\\"56\\\" height=\\\"56\\\" alt=\\\"Meliora Gym\\\" style=\\\"display:block;width:56px;height:56px;border:0;border-radius:10px;background:#ffffff;\\\"></a>\\n                </td>\\n                <td align=\\\"right\\\" style=\\\"vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:bold;letter-spacing:4px;text-transform:uppercase;color:#ffffff;\\\">\\n                  Meliora <span style=\\\"color:#E10600;\\\">Gym</span>\\n                </td>\\n              </tr>\\n            </table>\\n          </td>\\n        </tr>\\n        <tr><td style=\\\"height:4px;line-height:4px;font-size:0;background:#E10600;\\\">&nbsp;</td></tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"padding:36px 40px 30px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#1b1b1b;\\\">\\n<p style=\\\"margin:0 0 8px;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#E10600;\\\">Bienvenue dans la famille</p>\\n<h1 class=\\\"h1\\\" style=\\\"margin:0 0 18px;font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:30px;line-height:1.2;color:#0b0b0c;\\\">Bienvenue chez Meliora, {{firstName}} !</h1>\\n<p style=\\\"margin:0 0 14px;\\\">Votre compte membre est prêt. À partir d’aujourd’hui, on avance ensemble vers votre meilleure version, un entraînement à la fois.</p>\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"margin:20px 0;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\\\">\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Numéro de membre</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{memberCode}}</td></tr>\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Adresse du club</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{address}}</td></tr>\\n</table>\\n<p style=\\\"margin:0 0 14px;\\\">Avec l’application Meliora, vous pouvez :</p>\\n<ul style=\\\"margin:0 0 14px;padding-left:20px;\\\">\\n  <li>entrer au club avec votre QR code personnel (il change toutes les 30 secondes) ;</li>\\n  <li>réserver vos cours collectifs ;</li>\\n  <li>suivre votre abonnement et vos visites.</li>\\n</ul>\\n<table role=\\\"presentation\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"margin:28px 0 10px;\\\"><tr><td style=\\\"border-radius:8px;background:#E10600;\\\"><a href=\\\"{{appUrl}}\\\" style=\\\"display:inline-block;padding:14px 28px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:8px;\\\">Ouvrir l’application</a></td></tr></table>\\n<p style=\\\"color:#6b6b6b;font-size:14px;\\\">Une question ? Répondez simplement à cet e-mail ou passez nous voir à l’accueil.</p>\\n          </td>\\n        </tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:26px 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#bdbdbd;\\\">\\n            <strong style=\\\"color:#ffffff;font-size:13px;letter-spacing:1px;\\\">MELIORA GYM</strong><br>\\n            {{address}}{{#if phone}} · {{phone}}{{/if}}<br>\\n            <a href=\\\"{{instagramUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Instagram {{instagramHandle}}</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{mapsUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Itinéraire</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{websiteUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Site web</a>\\n            {{#if footerNote}}<p style=\\\"margin:14px 0 0;color:#8c8c8c;\\\">{{footerNote}}</p>{{/if}}\\n            <p style=\\\"margin:14px 0 0;color:#6f6f6f;\\\">© {{year}} Meliora Gym — Sousse, Tunisie</p>\\n          </td>\\n        </tr>\\n      </table>\\n    </td>\\n  </tr>\\n</table>\\n</body>\\n</html>\\n\"};\n\nconst env = (key, fallback = '') => {\n  try {\n    const value = $env[key];\n    return value === undefined || value === null || value === '' ? fallback : String(value);\n  } catch (error) {\n    return fallback; // N8N_BLOCK_ENV_ACCESS_IN_NODE=true\n  }\n};\nconst BRAND = {\n  logoUrl: env('MELIORA_LOGO_URL', 'https://meliora-gym.tn/images/logo.jpg'),\n  websiteUrl: env('MELIORA_WEBSITE_URL', 'https://meliora-gym.tn'),\n  appUrl: env('MELIORA_APP_URL', 'https://meliora-gym.tn/app'),\n  adminUrl: env('MELIORA_ADMIN_URL', 'https://meliora-gym.tn/admin'),\n  mapsUrl: env('MELIORA_MAPS_URL', 'https://maps.app.goo.gl/CVWB98nx2RdSd8Mw8'),\n  instagramUrl: 'https://www.instagram.com/gymmeliora/',\n  instagramHandle: '@gymmeliora',\n  address: 'Khzema Est, Rue Colonel Garnaoui, Sousse 4051',\n  phone: env('MELIORA_GYM_PHONE'),\n};\nconst FROM = env('MELIORA_FROM_EMAIL', 'Meliora Gym <contact@meliora-gym.tn>');\nconst OWNER = env('MELIORA_OWNER_EMAIL');\nconst STAFF = env('MELIORA_STAFF_EMAIL', OWNER);\nconst MEMBER_NOTE = 'Vous recevez cet e-mail car vous êtes membre de Meliora Gym. Répondez « STOP » pour ne plus recevoir nos messages.';\nconst TZ = 'Africa/Tunis';\n\nconst esc = (value) =>\n  String(value ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);\n// {{#if key}}…{{/if}} blocks, then {{{raw}}} / {{escaped}} values in a single pass (values are never re-scanned).\nconst render = (template, vars) =>\n  template\n    .replace(/\\{\\{#if (\\w+)\\}\\}([\\s\\S]*?)\\{\\{\\/if\\}\\}/g, (_, key, inner) => (vars[key] ? inner : ''))\n    .replace(/\\{\\{\\{(\\w+)\\}\\}\\}|\\{\\{(\\w+)\\}\\}/g, (_, raw, key) => (raw ? String(vars[raw] ?? '') : esc(vars[key])));\n\nconst asDate = (value) =>\n  typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) ? new Date(`${value}T12:00:00Z`) : new Date(value);\nconst fmt = (value, options) => {\n  if (!value) return '';\n  const date = asDate(value);\n  return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat('fr-FR', { timeZone: TZ, ...options }).format(date);\n};\nconst longDate = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst dayMonth = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long' });\nconst shortDate = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric' });\nconst dateTime = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });\nconst hour = (value) => fmt(value, { hour: '2-digit', minute: '2-digit' });\nconst dayKey = (value) => fmt(value, { year: 'numeric', month: '2-digit', day: '2-digit' }).split('/').reverse().join('-');\nconst capitalize = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : '');\nconst money = (amount) =>\n  `${Number(amount || 0).toLocaleString('fr-FR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} DT`;\nconst plural = (count, one, many) => `${count} ${Math.abs(Number(count)) === 1 ? one : many}`;\nconst firstWord = (name) => String(name || '').trim().split(/\\s+/)[0] || '';\nconst weekRange = (from, to) => `${fmt(from, { day: 'numeric', month: 'long' })} au ${fmt(to, { day: 'numeric', month: 'long', year: 'numeric' })}`;\n\nconst METHODS = { CASH: 'Espèces', CARD: 'Carte bancaire', TRANSFER: 'Virement bancaire', D17: 'D17' };\nconst SOURCES = {\n  WALK_IN: 'Passage à l’accueil',\n  INSTAGRAM: 'Instagram',\n  FACEBOOK: 'Facebook',\n  WEBSITE: 'Site web',\n  REFERRAL: 'Parrainage',\n  PHONE: 'Téléphone',\n  OTHER: 'Autre',\n};\nconst PRIORITIES = { LOW: 'basse', MEDIUM: 'moyenne', HIGH: 'haute', URGENT: 'urgente' };\n\n/** One e-mail item for the \"Send Email\" node, or null when there is no usable recipient. */\nconst email = (template, { to, subject, preheader = '', vars = {}, footerNote = '' }) => {\n  const recipient = String(to || '').trim();\n  if (!recipient.includes('@')) return null;\n  const html = render(TEMPLATES[template], {\n    ...BRAND,\n    year: new Date().getFullYear(),\n    subject,\n    preheader,\n    footerNote,\n    ...vars,\n  });\n  return { json: { from: FROM, to: recipient, subject, html } };\n};\n\n/** Bordered list used in owner digests: rows of { title, detail }. */\nconst listTable = (rows, empty = 'Rien à signaler ✅') => {\n  if (!rows.length) return `<p style=\"margin:0 0 14px;color:#2e7d32;\">${esc(empty)}</p>`;\n  const body = rows\n    .map(\n      (row) =>\n        `<tr><td style=\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;\"><strong style=\"color:#0b0b0c;\">${esc(row.title)}</strong>` +\n        (row.detail ? `<br><span style=\"color:#6b6b6b;font-size:13px;\">${esc(row.detail)}</span>` : '') +\n        '</td></tr>',\n    )\n    .join('');\n  return `<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 18px;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\">${body}</table>`;\n};\n\nreturn $input\n  .all()\n  .map((item) => {\n    const d = item.json.body?.data ?? {};\n    return email('welcome', {\n      to: d.email,\n      subject: `Bienvenue chez Meliora Gym, ${d.firstName} !`,\n      preheader: 'Votre compte membre est prêt : QR code d’accès, réservations et suivi dans l’application.',\n      vars: { firstName: d.firstName, memberCode: d.memberCode },\n    });\n  })\n  .filter(Boolean);"
+      },
+      "id": "bbefbd69-d0c5-510e-8709-8f63379f9958",
+      "name": "Préparer · Bienvenue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        -520
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Meliora Gym — e-mail « Abonnement confirmé » (subscription.created)\n// Généré par n8n/scripts/build.mjs : modifiez n8n/templates/*.html ou n8n/scripts/n8n-code.mjs,\n// puis `npm run build` et réimportez le workflow.\nconst TEMPLATES = {\"subscriptionConfirmation\":\"<!DOCTYPE html>\\n<html lang=\\\"fr\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1\\\">\\n<meta name=\\\"color-scheme\\\" content=\\\"light only\\\">\\n<meta name=\\\"supported-color-schemes\\\" content=\\\"light only\\\">\\n<title>{{subject}}</title>\\n<style>\\n  @media (max-width: 620px) {\\n    .container { width: 100% !important; }\\n    .px { padding-left: 22px !important; padding-right: 22px !important; }\\n    .h1 { font-size: 25px !important; }\\n  }\\n  a { color: #E10600; }\\n</style>\\n</head>\\n<body style=\\\"margin:0;padding:0;background:#f1f1f1;-webkit-text-size-adjust:100%;\\\">\\n<div style=\\\"display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;\\\">{{preheader}}</div>\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"background:#f1f1f1;\\\">\\n  <tr>\\n    <td align=\\\"center\\\" style=\\\"padding:24px 12px;\\\">\\n      <table role=\\\"presentation\\\" class=\\\"container\\\" width=\\\"600\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"width:600px;max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;\\\">\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:20px 32px;\\\">\\n            <table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\">\\n              <tr>\\n                <td style=\\\"vertical-align:middle;\\\">\\n                  <a href=\\\"{{websiteUrl}}\\\" style=\\\"text-decoration:none;\\\"><img src=\\\"{{logoUrl}}\\\" width=\\\"56\\\" height=\\\"56\\\" alt=\\\"Meliora Gym\\\" style=\\\"display:block;width:56px;height:56px;border:0;border-radius:10px;background:#ffffff;\\\"></a>\\n                </td>\\n                <td align=\\\"right\\\" style=\\\"vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:bold;letter-spacing:4px;text-transform:uppercase;color:#ffffff;\\\">\\n                  Meliora <span style=\\\"color:#E10600;\\\">Gym</span>\\n                </td>\\n              </tr>\\n            </table>\\n          </td>\\n        </tr>\\n        <tr><td style=\\\"height:4px;line-height:4px;font-size:0;background:#E10600;\\\">&nbsp;</td></tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"padding:36px 40px 30px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#1b1b1b;\\\">\\n<p style=\\\"margin:0 0 8px;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#E10600;\\\">Abonnement confirmé</p>\\n<h1 class=\\\"h1\\\" style=\\\"margin:0 0 18px;font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:30px;line-height:1.2;color:#0b0b0c;\\\">C’est parti, {{firstName}} !</h1>\\n<p style=\\\"margin:0 0 14px;\\\">Votre abonnement <strong>{{planName}}</strong> est enregistré. Voici le récapitulatif :</p>\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"margin:20px 0;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\\\">\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Formule</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{planName}}</td></tr>\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Début</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{startDate}}</td></tr>\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Fin</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{endDate}}</td></tr>\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Montant</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{price}}</td></tr>\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Numéro de membre</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{memberCode}}</td></tr>\\n</table>\\n<table role=\\\"presentation\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"margin:28px 0 10px;\\\"><tr><td style=\\\"border-radius:8px;background:#E10600;\\\"><a href=\\\"{{appUrl}}\\\" style=\\\"display:inline-block;padding:14px 28px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:8px;\\\">Ouvrir mon espace membre</a></td></tr></table>\\n<p style=\\\"margin:0 0 14px;\\\">On a hâte de vous voir à la salle 💪</p>\\n          </td>\\n        </tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:26px 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#bdbdbd;\\\">\\n            <strong style=\\\"color:#ffffff;font-size:13px;letter-spacing:1px;\\\">MELIORA GYM</strong><br>\\n            {{address}}{{#if phone}} · {{phone}}{{/if}}<br>\\n            <a href=\\\"{{instagramUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Instagram {{instagramHandle}}</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{mapsUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Itinéraire</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{websiteUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Site web</a>\\n            {{#if footerNote}}<p style=\\\"margin:14px 0 0;color:#8c8c8c;\\\">{{footerNote}}</p>{{/if}}\\n            <p style=\\\"margin:14px 0 0;color:#6f6f6f;\\\">© {{year}} Meliora Gym — Sousse, Tunisie</p>\\n          </td>\\n        </tr>\\n      </table>\\n    </td>\\n  </tr>\\n</table>\\n</body>\\n</html>\\n\"};\n\nconst env = (key, fallback = '') => {\n  try {\n    const value = $env[key];\n    return value === undefined || value === null || value === '' ? fallback : String(value);\n  } catch (error) {\n    return fallback; // N8N_BLOCK_ENV_ACCESS_IN_NODE=true\n  }\n};\nconst BRAND = {\n  logoUrl: env('MELIORA_LOGO_URL', 'https://meliora-gym.tn/images/logo.jpg'),\n  websiteUrl: env('MELIORA_WEBSITE_URL', 'https://meliora-gym.tn'),\n  appUrl: env('MELIORA_APP_URL', 'https://meliora-gym.tn/app'),\n  adminUrl: env('MELIORA_ADMIN_URL', 'https://meliora-gym.tn/admin'),\n  mapsUrl: env('MELIORA_MAPS_URL', 'https://maps.app.goo.gl/CVWB98nx2RdSd8Mw8'),\n  instagramUrl: 'https://www.instagram.com/gymmeliora/',\n  instagramHandle: '@gymmeliora',\n  address: 'Khzema Est, Rue Colonel Garnaoui, Sousse 4051',\n  phone: env('MELIORA_GYM_PHONE'),\n};\nconst FROM = env('MELIORA_FROM_EMAIL', 'Meliora Gym <contact@meliora-gym.tn>');\nconst OWNER = env('MELIORA_OWNER_EMAIL');\nconst STAFF = env('MELIORA_STAFF_EMAIL', OWNER);\nconst MEMBER_NOTE = 'Vous recevez cet e-mail car vous êtes membre de Meliora Gym. Répondez « STOP » pour ne plus recevoir nos messages.';\nconst TZ = 'Africa/Tunis';\n\nconst esc = (value) =>\n  String(value ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);\n// {{#if key}}…{{/if}} blocks, then {{{raw}}} / {{escaped}} values in a single pass (values are never re-scanned).\nconst render = (template, vars) =>\n  template\n    .replace(/\\{\\{#if (\\w+)\\}\\}([\\s\\S]*?)\\{\\{\\/if\\}\\}/g, (_, key, inner) => (vars[key] ? inner : ''))\n    .replace(/\\{\\{\\{(\\w+)\\}\\}\\}|\\{\\{(\\w+)\\}\\}/g, (_, raw, key) => (raw ? String(vars[raw] ?? '') : esc(vars[key])));\n\nconst asDate = (value) =>\n  typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) ? new Date(`${value}T12:00:00Z`) : new Date(value);\nconst fmt = (value, options) => {\n  if (!value) return '';\n  const date = asDate(value);\n  return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat('fr-FR', { timeZone: TZ, ...options }).format(date);\n};\nconst longDate = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst dayMonth = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long' });\nconst shortDate = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric' });\nconst dateTime = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });\nconst hour = (value) => fmt(value, { hour: '2-digit', minute: '2-digit' });\nconst dayKey = (value) => fmt(value, { year: 'numeric', month: '2-digit', day: '2-digit' }).split('/').reverse().join('-');\nconst capitalize = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : '');\nconst money = (amount) =>\n  `${Number(amount || 0).toLocaleString('fr-FR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} DT`;\nconst plural = (count, one, many) => `${count} ${Math.abs(Number(count)) === 1 ? one : many}`;\nconst firstWord = (name) => String(name || '').trim().split(/\\s+/)[0] || '';\nconst weekRange = (from, to) => `${fmt(from, { day: 'numeric', month: 'long' })} au ${fmt(to, { day: 'numeric', month: 'long', year: 'numeric' })}`;\n\nconst METHODS = { CASH: 'Espèces', CARD: 'Carte bancaire', TRANSFER: 'Virement bancaire', D17: 'D17' };\nconst SOURCES = {\n  WALK_IN: 'Passage à l’accueil',\n  INSTAGRAM: 'Instagram',\n  FACEBOOK: 'Facebook',\n  WEBSITE: 'Site web',\n  REFERRAL: 'Parrainage',\n  PHONE: 'Téléphone',\n  OTHER: 'Autre',\n};\nconst PRIORITIES = { LOW: 'basse', MEDIUM: 'moyenne', HIGH: 'haute', URGENT: 'urgente' };\n\n/** One e-mail item for the \"Send Email\" node, or null when there is no usable recipient. */\nconst email = (template, { to, subject, preheader = '', vars = {}, footerNote = '' }) => {\n  const recipient = String(to || '').trim();\n  if (!recipient.includes('@')) return null;\n  const html = render(TEMPLATES[template], {\n    ...BRAND,\n    year: new Date().getFullYear(),\n    subject,\n    preheader,\n    footerNote,\n    ...vars,\n  });\n  return { json: { from: FROM, to: recipient, subject, html } };\n};\n\n/** Bordered list used in owner digests: rows of { title, detail }. */\nconst listTable = (rows, empty = 'Rien à signaler ✅') => {\n  if (!rows.length) return `<p style=\"margin:0 0 14px;color:#2e7d32;\">${esc(empty)}</p>`;\n  const body = rows\n    .map(\n      (row) =>\n        `<tr><td style=\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;\"><strong style=\"color:#0b0b0c;\">${esc(row.title)}</strong>` +\n        (row.detail ? `<br><span style=\"color:#6b6b6b;font-size:13px;\">${esc(row.detail)}</span>` : '') +\n        '</td></tr>',\n    )\n    .join('');\n  return `<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 18px;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\">${body}</table>`;\n};\n\nreturn $input\n  .all()\n  .map((item) => {\n    const d = item.json.body?.data ?? {};\n    return email('subscriptionConfirmation', {\n      to: d.email,\n      subject: `Abonnement ${d.planName} confirmé`,\n      preheader: `Du ${shortDate(d.startDate)} au ${shortDate(d.endDate)}.`,\n      vars: {\n        firstName: d.firstName,\n        planName: d.planName,\n        startDate: longDate(d.startDate),\n        endDate: longDate(d.endDate),\n        price: money(d.price),\n        memberCode: d.memberCode,\n      },\n    });\n  })\n  .filter(Boolean);"
+      },
+      "id": "3b478c9e-2f01-5a40-baa4-465d272db11d",
+      "name": "Préparer · Abonnement confirmé",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Meliora Gym — e-mail « Reçu de paiement » (payment.received)\n// Généré par n8n/scripts/build.mjs : modifiez n8n/templates/*.html ou n8n/scripts/n8n-code.mjs,\n// puis `npm run build` et réimportez le workflow.\nconst TEMPLATES = {\"paymentReceipt\":\"<!DOCTYPE html>\\n<html lang=\\\"fr\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1\\\">\\n<meta name=\\\"color-scheme\\\" content=\\\"light only\\\">\\n<meta name=\\\"supported-color-schemes\\\" content=\\\"light only\\\">\\n<title>{{subject}}</title>\\n<style>\\n  @media (max-width: 620px) {\\n    .container { width: 100% !important; }\\n    .px { padding-left: 22px !important; padding-right: 22px !important; }\\n    .h1 { font-size: 25px !important; }\\n  }\\n  a { color: #E10600; }\\n</style>\\n</head>\\n<body style=\\\"margin:0;padding:0;background:#f1f1f1;-webkit-text-size-adjust:100%;\\\">\\n<div style=\\\"display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;\\\">{{preheader}}</div>\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"background:#f1f1f1;\\\">\\n  <tr>\\n    <td align=\\\"center\\\" style=\\\"padding:24px 12px;\\\">\\n      <table role=\\\"presentation\\\" class=\\\"container\\\" width=\\\"600\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"width:600px;max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;\\\">\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:20px 32px;\\\">\\n            <table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\">\\n              <tr>\\n                <td style=\\\"vertical-align:middle;\\\">\\n                  <a href=\\\"{{websiteUrl}}\\\" style=\\\"text-decoration:none;\\\"><img src=\\\"{{logoUrl}}\\\" width=\\\"56\\\" height=\\\"56\\\" alt=\\\"Meliora Gym\\\" style=\\\"display:block;width:56px;height:56px;border:0;border-radius:10px;background:#ffffff;\\\"></a>\\n                </td>\\n                <td align=\\\"right\\\" style=\\\"vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:bold;letter-spacing:4px;text-transform:uppercase;color:#ffffff;\\\">\\n                  Meliora <span style=\\\"color:#E10600;\\\">Gym</span>\\n                </td>\\n              </tr>\\n            </table>\\n          </td>\\n        </tr>\\n        <tr><td style=\\\"height:4px;line-height:4px;font-size:0;background:#E10600;\\\">&nbsp;</td></tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"padding:36px 40px 30px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#1b1b1b;\\\">\\n<p style=\\\"margin:0 0 8px;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#E10600;\\\">Reçu de paiement</p>\\n<h1 class=\\\"h1\\\" style=\\\"margin:0 0 18px;font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:30px;line-height:1.2;color:#0b0b0c;\\\">Merci, {{firstName}} !</h1>\\n<p style=\\\"margin:0 0 14px;\\\">Nous avons bien reçu votre paiement. Conservez cet e-mail comme justificatif.</p>\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"margin:20px 0;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\\\">\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Reçu n°</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{receiptNumber}}</td></tr>\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Date</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{paidAt}}</td></tr>\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Montant</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{amount}}</td></tr>\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Moyen de paiement</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{methodLabel}}</td></tr>\\n{{#if planName}}<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Formule</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{planName}}</td></tr>{{/if}}\\n{{#if reference}}<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Référence</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{reference}}</td></tr>{{/if}}\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Numéro de membre</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{memberCode}}</td></tr>\\n</table>\\n<p style=\\\"color:#6b6b6b;font-size:14px;\\\">Besoin d’une facture au nom de votre société ? Demandez-la à l’accueil.</p>\\n          </td>\\n        </tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:26px 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#bdbdbd;\\\">\\n            <strong style=\\\"color:#ffffff;font-size:13px;letter-spacing:1px;\\\">MELIORA GYM</strong><br>\\n            {{address}}{{#if phone}} · {{phone}}{{/if}}<br>\\n            <a href=\\\"{{instagramUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Instagram {{instagramHandle}}</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{mapsUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Itinéraire</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{websiteUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Site web</a>\\n            {{#if footerNote}}<p style=\\\"margin:14px 0 0;color:#8c8c8c;\\\">{{footerNote}}</p>{{/if}}\\n            <p style=\\\"margin:14px 0 0;color:#6f6f6f;\\\">© {{year}} Meliora Gym — Sousse, Tunisie</p>\\n          </td>\\n        </tr>\\n      </table>\\n    </td>\\n  </tr>\\n</table>\\n</body>\\n</html>\\n\"};\n\nconst env = (key, fallback = '') => {\n  try {\n    const value = $env[key];\n    return value === undefined || value === null || value === '' ? fallback : String(value);\n  } catch (error) {\n    return fallback; // N8N_BLOCK_ENV_ACCESS_IN_NODE=true\n  }\n};\nconst BRAND = {\n  logoUrl: env('MELIORA_LOGO_URL', 'https://meliora-gym.tn/images/logo.jpg'),\n  websiteUrl: env('MELIORA_WEBSITE_URL', 'https://meliora-gym.tn'),\n  appUrl: env('MELIORA_APP_URL', 'https://meliora-gym.tn/app'),\n  adminUrl: env('MELIORA_ADMIN_URL', 'https://meliora-gym.tn/admin'),\n  mapsUrl: env('MELIORA_MAPS_URL', 'https://maps.app.goo.gl/CVWB98nx2RdSd8Mw8'),\n  instagramUrl: 'https://www.instagram.com/gymmeliora/',\n  instagramHandle: '@gymmeliora',\n  address: 'Khzema Est, Rue Colonel Garnaoui, Sousse 4051',\n  phone: env('MELIORA_GYM_PHONE'),\n};\nconst FROM = env('MELIORA_FROM_EMAIL', 'Meliora Gym <contact@meliora-gym.tn>');\nconst OWNER = env('MELIORA_OWNER_EMAIL');\nconst STAFF = env('MELIORA_STAFF_EMAIL', OWNER);\nconst MEMBER_NOTE = 'Vous recevez cet e-mail car vous êtes membre de Meliora Gym. Répondez « STOP » pour ne plus recevoir nos messages.';\nconst TZ = 'Africa/Tunis';\n\nconst esc = (value) =>\n  String(value ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);\n// {{#if key}}…{{/if}} blocks, then {{{raw}}} / {{escaped}} values in a single pass (values are never re-scanned).\nconst render = (template, vars) =>\n  template\n    .replace(/\\{\\{#if (\\w+)\\}\\}([\\s\\S]*?)\\{\\{\\/if\\}\\}/g, (_, key, inner) => (vars[key] ? inner : ''))\n    .replace(/\\{\\{\\{(\\w+)\\}\\}\\}|\\{\\{(\\w+)\\}\\}/g, (_, raw, key) => (raw ? String(vars[raw] ?? '') : esc(vars[key])));\n\nconst asDate = (value) =>\n  typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) ? new Date(`${value}T12:00:00Z`) : new Date(value);\nconst fmt = (value, options) => {\n  if (!value) return '';\n  const date = asDate(value);\n  return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat('fr-FR', { timeZone: TZ, ...options }).format(date);\n};\nconst longDate = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst dayMonth = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long' });\nconst shortDate = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric' });\nconst dateTime = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });\nconst hour = (value) => fmt(value, { hour: '2-digit', minute: '2-digit' });\nconst dayKey = (value) => fmt(value, { year: 'numeric', month: '2-digit', day: '2-digit' }).split('/').reverse().join('-');\nconst capitalize = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : '');\nconst money = (amount) =>\n  `${Number(amount || 0).toLocaleString('fr-FR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} DT`;\nconst plural = (count, one, many) => `${count} ${Math.abs(Number(count)) === 1 ? one : many}`;\nconst firstWord = (name) => String(name || '').trim().split(/\\s+/)[0] || '';\nconst weekRange = (from, to) => `${fmt(from, { day: 'numeric', month: 'long' })} au ${fmt(to, { day: 'numeric', month: 'long', year: 'numeric' })}`;\n\nconst METHODS = { CASH: 'Espèces', CARD: 'Carte bancaire', TRANSFER: 'Virement bancaire', D17: 'D17' };\nconst SOURCES = {\n  WALK_IN: 'Passage à l’accueil',\n  INSTAGRAM: 'Instagram',\n  FACEBOOK: 'Facebook',\n  WEBSITE: 'Site web',\n  REFERRAL: 'Parrainage',\n  PHONE: 'Téléphone',\n  OTHER: 'Autre',\n};\nconst PRIORITIES = { LOW: 'basse', MEDIUM: 'moyenne', HIGH: 'haute', URGENT: 'urgente' };\n\n/** One e-mail item for the \"Send Email\" node, or null when there is no usable recipient. */\nconst email = (template, { to, subject, preheader = '', vars = {}, footerNote = '' }) => {\n  const recipient = String(to || '').trim();\n  if (!recipient.includes('@')) return null;\n  const html = render(TEMPLATES[template], {\n    ...BRAND,\n    year: new Date().getFullYear(),\n    subject,\n    preheader,\n    footerNote,\n    ...vars,\n  });\n  return { json: { from: FROM, to: recipient, subject, html } };\n};\n\n/** Bordered list used in owner digests: rows of { title, detail }. */\nconst listTable = (rows, empty = 'Rien à signaler ✅') => {\n  if (!rows.length) return `<p style=\"margin:0 0 14px;color:#2e7d32;\">${esc(empty)}</p>`;\n  const body = rows\n    .map(\n      (row) =>\n        `<tr><td style=\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;\"><strong style=\"color:#0b0b0c;\">${esc(row.title)}</strong>` +\n        (row.detail ? `<br><span style=\"color:#6b6b6b;font-size:13px;\">${esc(row.detail)}</span>` : '') +\n        '</td></tr>',\n    )\n    .join('');\n  return `<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 18px;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\">${body}</table>`;\n};\n\nreturn $input\n  .all()\n  .map((item) => {\n    const d = item.json.body?.data ?? {};\n    return email('paymentReceipt', {\n      to: d.email,\n      subject: `Reçu de paiement — ${money(d.amount)}`,\n      preheader: `Paiement de ${money(d.amount)} reçu le ${shortDate(d.paidAt)}.`,\n      vars: {\n        firstName: d.firstName,\n        receiptNumber: `MEL-${String(d.paymentId ?? '').slice(-8).toUpperCase()}`,\n        paidAt: dateTime(d.paidAt),\n        amount: money(d.amount),\n        methodLabel: METHODS[d.method] ?? d.method,\n        planName: d.planName,\n        reference: d.reference,\n        memberCode: d.memberCode,\n      },\n    });\n  })\n  .filter(Boolean);"
+      },
+      "id": "dac039e3-9da7-5480-bcf3-75796b361397",
+      "name": "Préparer · Reçu de paiement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Meliora Gym — e-mail « Rappel d’expiration » (subscription.expiring)\n// Généré par n8n/scripts/build.mjs : modifiez n8n/templates/*.html ou n8n/scripts/n8n-code.mjs,\n// puis `npm run build` et réimportez le workflow.\nconst TEMPLATES = {\"expiryReminder\":\"<!DOCTYPE html>\\n<html lang=\\\"fr\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1\\\">\\n<meta name=\\\"color-scheme\\\" content=\\\"light only\\\">\\n<meta name=\\\"supported-color-schemes\\\" content=\\\"light only\\\">\\n<title>{{subject}}</title>\\n<style>\\n  @media (max-width: 620px) {\\n    .container { width: 100% !important; }\\n    .px { padding-left: 22px !important; padding-right: 22px !important; }\\n    .h1 { font-size: 25px !important; }\\n  }\\n  a { color: #E10600; }\\n</style>\\n</head>\\n<body style=\\\"margin:0;padding:0;background:#f1f1f1;-webkit-text-size-adjust:100%;\\\">\\n<div style=\\\"display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;\\\">{{preheader}}</div>\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"background:#f1f1f1;\\\">\\n  <tr>\\n    <td align=\\\"center\\\" style=\\\"padding:24px 12px;\\\">\\n      <table role=\\\"presentation\\\" class=\\\"container\\\" width=\\\"600\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"width:600px;max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;\\\">\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:20px 32px;\\\">\\n            <table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\">\\n              <tr>\\n                <td style=\\\"vertical-align:middle;\\\">\\n                  <a href=\\\"{{websiteUrl}}\\\" style=\\\"text-decoration:none;\\\"><img src=\\\"{{logoUrl}}\\\" width=\\\"56\\\" height=\\\"56\\\" alt=\\\"Meliora Gym\\\" style=\\\"display:block;width:56px;height:56px;border:0;border-radius:10px;background:#ffffff;\\\"></a>\\n                </td>\\n                <td align=\\\"right\\\" style=\\\"vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:bold;letter-spacing:4px;text-transform:uppercase;color:#ffffff;\\\">\\n                  Meliora <span style=\\\"color:#E10600;\\\">Gym</span>\\n                </td>\\n              </tr>\\n            </table>\\n          </td>\\n        </tr>\\n        <tr><td style=\\\"height:4px;line-height:4px;font-size:0;background:#E10600;\\\">&nbsp;</td></tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"padding:36px 40px 30px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#1b1b1b;\\\">\\n<p style=\\\"margin:0 0 8px;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#E10600;\\\">Rappel d’abonnement</p>\\n<h1 class=\\\"h1\\\" style=\\\"margin:0 0 18px;font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:30px;line-height:1.2;color:#0b0b0c;\\\">Plus que {{daysLabel}}, {{firstName}} !</h1>\\n<p style=\\\"margin:0 0 14px;\\\">Votre abonnement <strong>{{planName}}</strong> se termine le <strong>{{endDate}}</strong>. Renouvelez-le dès maintenant pour garder votre accès au club sans interruption.</p>\\n<div style=\\\"margin:20px 0;padding:14px 18px;background:#f7f7f7;border-left:4px solid #E10600;border-radius:6px;font-size:14px;color:#333333;\\\">Un renouvellement payé à l’avance démarre automatiquement le lendemain de la fin de votre abonnement actuel : vous ne perdez aucun jour.</div>\\n<table role=\\\"presentation\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"margin:28px 0 10px;\\\"><tr><td style=\\\"border-radius:8px;background:#E10600;\\\"><a href=\\\"{{appUrl}}\\\" style=\\\"display:inline-block;padding:14px 28px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:8px;\\\">Renouveler mon abonnement</a></td></tr></table>\\n<p style=\\\"margin:0 0 14px;\\\">Vous pouvez aussi renouveler à l’accueil (espèces, carte bancaire ou D17).</p>\\n          </td>\\n        </tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:26px 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#bdbdbd;\\\">\\n            <strong style=\\\"color:#ffffff;font-size:13px;letter-spacing:1px;\\\">MELIORA GYM</strong><br>\\n            {{address}}{{#if phone}} · {{phone}}{{/if}}<br>\\n            <a href=\\\"{{instagramUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Instagram {{instagramHandle}}</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{mapsUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Itinéraire</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{websiteUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Site web</a>\\n            {{#if footerNote}}<p style=\\\"margin:14px 0 0;color:#8c8c8c;\\\">{{footerNote}}</p>{{/if}}\\n            <p style=\\\"margin:14px 0 0;color:#6f6f6f;\\\">© {{year}} Meliora Gym — Sousse, Tunisie</p>\\n          </td>\\n        </tr>\\n      </table>\\n    </td>\\n  </tr>\\n</table>\\n</body>\\n</html>\\n\"};\n\nconst env = (key, fallback = '') => {\n  try {\n    const value = $env[key];\n    return value === undefined || value === null || value === '' ? fallback : String(value);\n  } catch (error) {\n    return fallback; // N8N_BLOCK_ENV_ACCESS_IN_NODE=true\n  }\n};\nconst BRAND = {\n  logoUrl: env('MELIORA_LOGO_URL', 'https://meliora-gym.tn/images/logo.jpg'),\n  websiteUrl: env('MELIORA_WEBSITE_URL', 'https://meliora-gym.tn'),\n  appUrl: env('MELIORA_APP_URL', 'https://meliora-gym.tn/app'),\n  adminUrl: env('MELIORA_ADMIN_URL', 'https://meliora-gym.tn/admin'),\n  mapsUrl: env('MELIORA_MAPS_URL', 'https://maps.app.goo.gl/CVWB98nx2RdSd8Mw8'),\n  instagramUrl: 'https://www.instagram.com/gymmeliora/',\n  instagramHandle: '@gymmeliora',\n  address: 'Khzema Est, Rue Colonel Garnaoui, Sousse 4051',\n  phone: env('MELIORA_GYM_PHONE'),\n};\nconst FROM = env('MELIORA_FROM_EMAIL', 'Meliora Gym <contact@meliora-gym.tn>');\nconst OWNER = env('MELIORA_OWNER_EMAIL');\nconst STAFF = env('MELIORA_STAFF_EMAIL', OWNER);\nconst MEMBER_NOTE = 'Vous recevez cet e-mail car vous êtes membre de Meliora Gym. Répondez « STOP » pour ne plus recevoir nos messages.';\nconst TZ = 'Africa/Tunis';\n\nconst esc = (value) =>\n  String(value ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);\n// {{#if key}}…{{/if}} blocks, then {{{raw}}} / {{escaped}} values in a single pass (values are never re-scanned).\nconst render = (template, vars) =>\n  template\n    .replace(/\\{\\{#if (\\w+)\\}\\}([\\s\\S]*?)\\{\\{\\/if\\}\\}/g, (_, key, inner) => (vars[key] ? inner : ''))\n    .replace(/\\{\\{\\{(\\w+)\\}\\}\\}|\\{\\{(\\w+)\\}\\}/g, (_, raw, key) => (raw ? String(vars[raw] ?? '') : esc(vars[key])));\n\nconst asDate = (value) =>\n  typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) ? new Date(`${value}T12:00:00Z`) : new Date(value);\nconst fmt = (value, options) => {\n  if (!value) return '';\n  const date = asDate(value);\n  return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat('fr-FR', { timeZone: TZ, ...options }).format(date);\n};\nconst longDate = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst dayMonth = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long' });\nconst shortDate = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric' });\nconst dateTime = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });\nconst hour = (value) => fmt(value, { hour: '2-digit', minute: '2-digit' });\nconst dayKey = (value) => fmt(value, { year: 'numeric', month: '2-digit', day: '2-digit' }).split('/').reverse().join('-');\nconst capitalize = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : '');\nconst money = (amount) =>\n  `${Number(amount || 0).toLocaleString('fr-FR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} DT`;\nconst plural = (count, one, many) => `${count} ${Math.abs(Number(count)) === 1 ? one : many}`;\nconst firstWord = (name) => String(name || '').trim().split(/\\s+/)[0] || '';\nconst weekRange = (from, to) => `${fmt(from, { day: 'numeric', month: 'long' })} au ${fmt(to, { day: 'numeric', month: 'long', year: 'numeric' })}`;\n\nconst METHODS = { CASH: 'Espèces', CARD: 'Carte bancaire', TRANSFER: 'Virement bancaire', D17: 'D17' };\nconst SOURCES = {\n  WALK_IN: 'Passage à l’accueil',\n  INSTAGRAM: 'Instagram',\n  FACEBOOK: 'Facebook',\n  WEBSITE: 'Site web',\n  REFERRAL: 'Parrainage',\n  PHONE: 'Téléphone',\n  OTHER: 'Autre',\n};\nconst PRIORITIES = { LOW: 'basse', MEDIUM: 'moyenne', HIGH: 'haute', URGENT: 'urgente' };\n\n/** One e-mail item for the \"Send Email\" node, or null when there is no usable recipient. */\nconst email = (template, { to, subject, preheader = '', vars = {}, footerNote = '' }) => {\n  const recipient = String(to || '').trim();\n  if (!recipient.includes('@')) return null;\n  const html = render(TEMPLATES[template], {\n    ...BRAND,\n    year: new Date().getFullYear(),\n    subject,\n    preheader,\n    footerNote,\n    ...vars,\n  });\n  return { json: { from: FROM, to: recipient, subject, html } };\n};\n\n/** Bordered list used in owner digests: rows of { title, detail }. */\nconst listTable = (rows, empty = 'Rien à signaler ✅') => {\n  if (!rows.length) return `<p style=\"margin:0 0 14px;color:#2e7d32;\">${esc(empty)}</p>`;\n  const body = rows\n    .map(\n      (row) =>\n        `<tr><td style=\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;\"><strong style=\"color:#0b0b0c;\">${esc(row.title)}</strong>` +\n        (row.detail ? `<br><span style=\"color:#6b6b6b;font-size:13px;\">${esc(row.detail)}</span>` : '') +\n        '</td></tr>',\n    )\n    .join('');\n  return `<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 18px;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\">${body}</table>`;\n};\n\nreturn $input\n  .all()\n  .map((item) => {\n    const d = item.json.body?.data ?? {};\n    const days = Number(d.daysLeft ?? 0);\n    return email('expiryReminder', {\n      to: d.email,\n      subject:\n        days <= 0\n          ? 'Votre abonnement se termine aujourd’hui'\n          : days === 1\n            ? 'Votre abonnement se termine demain'\n            : `Votre abonnement se termine dans ${days} jours`,\n      preheader: `Renouvelez votre abonnement ${d.planName} pour garder votre accès au club.`,\n      vars: {\n        firstName: d.firstName,\n        planName: d.planName,\n        endDate: longDate(d.endDate),\n        daysLabel: days <= 0 ? 'quelques heures' : plural(days, 'jour', 'jours'),\n      },\n    });\n  })\n  .filter(Boolean);"
+      },
+      "id": "6a5d39e8-accf-5a95-9393-63c4869bc1ee",
+      "name": "Préparer · Rappel d’expiration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Meliora Gym — e-mail « Abonnement expiré » (subscription.expired)\n// Généré par n8n/scripts/build.mjs : modifiez n8n/templates/*.html ou n8n/scripts/n8n-code.mjs,\n// puis `npm run build` et réimportez le workflow.\nconst TEMPLATES = {\"renewalInvite\":\"<!DOCTYPE html>\\n<html lang=\\\"fr\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1\\\">\\n<meta name=\\\"color-scheme\\\" content=\\\"light only\\\">\\n<meta name=\\\"supported-color-schemes\\\" content=\\\"light only\\\">\\n<title>{{subject}}</title>\\n<style>\\n  @media (max-width: 620px) {\\n    .container { width: 100% !important; }\\n    .px { padding-left: 22px !important; padding-right: 22px !important; }\\n    .h1 { font-size: 25px !important; }\\n  }\\n  a { color: #E10600; }\\n</style>\\n</head>\\n<body style=\\\"margin:0;padding:0;background:#f1f1f1;-webkit-text-size-adjust:100%;\\\">\\n<div style=\\\"display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;\\\">{{preheader}}</div>\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"background:#f1f1f1;\\\">\\n  <tr>\\n    <td align=\\\"center\\\" style=\\\"padding:24px 12px;\\\">\\n      <table role=\\\"presentation\\\" class=\\\"container\\\" width=\\\"600\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"width:600px;max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;\\\">\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:20px 32px;\\\">\\n            <table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\">\\n              <tr>\\n                <td style=\\\"vertical-align:middle;\\\">\\n                  <a href=\\\"{{websiteUrl}}\\\" style=\\\"text-decoration:none;\\\"><img src=\\\"{{logoUrl}}\\\" width=\\\"56\\\" height=\\\"56\\\" alt=\\\"Meliora Gym\\\" style=\\\"display:block;width:56px;height:56px;border:0;border-radius:10px;background:#ffffff;\\\"></a>\\n                </td>\\n                <td align=\\\"right\\\" style=\\\"vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:bold;letter-spacing:4px;text-transform:uppercase;color:#ffffff;\\\">\\n                  Meliora <span style=\\\"color:#E10600;\\\">Gym</span>\\n                </td>\\n              </tr>\\n            </table>\\n          </td>\\n        </tr>\\n        <tr><td style=\\\"height:4px;line-height:4px;font-size:0;background:#E10600;\\\">&nbsp;</td></tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"padding:36px 40px 30px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#1b1b1b;\\\">\\n<p style=\\\"margin:0 0 8px;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#E10600;\\\">Votre abonnement a expiré</p>\\n<h1 class=\\\"h1\\\" style=\\\"margin:0 0 18px;font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:30px;line-height:1.2;color:#0b0b0c;\\\">On vous garde une place, {{firstName}}</h1>\\n<p style=\\\"margin:0 0 14px;\\\">Votre abonnement <strong>{{planName}}</strong> a pris fin le {{endDate}}. Votre accès au club est suspendu, mais votre progression n’attend que vous.</p>\\n<p style=\\\"margin:0 0 14px;\\\">Renouvelez à l’accueil ou depuis l’application : votre QR code d’accès est réactivé immédiatement.</p>\\n<table role=\\\"presentation\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"margin:28px 0 10px;\\\"><tr><td style=\\\"border-radius:8px;background:#E10600;\\\"><a href=\\\"{{appUrl}}\\\" style=\\\"display:inline-block;padding:14px 28px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:8px;\\\">Je reprends l’entraînement</a></td></tr></table>\\n          </td>\\n        </tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:26px 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#bdbdbd;\\\">\\n            <strong style=\\\"color:#ffffff;font-size:13px;letter-spacing:1px;\\\">MELIORA GYM</strong><br>\\n            {{address}}{{#if phone}} · {{phone}}{{/if}}<br>\\n            <a href=\\\"{{instagramUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Instagram {{instagramHandle}}</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{mapsUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Itinéraire</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{websiteUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Site web</a>\\n            {{#if footerNote}}<p style=\\\"margin:14px 0 0;color:#8c8c8c;\\\">{{footerNote}}</p>{{/if}}\\n            <p style=\\\"margin:14px 0 0;color:#6f6f6f;\\\">© {{year}} Meliora Gym — Sousse, Tunisie</p>\\n          </td>\\n        </tr>\\n      </table>\\n    </td>\\n  </tr>\\n</table>\\n</body>\\n</html>\\n\"};\n\nconst env = (key, fallback = '') => {\n  try {\n    const value = $env[key];\n    return value === undefined || value === null || value === '' ? fallback : String(value);\n  } catch (error) {\n    return fallback; // N8N_BLOCK_ENV_ACCESS_IN_NODE=true\n  }\n};\nconst BRAND = {\n  logoUrl: env('MELIORA_LOGO_URL', 'https://meliora-gym.tn/images/logo.jpg'),\n  websiteUrl: env('MELIORA_WEBSITE_URL', 'https://meliora-gym.tn'),\n  appUrl: env('MELIORA_APP_URL', 'https://meliora-gym.tn/app'),\n  adminUrl: env('MELIORA_ADMIN_URL', 'https://meliora-gym.tn/admin'),\n  mapsUrl: env('MELIORA_MAPS_URL', 'https://maps.app.goo.gl/CVWB98nx2RdSd8Mw8'),\n  instagramUrl: 'https://www.instagram.com/gymmeliora/',\n  instagramHandle: '@gymmeliora',\n  address: 'Khzema Est, Rue Colonel Garnaoui, Sousse 4051',\n  phone: env('MELIORA_GYM_PHONE'),\n};\nconst FROM = env('MELIORA_FROM_EMAIL', 'Meliora Gym <contact@meliora-gym.tn>');\nconst OWNER = env('MELIORA_OWNER_EMAIL');\nconst STAFF = env('MELIORA_STAFF_EMAIL', OWNER);\nconst MEMBER_NOTE = 'Vous recevez cet e-mail car vous êtes membre de Meliora Gym. Répondez « STOP » pour ne plus recevoir nos messages.';\nconst TZ = 'Africa/Tunis';\n\nconst esc = (value) =>\n  String(value ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);\n// {{#if key}}…{{/if}} blocks, then {{{raw}}} / {{escaped}} values in a single pass (values are never re-scanned).\nconst render = (template, vars) =>\n  template\n    .replace(/\\{\\{#if (\\w+)\\}\\}([\\s\\S]*?)\\{\\{\\/if\\}\\}/g, (_, key, inner) => (vars[key] ? inner : ''))\n    .replace(/\\{\\{\\{(\\w+)\\}\\}\\}|\\{\\{(\\w+)\\}\\}/g, (_, raw, key) => (raw ? String(vars[raw] ?? '') : esc(vars[key])));\n\nconst asDate = (value) =>\n  typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) ? new Date(`${value}T12:00:00Z`) : new Date(value);\nconst fmt = (value, options) => {\n  if (!value) return '';\n  const date = asDate(value);\n  return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat('fr-FR', { timeZone: TZ, ...options }).format(date);\n};\nconst longDate = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst dayMonth = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long' });\nconst shortDate = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric' });\nconst dateTime = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });\nconst hour = (value) => fmt(value, { hour: '2-digit', minute: '2-digit' });\nconst dayKey = (value) => fmt(value, { year: 'numeric', month: '2-digit', day: '2-digit' }).split('/').reverse().join('-');\nconst capitalize = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : '');\nconst money = (amount) =>\n  `${Number(amount || 0).toLocaleString('fr-FR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} DT`;\nconst plural = (count, one, many) => `${count} ${Math.abs(Number(count)) === 1 ? one : many}`;\nconst firstWord = (name) => String(name || '').trim().split(/\\s+/)[0] || '';\nconst weekRange = (from, to) => `${fmt(from, { day: 'numeric', month: 'long' })} au ${fmt(to, { day: 'numeric', month: 'long', year: 'numeric' })}`;\n\nconst METHODS = { CASH: 'Espèces', CARD: 'Carte bancaire', TRANSFER: 'Virement bancaire', D17: 'D17' };\nconst SOURCES = {\n  WALK_IN: 'Passage à l’accueil',\n  INSTAGRAM: 'Instagram',\n  FACEBOOK: 'Facebook',\n  WEBSITE: 'Site web',\n  REFERRAL: 'Parrainage',\n  PHONE: 'Téléphone',\n  OTHER: 'Autre',\n};\nconst PRIORITIES = { LOW: 'basse', MEDIUM: 'moyenne', HIGH: 'haute', URGENT: 'urgente' };\n\n/** One e-mail item for the \"Send Email\" node, or null when there is no usable recipient. */\nconst email = (template, { to, subject, preheader = '', vars = {}, footerNote = '' }) => {\n  const recipient = String(to || '').trim();\n  if (!recipient.includes('@')) return null;\n  const html = render(TEMPLATES[template], {\n    ...BRAND,\n    year: new Date().getFullYear(),\n    subject,\n    preheader,\n    footerNote,\n    ...vars,\n  });\n  return { json: { from: FROM, to: recipient, subject, html } };\n};\n\n/** Bordered list used in owner digests: rows of { title, detail }. */\nconst listTable = (rows, empty = 'Rien à signaler ✅') => {\n  if (!rows.length) return `<p style=\"margin:0 0 14px;color:#2e7d32;\">${esc(empty)}</p>`;\n  const body = rows\n    .map(\n      (row) =>\n        `<tr><td style=\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;\"><strong style=\"color:#0b0b0c;\">${esc(row.title)}</strong>` +\n        (row.detail ? `<br><span style=\"color:#6b6b6b;font-size:13px;\">${esc(row.detail)}</span>` : '') +\n        '</td></tr>',\n    )\n    .join('');\n  return `<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 18px;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\">${body}</table>`;\n};\n\nreturn $input\n  .all()\n  .map((item) => {\n    const d = item.json.body?.data ?? {};\n    return email('renewalInvite', {\n      to: d.email,\n      subject: 'Votre abonnement a expiré — on vous garde une place',\n      preheader: 'Renouvelez à l’accueil ou dans l’application : votre accès est réactivé immédiatement.',\n      vars: { firstName: d.firstName, planName: d.planName, endDate: longDate(d.endDate) },\n    });\n  })\n  .filter(Boolean);"
+      },
+      "id": "0abac8a0-fe13-5153-a19b-c4b2fb5c135f",
+      "name": "Préparer · Abonnement expiré",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Meliora Gym — e-mail « Réservation confirmée » (booking.created)\n// Généré par n8n/scripts/build.mjs : modifiez n8n/templates/*.html ou n8n/scripts/n8n-code.mjs,\n// puis `npm run build` et réimportez le workflow.\nconst TEMPLATES = {\"bookingConfirmation\":\"<!DOCTYPE html>\\n<html lang=\\\"fr\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1\\\">\\n<meta name=\\\"color-scheme\\\" content=\\\"light only\\\">\\n<meta name=\\\"supported-color-schemes\\\" content=\\\"light only\\\">\\n<title>{{subject}}</title>\\n<style>\\n  @media (max-width: 620px) {\\n    .container { width: 100% !important; }\\n    .px { padding-left: 22px !important; padding-right: 22px !important; }\\n    .h1 { font-size: 25px !important; }\\n  }\\n  a { color: #E10600; }\\n</style>\\n</head>\\n<body style=\\\"margin:0;padding:0;background:#f1f1f1;-webkit-text-size-adjust:100%;\\\">\\n<div style=\\\"display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;\\\">{{preheader}}</div>\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"background:#f1f1f1;\\\">\\n  <tr>\\n    <td align=\\\"center\\\" style=\\\"padding:24px 12px;\\\">\\n      <table role=\\\"presentation\\\" class=\\\"container\\\" width=\\\"600\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"width:600px;max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;\\\">\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:20px 32px;\\\">\\n            <table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\">\\n              <tr>\\n                <td style=\\\"vertical-align:middle;\\\">\\n                  <a href=\\\"{{websiteUrl}}\\\" style=\\\"text-decoration:none;\\\"><img src=\\\"{{logoUrl}}\\\" width=\\\"56\\\" height=\\\"56\\\" alt=\\\"Meliora Gym\\\" style=\\\"display:block;width:56px;height:56px;border:0;border-radius:10px;background:#ffffff;\\\"></a>\\n                </td>\\n                <td align=\\\"right\\\" style=\\\"vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:bold;letter-spacing:4px;text-transform:uppercase;color:#ffffff;\\\">\\n                  Meliora <span style=\\\"color:#E10600;\\\">Gym</span>\\n                </td>\\n              </tr>\\n            </table>\\n          </td>\\n        </tr>\\n        <tr><td style=\\\"height:4px;line-height:4px;font-size:0;background:#E10600;\\\">&nbsp;</td></tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"padding:36px 40px 30px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#1b1b1b;\\\">\\n<p style=\\\"margin:0 0 8px;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#E10600;\\\">Réservation confirmée</p>\\n<h1 class=\\\"h1\\\" style=\\\"margin:0 0 18px;font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:30px;line-height:1.2;color:#0b0b0c;\\\">À bientôt au cours de {{sessionTitle}} !</h1>\\n<p style=\\\"margin:0 0 14px;\\\">Bonjour {{firstName}}, votre place est réservée.</p>\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"margin:20px 0;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\\\">\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Cours</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{sessionTitle}}</td></tr>\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Date</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{date}}</td></tr>\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Horaire</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{timeRange}}</td></tr>\\n{{#if coachName}}<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Coach</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{coachName}}</td></tr>{{/if}}\\n{{#if room}}<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Salle</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{room}}</td></tr>{{/if}}\\n</table>\\n<p style=\\\"margin:0 0 14px;\\\">Arrivez 5 minutes en avance avec une serviette et une bouteille d’eau. Un empêchement ? Annulez depuis l’application pour libérer votre place.</p>\\n<table role=\\\"presentation\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"margin:28px 0 10px;\\\"><tr><td style=\\\"border-radius:8px;background:#E10600;\\\"><a href=\\\"{{appUrl}}\\\" style=\\\"display:inline-block;padding:14px 28px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:8px;\\\">Voir mes réservations</a></td></tr></table>\\n          </td>\\n        </tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:26px 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#bdbdbd;\\\">\\n            <strong style=\\\"color:#ffffff;font-size:13px;letter-spacing:1px;\\\">MELIORA GYM</strong><br>\\n            {{address}}{{#if phone}} · {{phone}}{{/if}}<br>\\n            <a href=\\\"{{instagramUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Instagram {{instagramHandle}}</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{mapsUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Itinéraire</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{websiteUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Site web</a>\\n            {{#if footerNote}}<p style=\\\"margin:14px 0 0;color:#8c8c8c;\\\">{{footerNote}}</p>{{/if}}\\n            <p style=\\\"margin:14px 0 0;color:#6f6f6f;\\\">© {{year}} Meliora Gym — Sousse, Tunisie</p>\\n          </td>\\n        </tr>\\n      </table>\\n    </td>\\n  </tr>\\n</table>\\n</body>\\n</html>\\n\"};\n\nconst env = (key, fallback = '') => {\n  try {\n    const value = $env[key];\n    return value === undefined || value === null || value === '' ? fallback : String(value);\n  } catch (error) {\n    return fallback; // N8N_BLOCK_ENV_ACCESS_IN_NODE=true\n  }\n};\nconst BRAND = {\n  logoUrl: env('MELIORA_LOGO_URL', 'https://meliora-gym.tn/images/logo.jpg'),\n  websiteUrl: env('MELIORA_WEBSITE_URL', 'https://meliora-gym.tn'),\n  appUrl: env('MELIORA_APP_URL', 'https://meliora-gym.tn/app'),\n  adminUrl: env('MELIORA_ADMIN_URL', 'https://meliora-gym.tn/admin'),\n  mapsUrl: env('MELIORA_MAPS_URL', 'https://maps.app.goo.gl/CVWB98nx2RdSd8Mw8'),\n  instagramUrl: 'https://www.instagram.com/gymmeliora/',\n  instagramHandle: '@gymmeliora',\n  address: 'Khzema Est, Rue Colonel Garnaoui, Sousse 4051',\n  phone: env('MELIORA_GYM_PHONE'),\n};\nconst FROM = env('MELIORA_FROM_EMAIL', 'Meliora Gym <contact@meliora-gym.tn>');\nconst OWNER = env('MELIORA_OWNER_EMAIL');\nconst STAFF = env('MELIORA_STAFF_EMAIL', OWNER);\nconst MEMBER_NOTE = 'Vous recevez cet e-mail car vous êtes membre de Meliora Gym. Répondez « STOP » pour ne plus recevoir nos messages.';\nconst TZ = 'Africa/Tunis';\n\nconst esc = (value) =>\n  String(value ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);\n// {{#if key}}…{{/if}} blocks, then {{{raw}}} / {{escaped}} values in a single pass (values are never re-scanned).\nconst render = (template, vars) =>\n  template\n    .replace(/\\{\\{#if (\\w+)\\}\\}([\\s\\S]*?)\\{\\{\\/if\\}\\}/g, (_, key, inner) => (vars[key] ? inner : ''))\n    .replace(/\\{\\{\\{(\\w+)\\}\\}\\}|\\{\\{(\\w+)\\}\\}/g, (_, raw, key) => (raw ? String(vars[raw] ?? '') : esc(vars[key])));\n\nconst asDate = (value) =>\n  typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) ? new Date(`${value}T12:00:00Z`) : new Date(value);\nconst fmt = (value, options) => {\n  if (!value) return '';\n  const date = asDate(value);\n  return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat('fr-FR', { timeZone: TZ, ...options }).format(date);\n};\nconst longDate = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst dayMonth = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long' });\nconst shortDate = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric' });\nconst dateTime = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });\nconst hour = (value) => fmt(value, { hour: '2-digit', minute: '2-digit' });\nconst dayKey = (value) => fmt(value, { year: 'numeric', month: '2-digit', day: '2-digit' }).split('/').reverse().join('-');\nconst capitalize = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : '');\nconst money = (amount) =>\n  `${Number(amount || 0).toLocaleString('fr-FR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} DT`;\nconst plural = (count, one, many) => `${count} ${Math.abs(Number(count)) === 1 ? one : many}`;\nconst firstWord = (name) => String(name || '').trim().split(/\\s+/)[0] || '';\nconst weekRange = (from, to) => `${fmt(from, { day: 'numeric', month: 'long' })} au ${fmt(to, { day: 'numeric', month: 'long', year: 'numeric' })}`;\n\nconst METHODS = { CASH: 'Espèces', CARD: 'Carte bancaire', TRANSFER: 'Virement bancaire', D17: 'D17' };\nconst SOURCES = {\n  WALK_IN: 'Passage à l’accueil',\n  INSTAGRAM: 'Instagram',\n  FACEBOOK: 'Facebook',\n  WEBSITE: 'Site web',\n  REFERRAL: 'Parrainage',\n  PHONE: 'Téléphone',\n  OTHER: 'Autre',\n};\nconst PRIORITIES = { LOW: 'basse', MEDIUM: 'moyenne', HIGH: 'haute', URGENT: 'urgente' };\n\n/** One e-mail item for the \"Send Email\" node, or null when there is no usable recipient. */\nconst email = (template, { to, subject, preheader = '', vars = {}, footerNote = '' }) => {\n  const recipient = String(to || '').trim();\n  if (!recipient.includes('@')) return null;\n  const html = render(TEMPLATES[template], {\n    ...BRAND,\n    year: new Date().getFullYear(),\n    subject,\n    preheader,\n    footerNote,\n    ...vars,\n  });\n  return { json: { from: FROM, to: recipient, subject, html } };\n};\n\n/** Bordered list used in owner digests: rows of { title, detail }. */\nconst listTable = (rows, empty = 'Rien à signaler ✅') => {\n  if (!rows.length) return `<p style=\"margin:0 0 14px;color:#2e7d32;\">${esc(empty)}</p>`;\n  const body = rows\n    .map(\n      (row) =>\n        `<tr><td style=\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;\"><strong style=\"color:#0b0b0c;\">${esc(row.title)}</strong>` +\n        (row.detail ? `<br><span style=\"color:#6b6b6b;font-size:13px;\">${esc(row.detail)}</span>` : '') +\n        '</td></tr>',\n    )\n    .join('');\n  return `<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 18px;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\">${body}</table>`;\n};\n\nreturn $input\n  .all()\n  .map((item) => {\n    const d = item.json.body?.data ?? {};\n    return email('bookingConfirmation', {\n      to: d.email,\n      subject: `Réservation confirmée : ${d.sessionTitle} (${dayMonth(d.startsAt)} à ${hour(d.startsAt)})`,\n      preheader: `Votre place au cours de ${d.sessionTitle} est réservée.`,\n      vars: {\n        firstName: firstWord(d.memberName),\n        sessionTitle: d.sessionTitle,\n        date: capitalize(dayMonth(d.startsAt)),\n        timeRange: `${hour(d.startsAt)} – ${hour(d.endsAt)}`,\n        coachName: d.coachName,\n        room: d.room,\n      },\n    });\n  })\n  .filter(Boolean);"
+      },
+      "id": "2a8599b2-a9d1-545b-8987-84c04ba1a093",
+      "name": "Préparer · Réservation confirmée",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Meliora Gym — e-mail « Séance d’essai » (lead.created)\n// Généré par n8n/scripts/build.mjs : modifiez n8n/templates/*.html ou n8n/scripts/n8n-code.mjs,\n// puis `npm run build` et réimportez le workflow.\nconst TEMPLATES = {\"trialConfirmation\":\"<!DOCTYPE html>\\n<html lang=\\\"fr\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1\\\">\\n<meta name=\\\"color-scheme\\\" content=\\\"light only\\\">\\n<meta name=\\\"supported-color-schemes\\\" content=\\\"light only\\\">\\n<title>{{subject}}</title>\\n<style>\\n  @media (max-width: 620px) {\\n    .container { width: 100% !important; }\\n    .px { padding-left: 22px !important; padding-right: 22px !important; }\\n    .h1 { font-size: 25px !important; }\\n  }\\n  a { color: #E10600; }\\n</style>\\n</head>\\n<body style=\\\"margin:0;padding:0;background:#f1f1f1;-webkit-text-size-adjust:100%;\\\">\\n<div style=\\\"display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;\\\">{{preheader}}</div>\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"background:#f1f1f1;\\\">\\n  <tr>\\n    <td align=\\\"center\\\" style=\\\"padding:24px 12px;\\\">\\n      <table role=\\\"presentation\\\" class=\\\"container\\\" width=\\\"600\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"width:600px;max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;\\\">\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:20px 32px;\\\">\\n            <table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\">\\n              <tr>\\n                <td style=\\\"vertical-align:middle;\\\">\\n                  <a href=\\\"{{websiteUrl}}\\\" style=\\\"text-decoration:none;\\\"><img src=\\\"{{logoUrl}}\\\" width=\\\"56\\\" height=\\\"56\\\" alt=\\\"Meliora Gym\\\" style=\\\"display:block;width:56px;height:56px;border:0;border-radius:10px;background:#ffffff;\\\"></a>\\n                </td>\\n                <td align=\\\"right\\\" style=\\\"vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:bold;letter-spacing:4px;text-transform:uppercase;color:#ffffff;\\\">\\n                  Meliora <span style=\\\"color:#E10600;\\\">Gym</span>\\n                </td>\\n              </tr>\\n            </table>\\n          </td>\\n        </tr>\\n        <tr><td style=\\\"height:4px;line-height:4px;font-size:0;background:#E10600;\\\">&nbsp;</td></tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"padding:36px 40px 30px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#1b1b1b;\\\">\\n<p style=\\\"margin:0 0 8px;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#E10600;\\\">Séance d’essai gratuite</p>\\n<h1 class=\\\"h1\\\" style=\\\"margin:0 0 18px;font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:30px;line-height:1.2;color:#0b0b0c;\\\">Bienvenue, {{firstName}} !</h1>\\n<p style=\\\"margin:0 0 14px;\\\">Merci pour votre intérêt pour Meliora Gym. Votre demande de séance d’essai gratuite est bien enregistrée{{#if trialDate}} pour le <strong>{{trialDate}}</strong>{{/if}}.</p>\\n{{#if noTrialDate}}<p style=\\\"margin:0 0 14px;\\\">Notre équipe vous contacte très vite pour fixer le jour qui vous convient.</p>{{/if}}\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"margin:20px 0;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\\\">\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Où</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{address}}</td></tr>\\n{{#if interestPlanName}}<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Formule qui vous intéresse</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{interestPlanName}}</td></tr>{{/if}}\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">À prévoir</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">Tenue de sport, baskets propres, serviette et bouteille d’eau</td></tr>\\n</table>\\n<table role=\\\"presentation\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"margin:28px 0 10px;\\\"><tr><td style=\\\"border-radius:8px;background:#E10600;\\\"><a href=\\\"{{mapsUrl}}\\\" style=\\\"display:inline-block;padding:14px 28px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:8px;\\\">Voir l’itinéraire</a></td></tr></table>\\n<p style=\\\"color:#6b6b6b;font-size:14px;\\\">Une question ? Écrivez-nous sur Instagram {{instagramHandle}} ou répondez à cet e-mail.</p>\\n          </td>\\n        </tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:26px 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#bdbdbd;\\\">\\n            <strong style=\\\"color:#ffffff;font-size:13px;letter-spacing:1px;\\\">MELIORA GYM</strong><br>\\n            {{address}}{{#if phone}} · {{phone}}{{/if}}<br>\\n            <a href=\\\"{{instagramUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Instagram {{instagramHandle}}</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{mapsUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Itinéraire</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{websiteUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Site web</a>\\n            {{#if footerNote}}<p style=\\\"margin:14px 0 0;color:#8c8c8c;\\\">{{footerNote}}</p>{{/if}}\\n            <p style=\\\"margin:14px 0 0;color:#6f6f6f;\\\">© {{year}} Meliora Gym — Sousse, Tunisie</p>\\n          </td>\\n        </tr>\\n      </table>\\n    </td>\\n  </tr>\\n</table>\\n</body>\\n</html>\\n\",\"leadAlert\":\"<!DOCTYPE html>\\n<html lang=\\\"fr\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1\\\">\\n<meta name=\\\"color-scheme\\\" content=\\\"light only\\\">\\n<meta name=\\\"supported-color-schemes\\\" content=\\\"light only\\\">\\n<title>{{subject}}</title>\\n<style>\\n  @media (max-width: 620px) {\\n    .container { width: 100% !important; }\\n    .px { padding-left: 22px !important; padding-right: 22px !important; }\\n    .h1 { font-size: 25px !important; }\\n  }\\n  a { color: #E10600; }\\n</style>\\n</head>\\n<body style=\\\"margin:0;padding:0;background:#f1f1f1;-webkit-text-size-adjust:100%;\\\">\\n<div style=\\\"display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;\\\">{{preheader}}</div>\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"background:#f1f1f1;\\\">\\n  <tr>\\n    <td align=\\\"center\\\" style=\\\"padding:24px 12px;\\\">\\n      <table role=\\\"presentation\\\" class=\\\"container\\\" width=\\\"600\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"width:600px;max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;\\\">\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:20px 32px;\\\">\\n            <table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\">\\n              <tr>\\n                <td style=\\\"vertical-align:middle;\\\">\\n                  <a href=\\\"{{websiteUrl}}\\\" style=\\\"text-decoration:none;\\\"><img src=\\\"{{logoUrl}}\\\" width=\\\"56\\\" height=\\\"56\\\" alt=\\\"Meliora Gym\\\" style=\\\"display:block;width:56px;height:56px;border:0;border-radius:10px;background:#ffffff;\\\"></a>\\n                </td>\\n                <td align=\\\"right\\\" style=\\\"vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:bold;letter-spacing:4px;text-transform:uppercase;color:#ffffff;\\\">\\n                  Meliora <span style=\\\"color:#E10600;\\\">Gym</span>\\n                </td>\\n              </tr>\\n            </table>\\n          </td>\\n        </tr>\\n        <tr><td style=\\\"height:4px;line-height:4px;font-size:0;background:#E10600;\\\">&nbsp;</td></tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"padding:36px 40px 30px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#1b1b1b;\\\">\\n<p style=\\\"margin:0 0 8px;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#E10600;\\\">Nouveau prospect</p>\\n<h1 class=\\\"h1\\\" style=\\\"margin:0 0 18px;font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:30px;line-height:1.2;color:#0b0b0c;\\\">{{fullName}} veut essayer Meliora</h1>\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"margin:20px 0;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\\\">\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Téléphone</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{phone}}</td></tr>\\n{{#if email}}<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">E-mail</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{email}}</td></tr>{{/if}}\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Source</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{sourceLabel}}</td></tr>\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Séance d’essai</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{trialLabel}}</td></tr>\\n{{#if interestPlanName}}<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Formule</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{interestPlanName}}</td></tr>{{/if}}\\n</table>\\n{{#if message}}<div style=\\\"margin:20px 0;padding:14px 18px;background:#f7f7f7;border-left:4px solid #E10600;border-radius:6px;font-size:14px;color:#333333;\\\">« {{message}} »</div>{{/if}}\\n<p style=\\\"margin:0 0 14px;\\\">Rappelez ce prospect rapidement : c’est dans la première heure que l’on convertit le mieux.</p>\\n<table role=\\\"presentation\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"margin:28px 0 10px;\\\"><tr><td style=\\\"border-radius:8px;background:#E10600;\\\"><a href=\\\"{{adminUrl}}\\\" style=\\\"display:inline-block;padding:14px 28px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:8px;\\\">Ouvrir le CRM</a></td></tr></table>\\n          </td>\\n        </tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:26px 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#bdbdbd;\\\">\\n            <strong style=\\\"color:#ffffff;font-size:13px;letter-spacing:1px;\\\">MELIORA GYM</strong><br>\\n            {{address}}{{#if phone}} · {{phone}}{{/if}}<br>\\n            <a href=\\\"{{instagramUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Instagram {{instagramHandle}}</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{mapsUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Itinéraire</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{websiteUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Site web</a>\\n            {{#if footerNote}}<p style=\\\"margin:14px 0 0;color:#8c8c8c;\\\">{{footerNote}}</p>{{/if}}\\n            <p style=\\\"margin:14px 0 0;color:#6f6f6f;\\\">© {{year}} Meliora Gym — Sousse, Tunisie</p>\\n          </td>\\n        </tr>\\n      </table>\\n    </td>\\n  </tr>\\n</table>\\n</body>\\n</html>\\n\"};\n\nconst env = (key, fallback = '') => {\n  try {\n    const value = $env[key];\n    return value === undefined || value === null || value === '' ? fallback : String(value);\n  } catch (error) {\n    return fallback; // N8N_BLOCK_ENV_ACCESS_IN_NODE=true\n  }\n};\nconst BRAND = {\n  logoUrl: env('MELIORA_LOGO_URL', 'https://meliora-gym.tn/images/logo.jpg'),\n  websiteUrl: env('MELIORA_WEBSITE_URL', 'https://meliora-gym.tn'),\n  appUrl: env('MELIORA_APP_URL', 'https://meliora-gym.tn/app'),\n  adminUrl: env('MELIORA_ADMIN_URL', 'https://meliora-gym.tn/admin'),\n  mapsUrl: env('MELIORA_MAPS_URL', 'https://maps.app.goo.gl/CVWB98nx2RdSd8Mw8'),\n  instagramUrl: 'https://www.instagram.com/gymmeliora/',\n  instagramHandle: '@gymmeliora',\n  address: 'Khzema Est, Rue Colonel Garnaoui, Sousse 4051',\n  phone: env('MELIORA_GYM_PHONE'),\n};\nconst FROM = env('MELIORA_FROM_EMAIL', 'Meliora Gym <contact@meliora-gym.tn>');\nconst OWNER = env('MELIORA_OWNER_EMAIL');\nconst STAFF = env('MELIORA_STAFF_EMAIL', OWNER);\nconst MEMBER_NOTE = 'Vous recevez cet e-mail car vous êtes membre de Meliora Gym. Répondez « STOP » pour ne plus recevoir nos messages.';\nconst TZ = 'Africa/Tunis';\n\nconst esc = (value) =>\n  String(value ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);\n// {{#if key}}…{{/if}} blocks, then {{{raw}}} / {{escaped}} values in a single pass (values are never re-scanned).\nconst render = (template, vars) =>\n  template\n    .replace(/\\{\\{#if (\\w+)\\}\\}([\\s\\S]*?)\\{\\{\\/if\\}\\}/g, (_, key, inner) => (vars[key] ? inner : ''))\n    .replace(/\\{\\{\\{(\\w+)\\}\\}\\}|\\{\\{(\\w+)\\}\\}/g, (_, raw, key) => (raw ? String(vars[raw] ?? '') : esc(vars[key])));\n\nconst asDate = (value) =>\n  typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) ? new Date(`${value}T12:00:00Z`) : new Date(value);\nconst fmt = (value, options) => {\n  if (!value) return '';\n  const date = asDate(value);\n  return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat('fr-FR', { timeZone: TZ, ...options }).format(date);\n};\nconst longDate = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst dayMonth = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long' });\nconst shortDate = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric' });\nconst dateTime = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });\nconst hour = (value) => fmt(value, { hour: '2-digit', minute: '2-digit' });\nconst dayKey = (value) => fmt(value, { year: 'numeric', month: '2-digit', day: '2-digit' }).split('/').reverse().join('-');\nconst capitalize = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : '');\nconst money = (amount) =>\n  `${Number(amount || 0).toLocaleString('fr-FR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} DT`;\nconst plural = (count, one, many) => `${count} ${Math.abs(Number(count)) === 1 ? one : many}`;\nconst firstWord = (name) => String(name || '').trim().split(/\\s+/)[0] || '';\nconst weekRange = (from, to) => `${fmt(from, { day: 'numeric', month: 'long' })} au ${fmt(to, { day: 'numeric', month: 'long', year: 'numeric' })}`;\n\nconst METHODS = { CASH: 'Espèces', CARD: 'Carte bancaire', TRANSFER: 'Virement bancaire', D17: 'D17' };\nconst SOURCES = {\n  WALK_IN: 'Passage à l’accueil',\n  INSTAGRAM: 'Instagram',\n  FACEBOOK: 'Facebook',\n  WEBSITE: 'Site web',\n  REFERRAL: 'Parrainage',\n  PHONE: 'Téléphone',\n  OTHER: 'Autre',\n};\nconst PRIORITIES = { LOW: 'basse', MEDIUM: 'moyenne', HIGH: 'haute', URGENT: 'urgente' };\n\n/** One e-mail item for the \"Send Email\" node, or null when there is no usable recipient. */\nconst email = (template, { to, subject, preheader = '', vars = {}, footerNote = '' }) => {\n  const recipient = String(to || '').trim();\n  if (!recipient.includes('@')) return null;\n  const html = render(TEMPLATES[template], {\n    ...BRAND,\n    year: new Date().getFullYear(),\n    subject,\n    preheader,\n    footerNote,\n    ...vars,\n  });\n  return { json: { from: FROM, to: recipient, subject, html } };\n};\n\n/** Bordered list used in owner digests: rows of { title, detail }. */\nconst listTable = (rows, empty = 'Rien à signaler ✅') => {\n  if (!rows.length) return `<p style=\"margin:0 0 14px;color:#2e7d32;\">${esc(empty)}</p>`;\n  const body = rows\n    .map(\n      (row) =>\n        `<tr><td style=\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;\"><strong style=\"color:#0b0b0c;\">${esc(row.title)}</strong>` +\n        (row.detail ? `<br><span style=\"color:#6b6b6b;font-size:13px;\">${esc(row.detail)}</span>` : '') +\n        '</td></tr>',\n    )\n    .join('');\n  return `<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 18px;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\">${body}</table>`;\n};\n\nconst out = [];\nfor (const item of $input.all()) {\n  const d = item.json.body?.data ?? {};\n  const fullName = `${d.firstName ?? ''} ${d.lastName ?? ''}`.trim();\n  const trialDate = d.trialDate ? longDate(d.trialDate) : '';\n  const sourceLabel = SOURCES[d.source] ?? d.source ?? 'Autre';\n  // To the prospect, when an e-mail was given on the free-trial form.\n  out.push(\n    email('trialConfirmation', {\n      to: d.email,\n      subject: 'Votre séance d’essai gratuite chez Meliora Gym',\n      preheader: trialDate ? `Rendez-vous le ${trialDate}.` : 'Notre équipe vous contacte très vite.',\n      vars: { firstName: d.firstName, trialDate, noTrialDate: !trialDate, interestPlanName: d.interestPlanName },\n    }),\n  );\n  // To the reception team.\n  out.push(\n    email('leadAlert', {\n      to: STAFF,\n      subject: `Nouveau prospect : ${fullName} (${sourceLabel})`,\n      preheader: `${d.phone ?? ''} · séance d’essai ${trialDate || 'à planifier'}`,\n      vars: {\n        fullName,\n        phone: d.phone || '—',\n        email: d.email,\n        sourceLabel,\n        trialLabel: trialDate || 'À planifier',\n        interestPlanName: d.interestPlanName,\n        message: d.message,\n      },\n    }),\n  );\n}\nreturn out.filter(Boolean);"
+      },
+      "id": "6c75e572-edb9-5249-b2f9-1a7078ea4102",
+      "name": "Préparer · Séance d’essai",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Meliora Gym — e-mail « Reçu boutique » (sale.completed)\n// Généré par n8n/scripts/build.mjs : modifiez n8n/templates/*.html ou n8n/scripts/n8n-code.mjs,\n// puis `npm run build` et réimportez le workflow.\nconst TEMPLATES = {\"saleReceipt\":\"<!DOCTYPE html>\\n<html lang=\\\"fr\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1\\\">\\n<meta name=\\\"color-scheme\\\" content=\\\"light only\\\">\\n<meta name=\\\"supported-color-schemes\\\" content=\\\"light only\\\">\\n<title>{{subject}}</title>\\n<style>\\n  @media (max-width: 620px) {\\n    .container { width: 100% !important; }\\n    .px { padding-left: 22px !important; padding-right: 22px !important; }\\n    .h1 { font-size: 25px !important; }\\n  }\\n  a { color: #E10600; }\\n</style>\\n</head>\\n<body style=\\\"margin:0;padding:0;background:#f1f1f1;-webkit-text-size-adjust:100%;\\\">\\n<div style=\\\"display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;\\\">{{preheader}}</div>\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"background:#f1f1f1;\\\">\\n  <tr>\\n    <td align=\\\"center\\\" style=\\\"padding:24px 12px;\\\">\\n      <table role=\\\"presentation\\\" class=\\\"container\\\" width=\\\"600\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"width:600px;max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;\\\">\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:20px 32px;\\\">\\n            <table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\">\\n              <tr>\\n                <td style=\\\"vertical-align:middle;\\\">\\n                  <a href=\\\"{{websiteUrl}}\\\" style=\\\"text-decoration:none;\\\"><img src=\\\"{{logoUrl}}\\\" width=\\\"56\\\" height=\\\"56\\\" alt=\\\"Meliora Gym\\\" style=\\\"display:block;width:56px;height:56px;border:0;border-radius:10px;background:#ffffff;\\\"></a>\\n                </td>\\n                <td align=\\\"right\\\" style=\\\"vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:bold;letter-spacing:4px;text-transform:uppercase;color:#ffffff;\\\">\\n                  Meliora <span style=\\\"color:#E10600;\\\">Gym</span>\\n                </td>\\n              </tr>\\n            </table>\\n          </td>\\n        </tr>\\n        <tr><td style=\\\"height:4px;line-height:4px;font-size:0;background:#E10600;\\\">&nbsp;</td></tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"padding:36px 40px 30px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#1b1b1b;\\\">\\n<p style=\\\"margin:0 0 8px;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#E10600;\\\">Reçu boutique</p>\\n<h1 class=\\\"h1\\\" style=\\\"margin:0 0 18px;font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:30px;line-height:1.2;color:#0b0b0c;\\\">Merci pour votre achat{{#if firstName}}, {{firstName}}{{/if}} !</h1>\\n<p style=\\\"margin:0 0 14px;\\\">Voici le détail de votre achat à la boutique Meliora.</p>\\n{{{itemsHtml}}}\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"margin:20px 0;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\\\">\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Ticket n°</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{number}}</td></tr>\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Date</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{date}}</td></tr>\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Paiement</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{methodLabel}}</td></tr>\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Total</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{total}}</td></tr>\\n</table>\\n<p style=\\\"color:#6b6b6b;font-size:14px;\\\">Un souci avec un produit ? Gardez cet e-mail et passez à l’accueil.</p>\\n          </td>\\n        </tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:26px 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#bdbdbd;\\\">\\n            <strong style=\\\"color:#ffffff;font-size:13px;letter-spacing:1px;\\\">MELIORA GYM</strong><br>\\n            {{address}}{{#if phone}} · {{phone}}{{/if}}<br>\\n            <a href=\\\"{{instagramUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Instagram {{instagramHandle}}</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{mapsUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Itinéraire</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{websiteUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Site web</a>\\n            {{#if footerNote}}<p style=\\\"margin:14px 0 0;color:#8c8c8c;\\\">{{footerNote}}</p>{{/if}}\\n            <p style=\\\"margin:14px 0 0;color:#6f6f6f;\\\">© {{year}} Meliora Gym — Sousse, Tunisie</p>\\n          </td>\\n        </tr>\\n      </table>\\n    </td>\\n  </tr>\\n</table>\\n</body>\\n</html>\\n\"};\n\nconst env = (key, fallback = '') => {\n  try {\n    const value = $env[key];\n    return value === undefined || value === null || value === '' ? fallback : String(value);\n  } catch (error) {\n    return fallback; // N8N_BLOCK_ENV_ACCESS_IN_NODE=true\n  }\n};\nconst BRAND = {\n  logoUrl: env('MELIORA_LOGO_URL', 'https://meliora-gym.tn/images/logo.jpg'),\n  websiteUrl: env('MELIORA_WEBSITE_URL', 'https://meliora-gym.tn'),\n  appUrl: env('MELIORA_APP_URL', 'https://meliora-gym.tn/app'),\n  adminUrl: env('MELIORA_ADMIN_URL', 'https://meliora-gym.tn/admin'),\n  mapsUrl: env('MELIORA_MAPS_URL', 'https://maps.app.goo.gl/CVWB98nx2RdSd8Mw8'),\n  instagramUrl: 'https://www.instagram.com/gymmeliora/',\n  instagramHandle: '@gymmeliora',\n  address: 'Khzema Est, Rue Colonel Garnaoui, Sousse 4051',\n  phone: env('MELIORA_GYM_PHONE'),\n};\nconst FROM = env('MELIORA_FROM_EMAIL', 'Meliora Gym <contact@meliora-gym.tn>');\nconst OWNER = env('MELIORA_OWNER_EMAIL');\nconst STAFF = env('MELIORA_STAFF_EMAIL', OWNER);\nconst MEMBER_NOTE = 'Vous recevez cet e-mail car vous êtes membre de Meliora Gym. Répondez « STOP » pour ne plus recevoir nos messages.';\nconst TZ = 'Africa/Tunis';\n\nconst esc = (value) =>\n  String(value ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);\n// {{#if key}}…{{/if}} blocks, then {{{raw}}} / {{escaped}} values in a single pass (values are never re-scanned).\nconst render = (template, vars) =>\n  template\n    .replace(/\\{\\{#if (\\w+)\\}\\}([\\s\\S]*?)\\{\\{\\/if\\}\\}/g, (_, key, inner) => (vars[key] ? inner : ''))\n    .replace(/\\{\\{\\{(\\w+)\\}\\}\\}|\\{\\{(\\w+)\\}\\}/g, (_, raw, key) => (raw ? String(vars[raw] ?? '') : esc(vars[key])));\n\nconst asDate = (value) =>\n  typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) ? new Date(`${value}T12:00:00Z`) : new Date(value);\nconst fmt = (value, options) => {\n  if (!value) return '';\n  const date = asDate(value);\n  return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat('fr-FR', { timeZone: TZ, ...options }).format(date);\n};\nconst longDate = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst dayMonth = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long' });\nconst shortDate = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric' });\nconst dateTime = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });\nconst hour = (value) => fmt(value, { hour: '2-digit', minute: '2-digit' });\nconst dayKey = (value) => fmt(value, { year: 'numeric', month: '2-digit', day: '2-digit' }).split('/').reverse().join('-');\nconst capitalize = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : '');\nconst money = (amount) =>\n  `${Number(amount || 0).toLocaleString('fr-FR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} DT`;\nconst plural = (count, one, many) => `${count} ${Math.abs(Number(count)) === 1 ? one : many}`;\nconst firstWord = (name) => String(name || '').trim().split(/\\s+/)[0] || '';\nconst weekRange = (from, to) => `${fmt(from, { day: 'numeric', month: 'long' })} au ${fmt(to, { day: 'numeric', month: 'long', year: 'numeric' })}`;\n\nconst METHODS = { CASH: 'Espèces', CARD: 'Carte bancaire', TRANSFER: 'Virement bancaire', D17: 'D17' };\nconst SOURCES = {\n  WALK_IN: 'Passage à l’accueil',\n  INSTAGRAM: 'Instagram',\n  FACEBOOK: 'Facebook',\n  WEBSITE: 'Site web',\n  REFERRAL: 'Parrainage',\n  PHONE: 'Téléphone',\n  OTHER: 'Autre',\n};\nconst PRIORITIES = { LOW: 'basse', MEDIUM: 'moyenne', HIGH: 'haute', URGENT: 'urgente' };\n\n/** One e-mail item for the \"Send Email\" node, or null when there is no usable recipient. */\nconst email = (template, { to, subject, preheader = '', vars = {}, footerNote = '' }) => {\n  const recipient = String(to || '').trim();\n  if (!recipient.includes('@')) return null;\n  const html = render(TEMPLATES[template], {\n    ...BRAND,\n    year: new Date().getFullYear(),\n    subject,\n    preheader,\n    footerNote,\n    ...vars,\n  });\n  return { json: { from: FROM, to: recipient, subject, html } };\n};\n\n/** Bordered list used in owner digests: rows of { title, detail }. */\nconst listTable = (rows, empty = 'Rien à signaler ✅') => {\n  if (!rows.length) return `<p style=\"margin:0 0 14px;color:#2e7d32;\">${esc(empty)}</p>`;\n  const body = rows\n    .map(\n      (row) =>\n        `<tr><td style=\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;\"><strong style=\"color:#0b0b0c;\">${esc(row.title)}</strong>` +\n        (row.detail ? `<br><span style=\"color:#6b6b6b;font-size:13px;\">${esc(row.detail)}</span>` : '') +\n        '</td></tr>',\n    )\n    .join('');\n  return `<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 18px;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\">${body}</table>`;\n};\n\nreturn $input\n  .all()\n  .map((item) => {\n    const d = item.json.body?.data ?? {};\n    const rows = (d.items ?? [])\n      .map(\n        (line) =>\n          `<tr><td style=\"padding:10px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;\">${esc(line.name)} <span style=\"color:#6b6b6b;\">× ${esc(line.quantity)}</span></td>` +\n          `<td align=\"right\" style=\"padding:10px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;white-space:nowrap;\">${esc(money(line.total))}</td></tr>`,\n      )\n      .join('');\n    const itemsHtml = `<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:12px 0 4px;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\">${rows}</table>`;\n    return email('saleReceipt', {\n      to: d.email,\n      subject: `Votre reçu Meliora Gym — ${d.number}`,\n      preheader: `Total : ${money(d.total)}`,\n      vars: {\n        firstName: firstWord(d.memberName),\n        number: d.number,\n        date: dateTime(d.createdAt),\n        methodLabel: METHODS[d.paymentMethod] ?? d.paymentMethod,\n        total: money(d.total),\n        itemsHtml,\n      },\n    });\n  })\n  .filter(Boolean);"
+      },
+      "id": "f84190dd-3a6c-5805-9908-1b6211bd3829",
+      "name": "Préparer · Reçu boutique",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Meliora Gym — e-mail « Alerte stock » (stock.low)\n// Généré par n8n/scripts/build.mjs : modifiez n8n/templates/*.html ou n8n/scripts/n8n-code.mjs,\n// puis `npm run build` et réimportez le workflow.\nconst TEMPLATES = {\"stockAlert\":\"<!DOCTYPE html>\\n<html lang=\\\"fr\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1\\\">\\n<meta name=\\\"color-scheme\\\" content=\\\"light only\\\">\\n<meta name=\\\"supported-color-schemes\\\" content=\\\"light only\\\">\\n<title>{{subject}}</title>\\n<style>\\n  @media (max-width: 620px) {\\n    .container { width: 100% !important; }\\n    .px { padding-left: 22px !important; padding-right: 22px !important; }\\n    .h1 { font-size: 25px !important; }\\n  }\\n  a { color: #E10600; }\\n</style>\\n</head>\\n<body style=\\\"margin:0;padding:0;background:#f1f1f1;-webkit-text-size-adjust:100%;\\\">\\n<div style=\\\"display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;\\\">{{preheader}}</div>\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"background:#f1f1f1;\\\">\\n  <tr>\\n    <td align=\\\"center\\\" style=\\\"padding:24px 12px;\\\">\\n      <table role=\\\"presentation\\\" class=\\\"container\\\" width=\\\"600\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"width:600px;max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;\\\">\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:20px 32px;\\\">\\n            <table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\">\\n              <tr>\\n                <td style=\\\"vertical-align:middle;\\\">\\n                  <a href=\\\"{{websiteUrl}}\\\" style=\\\"text-decoration:none;\\\"><img src=\\\"{{logoUrl}}\\\" width=\\\"56\\\" height=\\\"56\\\" alt=\\\"Meliora Gym\\\" style=\\\"display:block;width:56px;height:56px;border:0;border-radius:10px;background:#ffffff;\\\"></a>\\n                </td>\\n                <td align=\\\"right\\\" style=\\\"vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:bold;letter-spacing:4px;text-transform:uppercase;color:#ffffff;\\\">\\n                  Meliora <span style=\\\"color:#E10600;\\\">Gym</span>\\n                </td>\\n              </tr>\\n            </table>\\n          </td>\\n        </tr>\\n        <tr><td style=\\\"height:4px;line-height:4px;font-size:0;background:#E10600;\\\">&nbsp;</td></tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"padding:36px 40px 30px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#1b1b1b;\\\">\\n<p style=\\\"margin:0 0 8px;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#E10600;\\\">Alerte stock</p>\\n<h1 class=\\\"h1\\\" style=\\\"margin:0 0 18px;font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:30px;line-height:1.2;color:#0b0b0c;\\\">Stock bas : {{name}}</h1>\\n<p style=\\\"margin:0 0 14px;\\\">Il ne reste que <strong>{{stockLabel}}</strong> de <strong>{{name}}</strong> (seuil d’alerte : {{threshold}}).</p>\\n<p style=\\\"margin:0 0 14px;\\\">Pensez à passer commande auprès du fournisseur avant la rupture.</p>\\n<table role=\\\"presentation\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"margin:28px 0 10px;\\\"><tr><td style=\\\"border-radius:8px;background:#E10600;\\\"><a href=\\\"{{adminUrl}}\\\" style=\\\"display:inline-block;padding:14px 28px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:8px;\\\">Gérer le stock</a></td></tr></table>\\n          </td>\\n        </tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:26px 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#bdbdbd;\\\">\\n            <strong style=\\\"color:#ffffff;font-size:13px;letter-spacing:1px;\\\">MELIORA GYM</strong><br>\\n            {{address}}{{#if phone}} · {{phone}}{{/if}}<br>\\n            <a href=\\\"{{instagramUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Instagram {{instagramHandle}}</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{mapsUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Itinéraire</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{websiteUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Site web</a>\\n            {{#if footerNote}}<p style=\\\"margin:14px 0 0;color:#8c8c8c;\\\">{{footerNote}}</p>{{/if}}\\n            <p style=\\\"margin:14px 0 0;color:#6f6f6f;\\\">© {{year}} Meliora Gym — Sousse, Tunisie</p>\\n          </td>\\n        </tr>\\n      </table>\\n    </td>\\n  </tr>\\n</table>\\n</body>\\n</html>\\n\"};\n\nconst env = (key, fallback = '') => {\n  try {\n    const value = $env[key];\n    return value === undefined || value === null || value === '' ? fallback : String(value);\n  } catch (error) {\n    return fallback; // N8N_BLOCK_ENV_ACCESS_IN_NODE=true\n  }\n};\nconst BRAND = {\n  logoUrl: env('MELIORA_LOGO_URL', 'https://meliora-gym.tn/images/logo.jpg'),\n  websiteUrl: env('MELIORA_WEBSITE_URL', 'https://meliora-gym.tn'),\n  appUrl: env('MELIORA_APP_URL', 'https://meliora-gym.tn/app'),\n  adminUrl: env('MELIORA_ADMIN_URL', 'https://meliora-gym.tn/admin'),\n  mapsUrl: env('MELIORA_MAPS_URL', 'https://maps.app.goo.gl/CVWB98nx2RdSd8Mw8'),\n  instagramUrl: 'https://www.instagram.com/gymmeliora/',\n  instagramHandle: '@gymmeliora',\n  address: 'Khzema Est, Rue Colonel Garnaoui, Sousse 4051',\n  phone: env('MELIORA_GYM_PHONE'),\n};\nconst FROM = env('MELIORA_FROM_EMAIL', 'Meliora Gym <contact@meliora-gym.tn>');\nconst OWNER = env('MELIORA_OWNER_EMAIL');\nconst STAFF = env('MELIORA_STAFF_EMAIL', OWNER);\nconst MEMBER_NOTE = 'Vous recevez cet e-mail car vous êtes membre de Meliora Gym. Répondez « STOP » pour ne plus recevoir nos messages.';\nconst TZ = 'Africa/Tunis';\n\nconst esc = (value) =>\n  String(value ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);\n// {{#if key}}…{{/if}} blocks, then {{{raw}}} / {{escaped}} values in a single pass (values are never re-scanned).\nconst render = (template, vars) =>\n  template\n    .replace(/\\{\\{#if (\\w+)\\}\\}([\\s\\S]*?)\\{\\{\\/if\\}\\}/g, (_, key, inner) => (vars[key] ? inner : ''))\n    .replace(/\\{\\{\\{(\\w+)\\}\\}\\}|\\{\\{(\\w+)\\}\\}/g, (_, raw, key) => (raw ? String(vars[raw] ?? '') : esc(vars[key])));\n\nconst asDate = (value) =>\n  typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) ? new Date(`${value}T12:00:00Z`) : new Date(value);\nconst fmt = (value, options) => {\n  if (!value) return '';\n  const date = asDate(value);\n  return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat('fr-FR', { timeZone: TZ, ...options }).format(date);\n};\nconst longDate = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst dayMonth = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long' });\nconst shortDate = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric' });\nconst dateTime = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });\nconst hour = (value) => fmt(value, { hour: '2-digit', minute: '2-digit' });\nconst dayKey = (value) => fmt(value, { year: 'numeric', month: '2-digit', day: '2-digit' }).split('/').reverse().join('-');\nconst capitalize = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : '');\nconst money = (amount) =>\n  `${Number(amount || 0).toLocaleString('fr-FR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} DT`;\nconst plural = (count, one, many) => `${count} ${Math.abs(Number(count)) === 1 ? one : many}`;\nconst firstWord = (name) => String(name || '').trim().split(/\\s+/)[0] || '';\nconst weekRange = (from, to) => `${fmt(from, { day: 'numeric', month: 'long' })} au ${fmt(to, { day: 'numeric', month: 'long', year: 'numeric' })}`;\n\nconst METHODS = { CASH: 'Espèces', CARD: 'Carte bancaire', TRANSFER: 'Virement bancaire', D17: 'D17' };\nconst SOURCES = {\n  WALK_IN: 'Passage à l’accueil',\n  INSTAGRAM: 'Instagram',\n  FACEBOOK: 'Facebook',\n  WEBSITE: 'Site web',\n  REFERRAL: 'Parrainage',\n  PHONE: 'Téléphone',\n  OTHER: 'Autre',\n};\nconst PRIORITIES = { LOW: 'basse', MEDIUM: 'moyenne', HIGH: 'haute', URGENT: 'urgente' };\n\n/** One e-mail item for the \"Send Email\" node, or null when there is no usable recipient. */\nconst email = (template, { to, subject, preheader = '', vars = {}, footerNote = '' }) => {\n  const recipient = String(to || '').trim();\n  if (!recipient.includes('@')) return null;\n  const html = render(TEMPLATES[template], {\n    ...BRAND,\n    year: new Date().getFullYear(),\n    subject,\n    preheader,\n    footerNote,\n    ...vars,\n  });\n  return { json: { from: FROM, to: recipient, subject, html } };\n};\n\n/** Bordered list used in owner digests: rows of { title, detail }. */\nconst listTable = (rows, empty = 'Rien à signaler ✅') => {\n  if (!rows.length) return `<p style=\"margin:0 0 14px;color:#2e7d32;\">${esc(empty)}</p>`;\n  const body = rows\n    .map(\n      (row) =>\n        `<tr><td style=\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;\"><strong style=\"color:#0b0b0c;\">${esc(row.title)}</strong>` +\n        (row.detail ? `<br><span style=\"color:#6b6b6b;font-size:13px;\">${esc(row.detail)}</span>` : '') +\n        '</td></tr>',\n    )\n    .join('');\n  return `<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 18px;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\">${body}</table>`;\n};\n\nreturn $input\n  .all()\n  .map((item) => {\n    const d = item.json.body?.data ?? {};\n    return email('stockAlert', {\n      to: OWNER,\n      subject: `Stock bas : ${d.name} (${plural(d.stock, 'unité restante', 'unités restantes')})`,\n      preheader: `Seuil d’alerte : ${d.threshold}.`,\n      vars: { name: d.name, stockLabel: plural(d.stock, 'unité', 'unités'), threshold: d.threshold },\n    });\n  })\n  .filter(Boolean);"
+      },
+      "id": "2e22c587-dfd4-518c-ac30-3a2c579db8ae",
+      "name": "Préparer · Alerte stock",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        760
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Meliora Gym — e-mail « Alerte maintenance » (maintenance.opened)\n// Généré par n8n/scripts/build.mjs : modifiez n8n/templates/*.html ou n8n/scripts/n8n-code.mjs,\n// puis `npm run build` et réimportez le workflow.\nconst TEMPLATES = {\"maintenanceAlert\":\"<!DOCTYPE html>\\n<html lang=\\\"fr\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1\\\">\\n<meta name=\\\"color-scheme\\\" content=\\\"light only\\\">\\n<meta name=\\\"supported-color-schemes\\\" content=\\\"light only\\\">\\n<title>{{subject}}</title>\\n<style>\\n  @media (max-width: 620px) {\\n    .container { width: 100% !important; }\\n    .px { padding-left: 22px !important; padding-right: 22px !important; }\\n    .h1 { font-size: 25px !important; }\\n  }\\n  a { color: #E10600; }\\n</style>\\n</head>\\n<body style=\\\"margin:0;padding:0;background:#f1f1f1;-webkit-text-size-adjust:100%;\\\">\\n<div style=\\\"display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;\\\">{{preheader}}</div>\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"background:#f1f1f1;\\\">\\n  <tr>\\n    <td align=\\\"center\\\" style=\\\"padding:24px 12px;\\\">\\n      <table role=\\\"presentation\\\" class=\\\"container\\\" width=\\\"600\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"width:600px;max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;\\\">\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:20px 32px;\\\">\\n            <table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\">\\n              <tr>\\n                <td style=\\\"vertical-align:middle;\\\">\\n                  <a href=\\\"{{websiteUrl}}\\\" style=\\\"text-decoration:none;\\\"><img src=\\\"{{logoUrl}}\\\" width=\\\"56\\\" height=\\\"56\\\" alt=\\\"Meliora Gym\\\" style=\\\"display:block;width:56px;height:56px;border:0;border-radius:10px;background:#ffffff;\\\"></a>\\n                </td>\\n                <td align=\\\"right\\\" style=\\\"vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:bold;letter-spacing:4px;text-transform:uppercase;color:#ffffff;\\\">\\n                  Meliora <span style=\\\"color:#E10600;\\\">Gym</span>\\n                </td>\\n              </tr>\\n            </table>\\n          </td>\\n        </tr>\\n        <tr><td style=\\\"height:4px;line-height:4px;font-size:0;background:#E10600;\\\">&nbsp;</td></tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"padding:36px 40px 30px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#1b1b1b;\\\">\\n<p style=\\\"margin:0 0 8px;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#E10600;\\\">Maintenance · priorité {{priorityLabel}}</p>\\n<h1 class=\\\"h1\\\" style=\\\"margin:0 0 18px;font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:30px;line-height:1.2;color:#0b0b0c;\\\">{{title}}</h1>\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"margin:20px 0;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\\\">\\n{{#if equipmentName}}<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Équipement</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{equipmentName}}</td></tr>{{/if}}\\n{{#if roomName}}<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Salle</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{roomName}}</td></tr>{{/if}}\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Signalé le</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{at}}</td></tr>\\n<tr><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;color:#6b6b6b;\\\">Priorité</td><td style=\\\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;font-weight:bold;color:#0b0b0c;text-align:right;\\\">{{priorityLabel}}</td></tr>\\n</table>\\n<p style=\\\"margin:0 0 14px;\\\">Si l’équipement présente un risque pour les membres, signalez-le « hors service » en salle jusqu’à l’intervention.</p>\\n<table role=\\\"presentation\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"margin:28px 0 10px;\\\"><tr><td style=\\\"border-radius:8px;background:#E10600;\\\"><a href=\\\"{{adminUrl}}\\\" style=\\\"display:inline-block;padding:14px 28px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:8px;\\\">Voir le ticket</a></td></tr></table>\\n          </td>\\n        </tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:26px 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#bdbdbd;\\\">\\n            <strong style=\\\"color:#ffffff;font-size:13px;letter-spacing:1px;\\\">MELIORA GYM</strong><br>\\n            {{address}}{{#if phone}} · {{phone}}{{/if}}<br>\\n            <a href=\\\"{{instagramUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Instagram {{instagramHandle}}</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{mapsUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Itinéraire</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{websiteUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Site web</a>\\n            {{#if footerNote}}<p style=\\\"margin:14px 0 0;color:#8c8c8c;\\\">{{footerNote}}</p>{{/if}}\\n            <p style=\\\"margin:14px 0 0;color:#6f6f6f;\\\">© {{year}} Meliora Gym — Sousse, Tunisie</p>\\n          </td>\\n        </tr>\\n      </table>\\n    </td>\\n  </tr>\\n</table>\\n</body>\\n</html>\\n\"};\n\nconst env = (key, fallback = '') => {\n  try {\n    const value = $env[key];\n    return value === undefined || value === null || value === '' ? fallback : String(value);\n  } catch (error) {\n    return fallback; // N8N_BLOCK_ENV_ACCESS_IN_NODE=true\n  }\n};\nconst BRAND = {\n  logoUrl: env('MELIORA_LOGO_URL', 'https://meliora-gym.tn/images/logo.jpg'),\n  websiteUrl: env('MELIORA_WEBSITE_URL', 'https://meliora-gym.tn'),\n  appUrl: env('MELIORA_APP_URL', 'https://meliora-gym.tn/app'),\n  adminUrl: env('MELIORA_ADMIN_URL', 'https://meliora-gym.tn/admin'),\n  mapsUrl: env('MELIORA_MAPS_URL', 'https://maps.app.goo.gl/CVWB98nx2RdSd8Mw8'),\n  instagramUrl: 'https://www.instagram.com/gymmeliora/',\n  instagramHandle: '@gymmeliora',\n  address: 'Khzema Est, Rue Colonel Garnaoui, Sousse 4051',\n  phone: env('MELIORA_GYM_PHONE'),\n};\nconst FROM = env('MELIORA_FROM_EMAIL', 'Meliora Gym <contact@meliora-gym.tn>');\nconst OWNER = env('MELIORA_OWNER_EMAIL');\nconst STAFF = env('MELIORA_STAFF_EMAIL', OWNER);\nconst MEMBER_NOTE = 'Vous recevez cet e-mail car vous êtes membre de Meliora Gym. Répondez « STOP » pour ne plus recevoir nos messages.';\nconst TZ = 'Africa/Tunis';\n\nconst esc = (value) =>\n  String(value ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);\n// {{#if key}}…{{/if}} blocks, then {{{raw}}} / {{escaped}} values in a single pass (values are never re-scanned).\nconst render = (template, vars) =>\n  template\n    .replace(/\\{\\{#if (\\w+)\\}\\}([\\s\\S]*?)\\{\\{\\/if\\}\\}/g, (_, key, inner) => (vars[key] ? inner : ''))\n    .replace(/\\{\\{\\{(\\w+)\\}\\}\\}|\\{\\{(\\w+)\\}\\}/g, (_, raw, key) => (raw ? String(vars[raw] ?? '') : esc(vars[key])));\n\nconst asDate = (value) =>\n  typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) ? new Date(`${value}T12:00:00Z`) : new Date(value);\nconst fmt = (value, options) => {\n  if (!value) return '';\n  const date = asDate(value);\n  return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat('fr-FR', { timeZone: TZ, ...options }).format(date);\n};\nconst longDate = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst dayMonth = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long' });\nconst shortDate = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric' });\nconst dateTime = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });\nconst hour = (value) => fmt(value, { hour: '2-digit', minute: '2-digit' });\nconst dayKey = (value) => fmt(value, { year: 'numeric', month: '2-digit', day: '2-digit' }).split('/').reverse().join('-');\nconst capitalize = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : '');\nconst money = (amount) =>\n  `${Number(amount || 0).toLocaleString('fr-FR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} DT`;\nconst plural = (count, one, many) => `${count} ${Math.abs(Number(count)) === 1 ? one : many}`;\nconst firstWord = (name) => String(name || '').trim().split(/\\s+/)[0] || '';\nconst weekRange = (from, to) => `${fmt(from, { day: 'numeric', month: 'long' })} au ${fmt(to, { day: 'numeric', month: 'long', year: 'numeric' })}`;\n\nconst METHODS = { CASH: 'Espèces', CARD: 'Carte bancaire', TRANSFER: 'Virement bancaire', D17: 'D17' };\nconst SOURCES = {\n  WALK_IN: 'Passage à l’accueil',\n  INSTAGRAM: 'Instagram',\n  FACEBOOK: 'Facebook',\n  WEBSITE: 'Site web',\n  REFERRAL: 'Parrainage',\n  PHONE: 'Téléphone',\n  OTHER: 'Autre',\n};\nconst PRIORITIES = { LOW: 'basse', MEDIUM: 'moyenne', HIGH: 'haute', URGENT: 'urgente' };\n\n/** One e-mail item for the \"Send Email\" node, or null when there is no usable recipient. */\nconst email = (template, { to, subject, preheader = '', vars = {}, footerNote = '' }) => {\n  const recipient = String(to || '').trim();\n  if (!recipient.includes('@')) return null;\n  const html = render(TEMPLATES[template], {\n    ...BRAND,\n    year: new Date().getFullYear(),\n    subject,\n    preheader,\n    footerNote,\n    ...vars,\n  });\n  return { json: { from: FROM, to: recipient, subject, html } };\n};\n\n/** Bordered list used in owner digests: rows of { title, detail }. */\nconst listTable = (rows, empty = 'Rien à signaler ✅') => {\n  if (!rows.length) return `<p style=\"margin:0 0 14px;color:#2e7d32;\">${esc(empty)}</p>`;\n  const body = rows\n    .map(\n      (row) =>\n        `<tr><td style=\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;\"><strong style=\"color:#0b0b0c;\">${esc(row.title)}</strong>` +\n        (row.detail ? `<br><span style=\"color:#6b6b6b;font-size:13px;\">${esc(row.detail)}</span>` : '') +\n        '</td></tr>',\n    )\n    .join('');\n  return `<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 18px;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\">${body}</table>`;\n};\n\nreturn $input\n  .all()\n  .map((item) => {\n    const d = item.json.body?.data ?? {};\n    const priorityLabel = PRIORITIES[d.priority] ?? String(d.priority ?? '').toLowerCase();\n    return email('maintenanceAlert', {\n      to: OWNER,\n      subject: `Maintenance ${priorityLabel} : ${d.title}`,\n      preheader: [d.equipmentName, d.roomName].filter(Boolean).join(' · '),\n      vars: {\n        title: d.title,\n        priorityLabel,\n        equipmentName: d.equipmentName,\n        roomName: d.roomName,\n        at: dateTime(d.at),\n      },\n    });\n  })\n  .filter(Boolean);"
+      },
+      "id": "0defcdec-3464-5b1e-b2f8-86d0cc5ba2f5",
+      "name": "Préparer · Alerte maintenance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        920
+      ]
+    }
+  ],
+  "connections": {
+    "Événements Meliora": {
+      "main": [
+        [
+          {
+            "node": "Calculer la signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculer la signature": {
+      "main": [
+        [
+          {
+            "node": "Signature valide ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signature valide ?": {
+      "main": [
+        [
+          {
+            "node": "Ignorer les doublons",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Signature invalide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ignorer les doublons": {
+      "main": [
+        [
+          {
+            "node": "Type d’événement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Type d’événement": {
+      "main": [
+        [
+          {
+            "node": "Préparer · Bienvenue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Préparer · Abonnement confirmé",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Préparer · Reçu de paiement",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Préparer · Rappel d’expiration",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Préparer · Abonnement expiré",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Préparer · Réservation confirmée",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Préparer · Séance d’essai",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Préparer · Reçu boutique",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Préparer · Alerte stock",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Préparer · Alerte maintenance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer · Bienvenue": {
+      "main": [
+        [
+          {
+            "node": "Envoyer l’e-mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer · Abonnement confirmé": {
+      "main": [
+        [
+          {
+            "node": "Envoyer l’e-mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer · Reçu de paiement": {
+      "main": [
+        [
+          {
+            "node": "Envoyer l’e-mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer · Rappel d’expiration": {
+      "main": [
+        [
+          {
+            "node": "Envoyer l’e-mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer · Abonnement expiré": {
+      "main": [
+        [
+          {
+            "node": "Envoyer l’e-mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer · Réservation confirmée": {
+      "main": [
+        [
+          {
+            "node": "Envoyer l’e-mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer · Séance d’essai": {
+      "main": [
+        [
+          {
+            "node": "Envoyer l’e-mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer · Reçu boutique": {
+      "main": [
+        [
+          {
+            "node": "Envoyer l’e-mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer · Alerte stock": {
+      "main": [
+        [
+          {
+            "node": "Envoyer l’e-mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer · Alerte maintenance": {
+      "main": [
+        [
+          {
+            "node": "Envoyer l’e-mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tunis",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

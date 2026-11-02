@@ -1,0 +1,11 @@
+<!-- Événement maintenance.opened (alerte gérant) — vars: title, priorityLabel, equipmentName?, roomName?, at -->
+[[kicker:Maintenance · priorité {{priorityLabel}}]]
+[[h1:{{title}}]]
+[[details]]
+{{#if equipmentName}}[[row:Équipement|{{equipmentName}}]]{{/if}}
+{{#if roomName}}[[row:Salle|{{roomName}}]]{{/if}}
+[[row:Signalé le|{{at}}]]
+[[row:Priorité|{{priorityLabel}}]]
+[[/details]]
+<p>Si l’équipement présente un risque pour les membres, signalez-le « hors service » en salle jusqu’à l’intervention.</p>
+[[button:Voir le ticket|{{adminUrl}}]]

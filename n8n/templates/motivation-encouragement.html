@@ -1,0 +1,11 @@
+<!-- Motivation · étape « motivation » (14 à 29 jours) — vars: firstName, daysLabel, personalLine, classesHtml?, tip, whatsappUrl?, phoneUrl? -->
+[[kicker:On croit en vous]]
+[[h1:{{firstName}}, votre prochaine séance vous attend]]
+<p>Cela fait {{daysLabel}} que l’on ne vous a pas vu au club. Le plus important n’est pas d’être parfait, c’est de revenir.</p>
+[[note]]{{personalLine}}[[/note]]
+{{#if classesHtml}}[[h2:Les prochains cours]]{{/if}}
+{{{classesHtml}}}
+[[h2:Le conseil du coach]]
+<p>{{tip}}</p>
+[[button:Je réserve un cours|{{appUrl}}]]
+<p style="font-size:14px;color:#444444;">Besoin d’un coup de main pour reprendre ? Répondez à cet e-mail{{#if whatsappUrl}}, <a href="{{whatsappUrl}}">écrivez-nous sur WhatsApp</a>{{/if}}{{#if phoneUrl}} ou <a href="{{phoneUrl}}">appelez l’accueil</a>{{/if}}.</p>

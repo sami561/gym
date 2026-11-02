@@ -1,0 +1,30 @@
+# n8n for the Meliora automations:  cp .env.example .env && docker compose up -d
+# Editor: http://localhost:5678 — workflows to import are mounted read-only in /workflows.
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.45.7
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    env_file: .env
+    environment:
+      GENERIC_TIMEZONE: Africa/Tunis
+      TZ: Africa/Tunis
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${WEBHOOK_URL:-http://localhost:5678/}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?set N8N_ENCRYPTION_KEY in .env}
+      # The workflows read MELIORA_* variables with $env
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      N8N_RUNNERS_ENABLED: "true"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./workflows:/workflows:ro
+    extra_hosts:
+      # lets n8n reach the API gateway running on the host: MELIORA_API_URL=http://host.docker.internal:4000
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  n8n_data:

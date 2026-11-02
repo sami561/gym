@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+.pnp*
+
+# builds
+dist/
+build/
+web-build/
+.expo/
+*.tsbuildinfo
+coverage/
+
+# env & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Claude Code local-only settings
+.claude/settings.local.json
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log
+npm-debug.log*
