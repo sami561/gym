@@ -180,6 +180,7 @@ export class ListRunsQuery {
   status?: WorkflowRunStatus;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(200)

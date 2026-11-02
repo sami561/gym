@@ -59,6 +59,7 @@ export class OpenDoorDto {
 
 export class LimitQuery {
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(200)

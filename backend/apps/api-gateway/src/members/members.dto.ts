@@ -133,11 +133,13 @@ export class ListMembersQuery {
   status?: 'active' | 'expired' | 'suspended' | 'all';
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   page?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(100)
@@ -238,11 +240,13 @@ export class ListPaymentsQuery {
   memberId?: string;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   page?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(200)
