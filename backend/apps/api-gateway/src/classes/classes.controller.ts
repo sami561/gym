@@ -11,7 +11,7 @@ import {
   RpcClient,
 } from '@app/common';
 import { ClassRangeQuery } from '../public/public.dto';
-import { BookingStatusDto, CreateClassDto, UpdateClassDto } from './classes.dto';
+import { BookingStatusDto, CreateClassDto, StaffBookingDto, UpdateClassDto } from './classes.dto';
 
 @ApiTags('Planning des cours')
 @ApiBearerAuth()
@@ -44,6 +44,12 @@ export class ClassesController {
   @Get('classes/:id/bookings')
   bookings(@Param('id', ParseUUIDPipe) id: string) {
     return this.rpc.send<BookingDto[]>(PATTERNS.classes.bookings, { id });
+  }
+
+  /** Book a place for a member from the desk; same rules as the app (window, places, waitlist). */
+  @Post('classes/:id/bookings')
+  bookForMember(@Param('id', ParseUUIDPipe) id: string, @Body() dto: StaffBookingDto) {
+    return this.rpc.send<BookingDto>(PATTERNS.bookings.create, { sessionId: id, ...dto });
   }
 
   /** Reservation rules (booking window, cancellation deadline, no-show policy). */

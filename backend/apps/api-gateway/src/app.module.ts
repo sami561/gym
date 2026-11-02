@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthGuard, BusModule } from '@app/common';
 import { LiveGateway } from './live/live.gateway';
 import { LiveEventsController } from './live/live-events.controller';
@@ -22,6 +22,7 @@ import { DoorsController } from './access/doors.controller';
 import { DashboardController } from './dashboard/dashboard.controller';
 import { AutomationController } from './automation/automation.controller';
 import { OpsModule } from './ops/ops.module';
+import { HttpThrottlerGuard } from './common/http-throttler.guard';
 
 @Module({
   imports: [
@@ -51,7 +52,7 @@ import { OpsModule } from './ops/ops.module';
   ],
   providers: [
     LiveGateway,
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: HttpThrottlerGuard },
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
 })

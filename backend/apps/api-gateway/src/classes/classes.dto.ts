@@ -119,3 +119,15 @@ export class BookingStatusDto {
   @IsEnum(BookingStatus)
   status: BookingStatus;
 }
+
+/** Reception books a place on behalf of a member (phone / desk). */
+export class StaffBookingDto {
+  @IsUUID()
+  memberId: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  spotNumber?: number;
+}
