@@ -206,7 +206,7 @@ Push notifications need an EAS project id (`eas init`) and a development build o
 
 ### Door agent (on the gym network)
 ```bash
-cd door-agent && cp .env.example .env     # SERVER_URL + AGENT_KEY (created in Accès → Contrôleurs)
+cd door-agent && cp .env.example .env     # SERVER_URL + AGENT_KEY (created in Accès → Agents)
 npm install && npm run dev                 # or `npm run mock-server` to try without hardware
 ```
 Wiring (maglock / electric strike, relays, fail-safe on escape routes) is described in
