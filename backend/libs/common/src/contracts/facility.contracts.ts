@@ -62,6 +62,11 @@ export interface CreateRoomRequest {
   isActive?: boolean;
 }
 
+export interface ListRoomsRequest {
+  /** Back-office lists include inactive rooms; the public website does not. */
+  includeInactive?: boolean;
+}
+
 export interface UpdateRoomRequest {
   id: string;
   data: Partial<CreateRoomRequest>;
