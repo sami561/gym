@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "TZ": "Africa/Tunis"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(npm test*)",
+      "Bash(npm ci)",
+      "Bash(npm install)",
+      "Bash(npm ls *)",
+      "Bash(npx nest build *)",
+      "Bash(npx tsc --noEmit*)",
+      "Bash(npx jest*)",
+      "Bash(npx expo lint)",
+      "Bash(npx expo-doctor)",
+      "Bash(npx expo export *)",
+      "Bash(node --check *)",
+      "Bash(redis-cli ping)",
+      "Bash(curl -s localhost:4000/*)",
+      "Bash(curl -s http://localhost:4000/*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git branch*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git checkout -b *)",
+      "Bash(git push -u origin feat/*)",
+      "Bash(git push -u origin fix/*)",
+      "Bash(git push -u origin docs/*)",
+      "Bash(git push -u origin chore/*)",
+      "Bash(git push -u origin build/*)"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.local)",
+      "Read(**/.env.production)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push origin main*)",
+      "Bash(git push -u origin main*)",
+      "Bash(git push origin HEAD:main*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean -fd*)"
+    ]
+  }
+}
