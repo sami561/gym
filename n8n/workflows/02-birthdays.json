@@ -1,0 +1,140 @@
+{
+  "name": "Meliora · 02 · Anniversaires des membres",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "ecccd634-1a8b-59b9-9ae9-da2419eca5ce",
+      "name": "Chaque jour à 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.MELIORA_API_URL }}/api/automation/birthdays",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "5f5bf72d-4310-55bd-9f35-031f1d8fc995",
+      "name": "Anniversaires du jour",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "meliora-automation-api",
+          "name": "Meliora automation API (x-api-key)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Meliora Gym — e-mail d’anniversaire\n// Généré par n8n/scripts/build.mjs : modifiez n8n/templates/*.html ou n8n/scripts/n8n-code.mjs,\n// puis `npm run build` et réimportez le workflow.\nconst TEMPLATES = {\"birthday\":\"<!DOCTYPE html>\\n<html lang=\\\"fr\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1\\\">\\n<meta name=\\\"color-scheme\\\" content=\\\"light only\\\">\\n<meta name=\\\"supported-color-schemes\\\" content=\\\"light only\\\">\\n<title>{{subject}}</title>\\n<style>\\n  @media (max-width: 620px) {\\n    .container { width: 100% !important; }\\n    .px { padding-left: 22px !important; padding-right: 22px !important; }\\n    .h1 { font-size: 25px !important; }\\n  }\\n  a { color: #E10600; }\\n</style>\\n</head>\\n<body style=\\\"margin:0;padding:0;background:#f1f1f1;-webkit-text-size-adjust:100%;\\\">\\n<div style=\\\"display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;\\\">{{preheader}}</div>\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"background:#f1f1f1;\\\">\\n  <tr>\\n    <td align=\\\"center\\\" style=\\\"padding:24px 12px;\\\">\\n      <table role=\\\"presentation\\\" class=\\\"container\\\" width=\\\"600\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"width:600px;max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;\\\">\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:20px 32px;\\\">\\n            <table role=\\\"presentation\\\" width=\\\"100%\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\">\\n              <tr>\\n                <td style=\\\"vertical-align:middle;\\\">\\n                  <a href=\\\"{{websiteUrl}}\\\" style=\\\"text-decoration:none;\\\"><img src=\\\"{{logoUrl}}\\\" width=\\\"56\\\" height=\\\"56\\\" alt=\\\"Meliora Gym\\\" style=\\\"display:block;width:56px;height:56px;border:0;border-radius:10px;background:#ffffff;\\\"></a>\\n                </td>\\n                <td align=\\\"right\\\" style=\\\"vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:bold;letter-spacing:4px;text-transform:uppercase;color:#ffffff;\\\">\\n                  Meliora <span style=\\\"color:#E10600;\\\">Gym</span>\\n                </td>\\n              </tr>\\n            </table>\\n          </td>\\n        </tr>\\n        <tr><td style=\\\"height:4px;line-height:4px;font-size:0;background:#E10600;\\\">&nbsp;</td></tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"padding:36px 40px 30px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#1b1b1b;\\\">\\n<p style=\\\"margin:0 0 8px;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#E10600;\\\">Joyeux anniversaire</p>\\n<h1 class=\\\"h1\\\" style=\\\"margin:0 0 18px;font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:30px;line-height:1.2;color:#0b0b0c;\\\">Joyeux anniversaire, {{firstName}} ! 🎂</h1>\\n<p style=\\\"margin:0 0 14px;\\\">Toute l’équipe Meliora vous souhaite une très belle journée. Merci de faire partie de la famille : chaque séance compte, et on est fiers de vos progrès.</p>\\n{{#if offer}}<div style=\\\"margin:20px 0;padding:14px 18px;background:#f7f7f7;border-left:4px solid #E10600;border-radius:6px;font-size:14px;color:#333333;\\\">🎁 {{offer}}</div>{{/if}}\\n<table role=\\\"presentation\\\" cellpadding=\\\"0\\\" cellspacing=\\\"0\\\" border=\\\"0\\\" style=\\\"margin:28px 0 10px;\\\"><tr><td style=\\\"border-radius:8px;background:#E10600;\\\"><a href=\\\"{{appUrl}}\\\" style=\\\"display:inline-block;padding:14px 28px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:8px;\\\">Réserver un cours</a></td></tr></table>\\n          </td>\\n        </tr>\\n        <tr>\\n          <td class=\\\"px\\\" style=\\\"background:#0b0b0c;padding:26px 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#bdbdbd;\\\">\\n            <strong style=\\\"color:#ffffff;font-size:13px;letter-spacing:1px;\\\">MELIORA GYM</strong><br>\\n            {{address}}{{#if phone}} · {{phone}}{{/if}}<br>\\n            <a href=\\\"{{instagramUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Instagram {{instagramHandle}}</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{mapsUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Itinéraire</a>\\n            &nbsp;·&nbsp; <a href=\\\"{{websiteUrl}}\\\" style=\\\"color:#ffffff;text-decoration:underline;\\\">Site web</a>\\n            {{#if footerNote}}<p style=\\\"margin:14px 0 0;color:#8c8c8c;\\\">{{footerNote}}</p>{{/if}}\\n            <p style=\\\"margin:14px 0 0;color:#6f6f6f;\\\">© {{year}} Meliora Gym — Sousse, Tunisie</p>\\n          </td>\\n        </tr>\\n      </table>\\n    </td>\\n  </tr>\\n</table>\\n</body>\\n</html>\\n\"};\n\nconst env = (key, fallback = '') => {\n  try {\n    const value = $env[key];\n    return value === undefined || value === null || value === '' ? fallback : String(value);\n  } catch (error) {\n    return fallback; // N8N_BLOCK_ENV_ACCESS_IN_NODE=true\n  }\n};\nconst BRAND = {\n  logoUrl: env('MELIORA_LOGO_URL', 'https://meliora-gym.tn/images/logo.jpg'),\n  websiteUrl: env('MELIORA_WEBSITE_URL', 'https://meliora-gym.tn'),\n  appUrl: env('MELIORA_APP_URL', 'https://meliora-gym.tn/app'),\n  adminUrl: env('MELIORA_ADMIN_URL', 'https://meliora-gym.tn/admin'),\n  mapsUrl: env('MELIORA_MAPS_URL', 'https://maps.app.goo.gl/CVWB98nx2RdSd8Mw8'),\n  instagramUrl: 'https://www.instagram.com/gymmeliora/',\n  instagramHandle: '@gymmeliora',\n  address: 'Khzema Est, Rue Colonel Garnaoui, Sousse 4051',\n  phone: env('MELIORA_GYM_PHONE'),\n};\nconst FROM = env('MELIORA_FROM_EMAIL', 'Meliora Gym <contact@meliora-gym.tn>');\nconst OWNER = env('MELIORA_OWNER_EMAIL');\nconst STAFF = env('MELIORA_STAFF_EMAIL', OWNER);\nconst MEMBER_NOTE = 'Vous recevez cet e-mail car vous êtes membre de Meliora Gym. Répondez « STOP » pour ne plus recevoir nos messages.';\nconst TZ = 'Africa/Tunis';\n\nconst esc = (value) =>\n  String(value ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);\n// {{#if key}}…{{/if}} blocks, then {{{raw}}} / {{escaped}} values in a single pass (values are never re-scanned).\nconst render = (template, vars) =>\n  template\n    .replace(/\\{\\{#if (\\w+)\\}\\}([\\s\\S]*?)\\{\\{\\/if\\}\\}/g, (_, key, inner) => (vars[key] ? inner : ''))\n    .replace(/\\{\\{\\{(\\w+)\\}\\}\\}|\\{\\{(\\w+)\\}\\}/g, (_, raw, key) => (raw ? String(vars[raw] ?? '') : esc(vars[key])));\n\nconst asDate = (value) =>\n  typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) ? new Date(`${value}T12:00:00Z`) : new Date(value);\nconst fmt = (value, options) => {\n  if (!value) return '';\n  const date = asDate(value);\n  return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat('fr-FR', { timeZone: TZ, ...options }).format(date);\n};\nconst longDate = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst dayMonth = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long' });\nconst shortDate = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric' });\nconst dateTime = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });\nconst hour = (value) => fmt(value, { hour: '2-digit', minute: '2-digit' });\nconst dayKey = (value) => fmt(value, { year: 'numeric', month: '2-digit', day: '2-digit' }).split('/').reverse().join('-');\nconst capitalize = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : '');\nconst money = (amount) =>\n  `${Number(amount || 0).toLocaleString('fr-FR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} DT`;\nconst plural = (count, one, many) => `${count} ${Math.abs(Number(count)) === 1 ? one : many}`;\nconst firstWord = (name) => String(name || '').trim().split(/\\s+/)[0] || '';\nconst weekRange = (from, to) => `${fmt(from, { day: 'numeric', month: 'long' })} au ${fmt(to, { day: 'numeric', month: 'long', year: 'numeric' })}`;\n\nconst METHODS = { CASH: 'Espèces', CARD: 'Carte bancaire', TRANSFER: 'Virement bancaire', D17: 'D17' };\nconst SOURCES = {\n  WALK_IN: 'Passage à l’accueil',\n  INSTAGRAM: 'Instagram',\n  FACEBOOK: 'Facebook',\n  WEBSITE: 'Site web',\n  REFERRAL: 'Parrainage',\n  PHONE: 'Téléphone',\n  OTHER: 'Autre',\n};\nconst PRIORITIES = { LOW: 'basse', MEDIUM: 'moyenne', HIGH: 'haute', URGENT: 'urgente' };\n\n/** One e-mail item for the \"Send Email\" node, or null when there is no usable recipient. */\nconst email = (template, { to, subject, preheader = '', vars = {}, footerNote = '' }) => {\n  const recipient = String(to || '').trim();\n  if (!recipient.includes('@')) return null;\n  const html = render(TEMPLATES[template], {\n    ...BRAND,\n    year: new Date().getFullYear(),\n    subject,\n    preheader,\n    footerNote,\n    ...vars,\n  });\n  return { json: { from: FROM, to: recipient, subject, html } };\n};\n\n/** Bordered list used in owner digests: rows of { title, detail }. */\nconst listTable = (rows, empty = 'Rien à signaler ✅') => {\n  if (!rows.length) return `<p style=\"margin:0 0 14px;color:#2e7d32;\">${esc(empty)}</p>`;\n  const body = rows\n    .map(\n      (row) =>\n        `<tr><td style=\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;\"><strong style=\"color:#0b0b0c;\">${esc(row.title)}</strong>` +\n        (row.detail ? `<br><span style=\"color:#6b6b6b;font-size:13px;\">${esc(row.detail)}</span>` : '') +\n        '</td></tr>',\n    )\n    .join('');\n  return `<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 18px;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\">${body}</table>`;\n};\n\nconst offer = env('MELIORA_BIRTHDAY_OFFER');\nreturn $input\n  .all()\n  .map((item) => item.json)\n  .filter((member) => member && member.email)\n  .map((member) =>\n    email('birthday', {\n      to: member.email,\n      subject: `Joyeux anniversaire ${member.firstName} ! 🎂`,\n      preheader: 'Toute l’équipe Meliora vous souhaite une très belle journée.',\n      vars: { firstName: member.firstName, offer },\n      footerNote: MEMBER_NOTE,\n    }),\n  )\n  .filter(Boolean);"
+      },
+      "id": "31e700d9-0058-573e-ab62-abcf3d36915a",
+      "name": "Préparer · anniversaire",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $json.from }}",
+        "toEmail": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "html",
+        "html": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "c2f142f6-76d0-5380-84c9-89c43ade48b9",
+      "name": "Envoyer l’e-mail",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        720,
+        0
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "meliora-smtp",
+          "name": "Meliora SMTP"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Chaque jour à 09:00": {
+      "main": [
+        [
+          {
+            "node": "Anniversaires du jour",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anniversaires du jour": {
+      "main": [
+        [
+          {
+            "node": "Préparer · anniversaire",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer · anniversaire": {
+      "main": [
+        [
+          {
+            "node": "Envoyer l’e-mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tunis",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

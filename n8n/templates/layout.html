@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light only">
+<meta name="supported-color-schemes" content="light only">
+<title>{{subject}}</title>
+<style>
+  @media (max-width: 620px) {
+    .container { width: 100% !important; }
+    .px { padding-left: 22px !important; padding-right: 22px !important; }
+    .h1 { font-size: 25px !important; }
+  }
+  a { color: #E10600; }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#f1f1f1;-webkit-text-size-adjust:100%;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">{{preheader}}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f1f1f1;">
+  <tr>
+    <td align="center" style="padding:24px 12px;">
+      <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;">
+        <tr>
+          <td class="px" style="background:#0b0b0c;padding:20px 32px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="vertical-align:middle;">
+                  <a href="{{websiteUrl}}" style="text-decoration:none;"><img src="{{logoUrl}}" width="56" height="56" alt="Meliora Gym" style="display:block;width:56px;height:56px;border:0;border-radius:10px;background:#ffffff;"></a>
+                </td>
+                <td align="right" style="vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:bold;letter-spacing:4px;text-transform:uppercase;color:#ffffff;">
+                  Meliora <span style="color:#E10600;">Gym</span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr><td style="height:4px;line-height:4px;font-size:0;background:#E10600;">&nbsp;</td></tr>
+        <tr>
+          <td class="px" style="padding:36px 40px 30px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#1b1b1b;">
+{{{content}}}
+          </td>
+        </tr>
+        <tr>
+          <td class="px" style="background:#0b0b0c;padding:26px 32px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#bdbdbd;">
+            <strong style="color:#ffffff;font-size:13px;letter-spacing:1px;">MELIORA GYM</strong><br>
+            {{address}}{{#if phone}} · {{phone}}{{/if}}<br>
+            <a href="{{instagramUrl}}" style="color:#ffffff;text-decoration:underline;">Instagram {{instagramHandle}}</a>
+            &nbsp;·&nbsp; <a href="{{mapsUrl}}" style="color:#ffffff;text-decoration:underline;">Itinéraire</a>
+            &nbsp;·&nbsp; <a href="{{websiteUrl}}" style="color:#ffffff;text-decoration:underline;">Site web</a>
+            {{#if footerNote}}<p style="margin:14px 0 0;color:#8c8c8c;">{{footerNote}}</p>{{/if}}
+            <p style="margin:14px 0 0;color:#6f6f6f;">© {{year}} Meliora Gym — Sousse, Tunisie</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>

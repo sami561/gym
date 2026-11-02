@@ -1,0 +1,13 @@
+<!-- Événement lead.created (alerte équipe) — vars: fullName, phone, email?, sourceLabel, trialLabel, interestPlanName?, message? -->
+[[kicker:Nouveau prospect]]
+[[h1:{{fullName}} veut essayer Meliora]]
+[[details]]
+[[row:Téléphone|{{phone}}]]
+{{#if email}}[[row:E-mail|{{email}}]]{{/if}}
+[[row:Source|{{sourceLabel}}]]
+[[row:Séance d’essai|{{trialLabel}}]]
+{{#if interestPlanName}}[[row:Formule|{{interestPlanName}}]]{{/if}}
+[[/details]]
+{{#if message}}[[note]]« {{message}} »[[/note]]{{/if}}
+<p>Rappelez ce prospect rapidement : c’est dans la première heure que l’on convertit le mieux.</p>
+[[button:Ouvrir le CRM|{{adminUrl}}]]

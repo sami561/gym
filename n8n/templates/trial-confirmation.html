@@ -1,0 +1,12 @@
+<!-- Événement lead.created (e-mail au prospect) — vars: firstName, trialDate?, interestPlanName? -->
+[[kicker:Séance d’essai gratuite]]
+[[h1:Bienvenue, {{firstName}} !]]
+<p>Merci pour votre intérêt pour Meliora Gym. Votre demande de séance d’essai gratuite est bien enregistrée{{#if trialDate}} pour le <strong>{{trialDate}}</strong>{{/if}}.</p>
+{{#if noTrialDate}}<p>Notre équipe vous contacte très vite pour fixer le jour qui vous convient.</p>{{/if}}
+[[details]]
+[[row:Où|{{address}}]]
+{{#if interestPlanName}}[[row:Formule qui vous intéresse|{{interestPlanName}}]]{{/if}}
+[[row:À prévoir|Tenue de sport, baskets propres, serviette et bouteille d’eau]]
+[[/details]]
+[[button:Voir l’itinéraire|{{mapsUrl}}]]
+<p style="color:#6b6b6b;font-size:14px;">Une question ? Écrivez-nous sur Instagram {{instagramHandle}} ou répondez à cet e-mail.</p>
