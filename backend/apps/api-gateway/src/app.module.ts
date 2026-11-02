@@ -52,8 +52,10 @@ import { HttpThrottlerGuard } from './common/http-throttler.guard';
   ],
   providers: [
     LiveGateway,
-    { provide: APP_GUARD, useClass: HttpThrottlerGuard },
+    // Global guards run in this order: authenticate first (sets req.user, anonymous calls to
+    // protected routes stop at 401), then rate-limit per user, or per client address on @Public routes.
     { provide: APP_GUARD, useClass: AuthGuard },
+    { provide: APP_GUARD, useClass: HttpThrottlerGuard },
   ],
 })
 export class AppModule {}

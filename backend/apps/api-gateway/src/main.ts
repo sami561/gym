@@ -1,17 +1,28 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions } from '@nestjs/microservices';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
-import { envInt, loadEnv, serverTransport } from '@app/common';
+import { env, envInt, loadEnv, serverTransport } from '@app/common';
 import { AppModule } from './app.module';
 import { RpcToHttpFilter } from './common/rpc-to-http.filter';
 import { attachAgentSocketProxy } from './common/agent-proxy';
 import { corsOrigins } from './common/cors';
+import { DEFAULT_TRUST_PROXY, parseTrustProxy } from './common/trust-proxy';
 
 async function bootstrap() {
   loadEnv();
-  const app = await NestFactory.create(AppModule, { cors: { origin: corsOrigins(), credentials: true } });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    cors: { origin: corsOrigins(), credentials: true },
+  });
+  // Behind nginx every request comes from the proxy: read the client address from X-Forwarded-For
+  // (only when sent by a trusted proxy) so rate limits are per client, not one shared bucket.
+  try {
+    app.set('trust proxy', parseTrustProxy(env('TRUST_PROXY', DEFAULT_TRUST_PROXY)));
+  } catch (err) {
+    throw new Error(`Invalid TRUST_PROXY: ${(err as Error).message}`);
+  }
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.setGlobalPrefix('api');
   app.useGlobalPipes(

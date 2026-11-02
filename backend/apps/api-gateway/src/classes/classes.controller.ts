@@ -59,6 +59,7 @@ export class ClassesController {
     return this.rpc.send<BookingPolicy>(PATTERNS.bookings.policy, {});
   }
 
+  /** Attendance from the desk: BOOKED, CANCELLED, ATTENDED, or NO_SHOW once the class has started. */
   @Patch('bookings/:id')
   setStatus(@Param('id', ParseUUIDPipe) id: string, @Body() dto: BookingStatusDto) {
     return this.rpc.send<BookingDto>(PATTERNS.bookings.setStatus, { bookingId: id, status: dto.status });

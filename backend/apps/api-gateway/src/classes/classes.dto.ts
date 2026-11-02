@@ -1,8 +1,8 @@
 import {
   IsBoolean,
   IsDateString,
-  IsEnum,
   IsHexColor,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -12,7 +12,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { BookingStatus } from '@app/common';
+import { BookingStatus, STAFF_BOOKING_STATUSES } from '@app/common';
 
 export class CreateClassDto {
   @IsString()
@@ -116,7 +116,11 @@ export class UpdateClassDto {
 }
 
 export class BookingStatusDto {
-  @IsEnum(BookingStatus)
+  /**
+   * BOOKED, CANCELLED, ATTENDED or NO_SHOW (only once the class has started). WAITLISTED and
+   * LATE_CANCELLED (a strike) come from the booking flow only.
+   */
+  @IsIn(STAFF_BOOKING_STATUSES, { message: 'Statut invalide (BOOKED, CANCELLED, ATTENDED ou NO_SHOW).' })
   status: BookingStatus;
 }
 
