@@ -183,3 +183,8 @@ export interface TrainingStats {
   ptSessionsThisMonth: number;
   ptRevenueThisMonth: number;
 }
+
+export interface ListExercisesRequest {
+  search?: string;
+  muscleGroup?: MuscleGroup;
+}

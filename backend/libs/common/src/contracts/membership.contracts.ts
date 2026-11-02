@@ -473,3 +473,49 @@ export interface LeadStats {
   conversionRate90d: number;
   followUpsDue: number;
 }
+
+/** GET /api/dashboard/members-analytics */
+export interface MembersAnalytics {
+  total: number;
+  active: number;
+  /** Had a subscription, none covering today. */
+  expired: number;
+  suspended: number;
+  frozen: number;
+  /** Members who never subscribed. */
+  neverSubscribed: number;
+  byGender: { gender: 'MALE' | 'FEMALE' | 'UNKNOWN'; count: number }[];
+  byAgeGroup: { label: string; count: number }[];
+  /** Last 12 months, oldest first, months without sign-ups included. */
+  newPerMonth: { month: string; count: number }[];
+  /** Members whose access ended in the last 30 days without renewal. */
+  churnedLast30d: number;
+  /** Share of subscriptions ended in the last 90 days that were renewed (0-1). */
+  renewalRate90d: number;
+}
+
+export interface KpiPeriodRequest {
+  /** YYYY-MM-DD inclusive, defaults to the first day of the current month. */
+  from?: string;
+  /** YYYY-MM-DD inclusive, defaults to today. */
+  to?: string;
+}
+
+/** Membership side of the GMV / NMV / margin KPIs (subscriptions sold in the period). */
+export interface MembershipKpis {
+  /** Plan list price of subscriptions created in the period (before promo discounts). */
+  gross: number;
+  discounts: number;
+  /** Value of subscriptions created in the period and since cancelled. */
+  cancelled: number;
+  /** gross − discounts − cancelled */
+  net: number;
+  /** Payments received in the period (cash view). */
+  cashCollected: number;
+  /** Active subscriptions today normalised to 30 days. */
+  mrr: number;
+  activeMembers: number;
+  /** net / activeMembers */
+  arpu: number;
+  monthly: { month: string; gross: number; discounts: number; cancelled: number; net: number; cash: number }[];
+}

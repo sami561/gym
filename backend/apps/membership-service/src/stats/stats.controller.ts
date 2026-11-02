@@ -20,6 +20,11 @@ export class StatsController {
     return this.stats.summary();
   }
 
+  @MessagePattern(PATTERNS.membershipStats.analytics)
+  analytics() {
+    return this.stats.analytics();
+  }
+
   @MessagePattern(PATTERNS.membershipStats.revenue)
   revenue(@Payload() req: RevenueRequest) {
     return this.stats.revenue(req ?? {});

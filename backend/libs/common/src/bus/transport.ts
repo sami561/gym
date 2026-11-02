@@ -19,12 +19,18 @@ function redisOptions() {
   };
 }
 
-/** Options for a service listening on the bus. `service` names its NATS queue group. */
-export function serverTransport(service: string): MicroserviceOptions {
+/**
+ * Options for a service listening on the bus. `service` names its NATS queue group;
+ * `broadcast` (gateway live feed) skips the queue so every replica gets every event.
+ */
+export function serverTransport(service: string, opts: { broadcast?: boolean } = {}): MicroserviceOptions {
   if (transportKind() === 'nats') {
     return {
       transport: Transport.NATS,
-      options: { servers: env('NATS_URL', 'nats://127.0.0.1:4222').split(','), queue: service },
+      options: {
+        servers: env('NATS_URL', 'nats://127.0.0.1:4222').split(','),
+        ...(opts.broadcast ? {} : { queue: service }),
+      },
     };
   }
   return { transport: Transport.REDIS, options: redisOptions() };

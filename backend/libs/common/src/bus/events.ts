@@ -20,6 +20,8 @@ export const EVENTS = {
   paymentReceived: 'payment.received', // [webhook]
   bookingCreated: 'booking.created', // [webhook]
   bookingCancelled: 'booking.cancelled',
+  bookingPromoted: 'booking.promoted', // [webhook] waitlist → booked
+  bookingReminder: 'booking.reminder', // [webhook] N hours before the class
   accessLogged: 'access.logged',
   leadCreated: 'lead.created', // [webhook]
   leadConverted: 'lead.converted',
@@ -41,6 +43,8 @@ export const WEBHOOK_EVENTS: EventName[] = [
   EVENTS.subscriptionExpired,
   EVENTS.paymentReceived,
   EVENTS.bookingCreated,
+  EVENTS.bookingPromoted,
+  EVENTS.bookingReminder,
   EVENTS.leadCreated,
   EVENTS.saleCompleted,
   EVENTS.stockLow,
@@ -153,6 +157,9 @@ export interface BookingEvent {
   endsAt: string;
   coachName: string | null;
   room: string | null;
+  status?: string;
+  spotNumber?: number | null;
+  waitlistPosition?: number | null;
 }
 
 export interface LeadCreatedEvent {
@@ -233,6 +240,8 @@ export interface EventPayloads {
   'payment.received': PaymentReceivedEvent;
   'booking.created': BookingEvent;
   'booking.cancelled': BookingEvent;
+  'booking.promoted': BookingEvent;
+  'booking.reminder': BookingEvent;
   'access.logged': AccessLogDto;
   'lead.created': LeadCreatedEvent;
   'lead.converted': LeadConvertedEvent;

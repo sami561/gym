@@ -9,6 +9,7 @@ import {
   ExpiredRequest,
   ExpiringItem,
   ExpiringRequest,
+  MembersAnalytics,
   MembershipSummary,
   PlanMixItem,
   Recipient,
@@ -73,6 +74,76 @@ export class StatsService {
       revenueThisMonth: num(row.revenueThisMonth),
       revenueLastMonth: num(row.revenueLastMonth),
       revenueToday: num(row.revenueToday),
+    };
+  }
+
+  async analytics(): Promise<MembersAnalytics> {
+    const today = toDateOnly();
+    const tz = process.env.TZ ?? 'Africa/Tunis';
+    const start = addMonths(startOfMonth(), -11);
+    const [counts] = await this.query(
+      `SELECT
+        (SELECT COUNT(*) FROM members) AS total,
+        (SELECT COUNT(*) FROM members m WHERE m.status = 'ACTIVE' AND ${COVERED}) AS active,
+        (SELECT COUNT(*) FROM members m WHERE m.status = 'ACTIVE' AND NOT ${COVERED}
+           AND EXISTS (SELECT 1 FROM subscriptions x WHERE x."memberId" = m.id)) AS expired,
+        (SELECT COUNT(*) FROM members WHERE status = 'SUSPENDED') AS suspended,
+        (SELECT COUNT(DISTINCT "memberId") FROM subscriptions WHERE status = 'FROZEN') AS frozen,
+        (SELECT COUNT(*) FROM members m WHERE NOT EXISTS (SELECT 1 FROM subscriptions x WHERE x."memberId" = m.id)) AS "neverSubscribed",
+        (SELECT COUNT(DISTINCT s."memberId") FROM subscriptions s
+          WHERE s."endDate" >= :since30 AND s."endDate" < :today AND s.status IN ('ACTIVE', 'EXPIRED')
+            AND NOT EXISTS (SELECT 1 FROM subscriptions r WHERE r."memberId" = s."memberId"
+              AND r.status IN ('ACTIVE', 'FROZEN') AND r."endDate" >= :today)) AS churned,
+        (SELECT COUNT(*) FROM subscriptions s WHERE s."endDate" >= :since90 AND s."endDate" < :today
+            AND s.status IN ('ACTIVE', 'EXPIRED')) AS ended90,
+        (SELECT COUNT(*) FROM subscriptions s WHERE s."endDate" >= :since90 AND s."endDate" < :today
+            AND s.status IN ('ACTIVE', 'EXPIRED')
+            AND EXISTS (SELECT 1 FROM subscriptions r WHERE r."memberId" = s."memberId"
+              AND r.id <> s.id AND r."startDate" > s."startDate" AND r.status <> 'CANCELLED')) AS renewed90`,
+      { today, since30: addDays(today, -30), since90: addDays(today, -90) },
+    );
+    const genders = await this.query(
+      `SELECT COALESCE(gender::text, 'UNKNOWN') AS gender, COUNT(*) AS count FROM members GROUP BY 1`,
+      {},
+    );
+    const ages = await this.query(
+      `SELECT CASE
+          WHEN "birthDate" IS NULL THEN 'Non renseigné'
+          WHEN date_part('year', age("birthDate")) < 18 THEN '< 18'
+          WHEN date_part('year', age("birthDate")) < 25 THEN '18-24'
+          WHEN date_part('year', age("birthDate")) < 35 THEN '25-34'
+          WHEN date_part('year', age("birthDate")) < 45 THEN '35-44'
+          WHEN date_part('year', age("birthDate")) < 55 THEN '45-54'
+          ELSE '55+' END AS label, COUNT(*) AS count
+         FROM members GROUP BY 1`,
+      {},
+    );
+    const joined = await this.query(
+      `SELECT to_char(date_trunc('month', "joinedAt" AT TIME ZONE :tz), 'YYYY-MM') AS month, COUNT(*) AS count
+         FROM members WHERE "joinedAt" >= :start GROUP BY 1`,
+      { tz, start },
+    );
+    const ageOrder = ['< 18', '18-24', '25-34', '35-44', '45-54', '55+', 'Non renseigné'];
+    const joinedByMonth = new Map(joined.map((r) => [r.month as string, num(r.count)]));
+    const ended90 = num(counts.ended90);
+    return {
+      total: num(counts.total),
+      active: num(counts.active),
+      expired: num(counts.expired),
+      suspended: num(counts.suspended),
+      frozen: num(counts.frozen),
+      neverSubscribed: num(counts.neverSubscribed),
+      byGender: (['MALE', 'FEMALE', 'UNKNOWN'] as const).map((gender) => ({
+        gender,
+        count: num(genders.find((g) => g.gender === gender)?.count),
+      })),
+      byAgeGroup: ageOrder.map((label) => ({ label, count: num(ages.find((a) => a.label === label)?.count) })),
+      newPerMonth: Array.from({ length: 12 }, (_, i) => {
+        const month = monthKey(addMonths(start, i));
+        return { month, count: joinedByMonth.get(month) ?? 0 };
+      }),
+      churnedLast30d: num(counts.churned),
+      renewalRate90d: ended90 ? Math.round((num(counts.renewed90) / ended90) * 1000) / 1000 : 0,
     };
   }
 

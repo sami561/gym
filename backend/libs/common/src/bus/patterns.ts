@@ -68,6 +68,8 @@ export const PATTERNS = {
     revenue: 'membership.stats.revenue',
     expiring: 'membership.stats.expiring',
     planMix: 'membership.stats.plan-mix',
+    analytics: 'membership.stats.analytics',
+    kpis: 'membership.stats.kpis',
   },
   membershipAutomation: {
     recipients: 'membership.automation.recipients',
@@ -89,6 +91,8 @@ export const PATTERNS = {
     cancel: 'bookings.cancel',
     mine: 'bookings.mine',
     setStatus: 'bookings.set-status',
+    policy: 'bookings.policy',
+    standing: 'bookings.standing',
   },
   access: {
     key: 'access.key',
@@ -200,6 +204,7 @@ export const PATTERNS = {
   },
   finance: {
     summary: 'finance.summary',
+    kpis: 'finance.kpis',
     stats: 'commerce.stats.summary',
     health: 'commerce.health',
   },

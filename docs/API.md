@@ -280,3 +280,52 @@ Runs start manually, from a domain event (`TRIGGERABLE_EVENTS`, e.g. `member.cre
 | GET | `/api/workflows/meta` | staff | – | `{ events: string[], roles: Role[] }` (editor dropdowns) |
 
 `GET /api/dashboard/operations` also returns `workflows: WorkflowStats`.
+
+---
+
+# Class reservations (v4)
+
+Types: `contracts/class.contracts.ts` (BookingStatus, BookingPolicy, ClassSessionDto, BookingDto).
+
+- **Places & waitlist** — `ClassSessionDto` now carries `spotsLeft`, `waitlistCount`, `waitlistCapacity`,
+  `spotSelection`, `takenSpots`, `bookingOpensAt`, `bookingClosesAt`, `cancelDeadline` and, for the member,
+  `bookingStatus`, `spotNumber`, `waitlistPosition`.
+- `POST /api/me/bookings` `{ sessionId, spotNumber? }` → `BookingDto` with status `BOOKED`, or `WAITLISTED`
+  (with `waitlistPosition`) when the class is full. `spotNumber` is required when `spotSelection` is on.
+  Errors (French): booking not open yet / closed, spot taken, already booked, inactive membership,
+  too many no-shows (blocked until a date), waitlist full.
+- `DELETE /api/me/bookings/:id` → cancels; after `cancelDeadline` the booking becomes `LATE_CANCELLED`
+  (a strike). Any freed place promotes the first `WAITLISTED` member (event `booking.promoted`).
+- Attendance — a GRANTED door access of the member from `CHECKIN_WINDOW_MINUTES` before the start until the
+  end marks the booking `ATTENDED` automatically; staff can also `PATCH /api/bookings/:id { status }`.
+  Bookings still `BOOKED` 15 minutes after the end become `NO_SHOW` (a strike).
+- Strikes — `NO_SHOW_LIMIT` strikes (no-show or late cancel) in 30 days block new bookings for
+  `NO_SHOW_BLOCK_DAYS`. `GET /api/me/booking-standing` → `MemberBookingStanding`;
+  `GET /api/bookings/policy` (public) → `BookingPolicy`.
+- Reminders — `booking.reminder` is published 2 h before the class for every BOOKED member (push +
+  n8n email); `booking.promoted` notifies the member who got the place.
+- Staff: `POST /api/classes` accepts `spotSelection` and `waitlistCapacity`; `GET /api/classes/:id/bookings`
+  returns booked, waitlisted (with position), attended and no-show rows.
+
+---
+
+# Dashboard analytics (v5)
+
+| Method | Path | Roles | Result |
+|---|---|---|---|
+| GET | `/api/dashboard/members-analytics` | staff | `MembersAnalytics` — total / active / expired / suspended / frozen / never subscribed, gender split, age groups, new members per month (12), churned last 30 days, renewal rate 90 days |
+| GET | `/api/dashboard/team?date=YYYY-MM-DD` | staff | `TeamOverview` — employees total / active / by position, who is on duty right now (planned shift and/or clocked in), present count, every shift of the day |
+
+The team calendar (who works when) uses `GET /api/shifts?from&to` (week view, one row per employee or one
+column per day, coloured by position) plus `GET /api/attendance?from&to` to compare planned vs. real hours.
+
+## Business KPIs — GMV, NMV, margins (v5)
+
+`GET /api/dashboard/kpis?from=YYYY-MM-DD&to=YYYY-MM-DD` (ADMIN) → `FinanceKpis` (default: current month):
+- **GMV** = memberships sold at plan list price + shop sales subtotals (before any discount, refunds included)
+- **NMV** = GMV − discounts (promo codes, POS discounts) − refunds (shop) − cancellations (subscriptions)
+- **Gross margin** = NMV − cost of goods sold (shop unit cost captured at sale time), `grossMarginPct` = / NMV
+- **Operating profit** = NMV − COGS − expenses (rent, salaries, maintenance…), `operatingMarginPct` = / NMV
+- **Cash collected** = payments received + completed shop sales; **MRR** = active subscriptions normalised to
+  30 days; **ARPU** = membership NMV / active members
+- `monthly`: per month `{ gmv, nmv, expenses, profit, marginPct }`; `breakdown` gives the membership and shop parts.

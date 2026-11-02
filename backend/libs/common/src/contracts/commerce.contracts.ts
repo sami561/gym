@@ -222,3 +222,34 @@ export interface CommerceStats {
   expensesThisMonth: number;
   lowStockProducts: number;
 }
+
+export interface CommerceKpisRequest {
+  from?: string;
+  to?: string;
+}
+
+/** Shop + expenses side of the GMV / NMV / margin KPIs. */
+export interface CommerceKpis {
+  /** Sale subtotals before discounts, refunded sales included. */
+  gross: number;
+  discounts: number;
+  /** Totals of refunded sales. */
+  refunds: number;
+  /** gross − discounts − refunds */
+  net: number;
+  /** Cost of goods sold (unit cost captured at sale time) of non-refunded sales. */
+  cogs: number;
+  /** net − cogs */
+  grossMargin: number;
+  expenses: number;
+  expensesByCategory: { category: ExpenseCategory; total: number }[];
+  monthly: {
+    month: string;
+    gross: number;
+    discounts: number;
+    refunds: number;
+    net: number;
+    cogs: number;
+    expenses: number;
+  }[];
+}
