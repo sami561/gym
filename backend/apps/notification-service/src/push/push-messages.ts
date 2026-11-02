@@ -1,4 +1,5 @@
 import {
+  BookingEvent,
   EVENTS,
   PaymentReceivedEvent,
   SubscriptionExpiredEvent,
@@ -22,6 +23,26 @@ export interface ExpoTicket {
 export function formatDateFr(value: string): string {
   const [y, m, d] = value.slice(0, 10).split('-');
   return y && m && d ? `${d}/${m}/${y}` : value;
+}
+
+function inGymZone(value: string, options: Intl.DateTimeFormatOptions): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  try {
+    return new Intl.DateTimeFormat('fr-FR', { ...options, timeZone: process.env.TZ || 'Africa/Tunis' }).format(date);
+  } catch {
+    return new Intl.DateTimeFormat('fr-FR', { ...options, timeZone: 'Africa/Tunis' }).format(date);
+  }
+}
+
+/** ISO date-time → "18:00" in the gym timezone. */
+export function formatTimeFr(value: string): string {
+  return inGymZone(value, { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+/** ISO date-time → "03/11" in the gym timezone. */
+export function formatDayFr(value: string): string {
+  return inGymZone(value, { day: '2-digit', month: '2-digit' });
 }
 
 /** 120.5 → "120,500 DT" */
@@ -58,6 +79,24 @@ export function paymentMessage(event: PaymentReceivedEvent): PushMessage {
   };
 }
 
+export function promotedMessage(event: BookingEvent): PushMessage {
+  const spot = event.spotNumber ? `, place n°${event.spotNumber}` : '';
+  return {
+    title: 'Place confirmée',
+    body: `Une place s'est libérée pour ${event.sessionTitle} — vous êtes inscrit(e) (${formatDayFr(event.startsAt)} à ${formatTimeFr(event.startsAt)}${spot}).`,
+    data: { type: EVENTS.bookingPromoted, bookingId: event.bookingId, sessionId: event.sessionId, screen: 'bookings' },
+  };
+}
+
+export function reminderMessage(event: BookingEvent): PushMessage {
+  const details = [event.room, event.spotNumber ? `place n°${event.spotNumber}` : null].filter(Boolean);
+  return {
+    title: 'Rappel de séance',
+    body: `${event.sessionTitle} commence à ${formatTimeFr(event.startsAt)}${details.length ? ` (${details.join(', ')})` : ''}.`,
+    data: { type: EVENTS.bookingReminder, bookingId: event.bookingId, sessionId: event.sessionId, screen: 'bookings' },
+  };
+}
+
 /** Events that also notify the member's phone; every other webhook event is n8n only. */
 export function pushFor(event: string, data: unknown): { userId: string; message: PushMessage } | null {
   switch (event) {
@@ -72,6 +111,14 @@ export function pushFor(event: string, data: unknown): { userId: string; message
     case EVENTS.paymentReceived: {
       const payload = data as PaymentReceivedEvent;
       return { userId: payload.memberId, message: paymentMessage(payload) };
+    }
+    case EVENTS.bookingPromoted: {
+      const payload = data as BookingEvent;
+      return { userId: payload.memberId, message: promotedMessage(payload) };
+    }
+    case EVENTS.bookingReminder: {
+      const payload = data as BookingEvent;
+      return { userId: payload.memberId, message: reminderMessage(payload) };
     }
     default:
       return null;

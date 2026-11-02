@@ -1,14 +1,12 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { BookingStatus } from '@app/common';
 
 export const DAY_MS = 86_400_000;
 export const DEFAULT_CAPACITY = 20;
 export const MAX_CAPACITY = 500;
 export const MAX_REPEAT_WEEKS = 12;
 export const MAX_RANGE_DAYS = 120;
-
-/** Bookings that hold a spot in a session. */
-export const ACTIVE_BOOKING_STATUSES = [BookingStatus.BOOKED, BookingStatus.ATTENDED];
+export const DEFAULT_WAITLIST_CAPACITY = 10;
+export const MAX_WAITLIST_CAPACITY = 200;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const COLOR_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -35,6 +33,13 @@ export function assertCapacity(capacity: unknown): number {
     throw new BadRequestException(`La capacité doit être un entier entre 1 et ${MAX_CAPACITY}.`);
   }
   return capacity;
+}
+
+export function assertWaitlistCapacity(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > MAX_WAITLIST_CAPACITY) {
+    throw new BadRequestException(`La liste d'attente doit être comprise entre 0 et ${MAX_WAITLIST_CAPACITY}.`);
+  }
+  return value;
 }
 
 export function normaliseColor(color: string | null | undefined): string | null {

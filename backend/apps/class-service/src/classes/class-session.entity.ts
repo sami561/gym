@@ -37,6 +37,14 @@ export class ClassSession {
   @Column({ type: 'int', default: 20 })
   capacity: number;
 
+  /** Members pick a numbered place (bike, rower...) 1..capacity. */
+  @Column({ type: 'boolean', default: false })
+  spotSelection: boolean;
+
+  /** Max WAITLISTED bookings; 0 disables the waitlist. */
+  @Column({ type: 'int', default: 10 })
+  waitlistCapacity: number;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 

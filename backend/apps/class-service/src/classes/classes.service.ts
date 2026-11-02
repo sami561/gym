@@ -5,9 +5,10 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In, LessThan, MoreThan, Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, EntityManager, In, LessThan, MoreThan, Repository } from 'typeorm';
 import {
+  BookingDto,
   BookingStatus,
   ClassSessionDto,
   ClassStats,
@@ -28,21 +29,35 @@ import {
 } from '@app/common';
 import { Booking } from '../bookings/booking.entity';
 import { toBookingDto, toBookingEvent, toSessionDto } from '../mappers';
+import { loadBookingPolicy } from './booking-policy';
 import { ClassSession } from './class-session.entity';
 import {
-  ACTIVE_BOOKING_STATUSES,
   DAY_MS,
   DEFAULT_CAPACITY,
+  DEFAULT_WAITLIST_CAPACITY,
   MAX_RANGE_DAYS,
   assertCapacity,
   assertRepeatWeeks,
   assertUuid,
+  assertWaitlistCapacity,
   averageFillRate,
   dayRange,
   normaliseColor,
   parseDateTime,
   shiftWeeks,
 } from './class-rules';
+import { HOLDING_STATUSES, firstFreeSpot, waitlistPosition } from './occupancy';
+import { OccupancyService } from './occupancy.service';
+
+/** Order of the staff booking list: who is in, then the queue, then the rest. */
+const STATUS_ORDER: BookingStatus[] = [
+  BookingStatus.ATTENDED,
+  BookingStatus.BOOKED,
+  BookingStatus.NO_SHOW,
+  BookingStatus.WAITLISTED,
+  BookingStatus.LATE_CANCELLED,
+  BookingStatus.CANCELLED,
+];
 
 @Injectable()
 export class ClassesService {
@@ -51,6 +66,8 @@ export class ClassesService {
   constructor(
     @InjectRepository(ClassSession) private readonly sessions: Repository<ClassSession>,
     @InjectRepository(Booking) private readonly bookings: Repository<Booking>,
+    @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly occupancy: OccupancyService,
     private readonly rpc: RpcClient,
     private readonly events: EventBus,
   ) {}
@@ -77,6 +94,7 @@ export class ClassesService {
     const endsAt = parseDateTime(request.endsAt, 'endsAt');
     if (endsAt <= startsAt) throw new BadRequestException("L'heure de fin doit être après l'heure de début.");
     const capacity = assertCapacity(request.capacity ?? DEFAULT_CAPACITY);
+    const waitlistCapacity = assertWaitlistCapacity(request.waitlistCapacity ?? DEFAULT_WAITLIST_CAPACITY);
     const repeatWeeks = assertRepeatWeeks(request.repeatWeeks);
     const color = normaliseColor(request.color);
     const coach = request.coachId ? await this.resolveCoach(request.coachId) : null;
@@ -92,83 +110,130 @@ export class ClassesService {
         startsAt: shiftWeeks(startsAt, week),
         endsAt: shiftWeeks(endsAt, week),
         capacity,
+        spotSelection: Boolean(request.spotSelection),
+        waitlistCapacity,
       }),
     );
     const saved = await this.sessions.save(rows);
-    return saved.map((session) => toSessionDto(session, 0));
+    const policy = loadBookingPolicy();
+    return saved.map((session) => toSessionDto(session, undefined, policy));
   }
 
+  /** Place-related changes happen under the session lock; freed capacity promotes the waitlist. */
   async update({ id, data }: UpdateClassRequest): Promise<ClassSessionDto> {
-    const session = await this.findSession(id);
-    if (data.title !== undefined) {
-      const title = data.title?.trim();
-      if (!title) throw new BadRequestException('Le titre est obligatoire.');
-      session.title = title;
-    }
-    if (data.description !== undefined) session.description = data.description?.trim() || null;
-    if (data.room !== undefined) session.room = data.room?.trim() || null;
-    if (data.color !== undefined) session.color = normaliseColor(data.color);
-    if (data.startsAt !== undefined) session.startsAt = parseDateTime(data.startsAt, 'startsAt');
-    if (data.endsAt !== undefined) session.endsAt = parseDateTime(data.endsAt, 'endsAt');
-    if (session.endsAt <= session.startsAt) {
-      throw new BadRequestException("L'heure de fin doit être après l'heure de début.");
-    }
-    if (data.coachId !== undefined && data.coachId !== session.coachId) {
-      const coach = data.coachId ? await this.resolveCoach(data.coachId) : null;
-      session.coachId = coach?.id ?? null;
-      session.coachName = coach?.name ?? null;
-    }
-    if (data.capacity !== undefined) {
-      const capacity = assertCapacity(data.capacity);
-      const booked = (await this.countActiveBookings([session.id])).get(session.id) ?? 0;
-      if (capacity < booked) {
-        throw new BadRequestException(
-          `La capacité ne peut pas être inférieure au nombre de réservations (${booked}).`,
-        );
+    const current = await this.findSession(id);
+    // Resolve the coach before locking: never hold a row lock during an RPC.
+    const coach =
+      data.coachId !== undefined && data.coachId !== current.coachId
+        ? data.coachId
+          ? await this.resolveCoach(data.coachId)
+          : null
+        : undefined;
+
+    const { session, promoted } = await this.dataSource.transaction(async (manager) => {
+      const session = await this.occupancy.lockSession(manager, current.id);
+      if (data.title !== undefined) {
+        const title = data.title?.trim();
+        if (!title) throw new BadRequestException('Le titre est obligatoire.');
+        session.title = title;
       }
-      session.capacity = capacity;
-    }
-    const saved = await this.sessions.save(session);
-    const [dto] = await this.toDtos([saved]);
+      if (data.description !== undefined) session.description = data.description?.trim() || null;
+      if (data.room !== undefined) session.room = data.room?.trim() || null;
+      if (data.color !== undefined) session.color = normaliseColor(data.color);
+      if (data.startsAt !== undefined) session.startsAt = parseDateTime(data.startsAt, 'startsAt');
+      if (data.endsAt !== undefined) session.endsAt = parseDateTime(data.endsAt, 'endsAt');
+      if (session.endsAt <= session.startsAt) {
+        throw new BadRequestException("L'heure de fin doit être après l'heure de début.");
+      }
+      if (coach !== undefined) {
+        session.coachId = coach?.id ?? null;
+        session.coachName = coach?.name ?? null;
+      }
+      if (data.waitlistCapacity !== undefined) session.waitlistCapacity = assertWaitlistCapacity(data.waitlistCapacity);
+
+      const occupancy = await this.occupancy.loadOne(session.id, manager);
+      const spotSelection = data.spotSelection ?? session.spotSelection;
+      if (data.capacity !== undefined) {
+        const capacity = assertCapacity(data.capacity);
+        if (capacity < occupancy.booked) {
+          throw new BadRequestException(
+            `La capacité ne peut pas être inférieure au nombre de réservations (${occupancy.booked}).`,
+          );
+        }
+        const lostSpot = spotSelection ? occupancy.takenSpots.find((spot) => spot > capacity) : undefined;
+        if (lostSpot !== undefined) {
+          throw new BadRequestException(`La place ${lostSpot} est réservée : impossible de réduire la capacité à ${capacity}.`);
+        }
+        session.capacity = capacity;
+      }
+      if (spotSelection && !session.spotSelection) await this.numberHeldPlaces(manager, session);
+      session.spotSelection = Boolean(spotSelection);
+
+      const saved = await manager.save(session);
+      return { session: saved, promoted: await this.occupancy.promote(manager, saved) };
+    });
+    this.occupancy.publishPromoted(promoted, session);
+    const [dto] = await this.toDtos([session]);
     return dto;
   }
 
   async remove({ id }: IdRequest): Promise<OkResult> {
     const session = await this.findSession(id);
-    const pending = await this.bookings.find({ where: { sessionId: session.id, status: BookingStatus.BOOKED } });
+    const pending = await this.bookings.find({
+      where: { sessionId: session.id, status: In([BookingStatus.BOOKED, BookingStatus.WAITLISTED]) },
+    });
     await this.sessions.delete(session.id); // bookings go with it (FK ON DELETE CASCADE)
     if (session.startsAt > new Date()) {
-      for (const booking of pending) this.events.publish(EVENTS.bookingCancelled, toBookingEvent(booking, session));
+      for (const booking of pending) {
+        booking.status = BookingStatus.CANCELLED;
+        this.events.publish(EVENTS.bookingCancelled, toBookingEvent(booking, session));
+      }
     }
     return { ok: true };
   }
 
-  async sessionBookings({ id }: IdRequest) {
+  /** Every booking of the session (booked, attended, no-show, waitlisted with position, cancelled). */
+  async sessionBookings({ id }: IdRequest): Promise<BookingDto[]> {
     const session = await this.findSession(id);
-    const rows = await this.bookings.find({ where: { sessionId: session.id }, order: { createdAt: 'ASC' } });
-    return rows.map((booking) => toBookingDto(booking));
+    const [rows, occupancy] = await Promise.all([
+      this.bookings.find({ where: { sessionId: session.id } }),
+      this.occupancy.loadOne(session.id),
+    ]);
+    const position = (b: Booking) => waitlistPosition(occupancy, b.id);
+    rows.sort(
+      (a, b) =>
+        STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) ||
+        (position(a) ?? 0) - (position(b) ?? 0) ||
+        (a.spotNumber ?? Number.MAX_SAFE_INTEGER) - (b.spotNumber ?? Number.MAX_SAFE_INTEGER) ||
+        a.createdAt.getTime() - b.createdAt.getTime(),
+    );
+    return rows.map((booking) => toBookingDto(booking, position(booking)));
   }
 
   /**
-   * sessionsToday: sessions starting on `date` (default today); upcomingBookings: BOOKED spots in
-   * sessions not started yet; fillRate30d: over the 30 days before the end of `date` (or now).
+   * sessionsToday: sessions starting on `date` (default today); upcomingBookings / waitlisted: in
+   * sessions not started yet; noShows30d and fillRate30d: sessions of the 30 days before the end of
+   * `date` (or now). Fill counts every place that was held (booked, attended or no-show).
    */
   async stats({ date }: ClassStatsRequest): Promise<ClassStats> {
     const { start, end } = dayRange(date);
     const now = new Date();
     const reference = date ? end : now;
+    const upcoming = (status: BookingStatus) =>
+      this.bookings
+        .createQueryBuilder('b')
+        .innerJoin('b.session', 's')
+        .where('b.status = :status', { status })
+        .andWhere('s.startsAt >= :now', { now })
+        .getCount();
 
-    const [sessionsToday, upcomingBookings, recent] = await Promise.all([
+    const [sessionsToday, upcomingBookings, waitlisted, recent] = await Promise.all([
       this.sessions
         .createQueryBuilder('s')
         .where('s.startsAt >= :start AND s.startsAt < :end', { start, end })
         .getCount(),
-      this.bookings
-        .createQueryBuilder('b')
-        .innerJoin('b.session', 's')
-        .where('b.status = :status', { status: BookingStatus.BOOKED })
-        .andWhere('s.startsAt >= :now', { now })
-        .getCount(),
+      upcoming(BookingStatus.BOOKED),
+      upcoming(BookingStatus.WAITLISTED),
       this.sessions
         .createQueryBuilder('s')
         .where('s.startsAt >= :since AND s.startsAt < :reference', {
@@ -177,8 +242,13 @@ export class ClassesService {
         })
         .getMany(),
     ]);
-    const booked = await this.countActiveBookings(recent.map((s) => s.id));
-    return { sessionsToday, upcomingBookings, fillRate30d: averageFillRate(recent, booked) };
+    const ids = recent.map((s) => s.id);
+    const [held, noShows] = await Promise.all([
+      this.countByStatus(ids, [...HOLDING_STATUSES, BookingStatus.NO_SHOW]),
+      this.countByStatus(ids, [BookingStatus.NO_SHOW]),
+    ]);
+    const noShows30d = [...noShows.values()].reduce((sum, n) => sum + n, 0);
+    return { sessionsToday, upcomingBookings, waitlisted, noShows30d, fillRate30d: averageFillRate(recent, held) };
   }
 
   async onCoachUpdated(userId: string, name: string): Promise<void> {
@@ -195,31 +265,41 @@ export class ClassesService {
   async toDtos(sessions: ClassSession[], memberId?: string): Promise<ClassSessionDto[]> {
     if (!sessions.length) return [];
     const ids = sessions.map((s) => s.id);
-    const counts = await this.countActiveBookings(ids);
-    let mine = new Map<string, string>();
-    if (memberId) {
-      const rows = await this.bookings.find({
-        where: { sessionId: In(ids), memberId, status: In(ACTIVE_BOOKING_STATUSES) },
-      });
-      mine = new Map(rows.map((b) => [b.sessionId, b.id]));
-    }
+    const policy = loadBookingPolicy();
+    const [occupancy, mine] = await Promise.all([
+      this.occupancy.load(ids),
+      memberId ? this.occupancy.memberBookings(ids, memberId) : Promise.resolve(null),
+    ]);
     return sessions.map((s) =>
-      toSessionDto(s, counts.get(s.id) ?? 0, memberId ? (mine.get(s.id) ?? null) : undefined),
+      toSessionDto(s, occupancy.get(s.id), policy, mine ? { booking: mine.get(s.id) ?? null } : undefined),
     );
   }
 
-  /** BOOKED + ATTENDED bookings per session. */
-  async countActiveBookings(sessionIds: string[]): Promise<Map<string, number>> {
+  private async countByStatus(sessionIds: string[], statuses: BookingStatus[]): Promise<Map<string, number>> {
     if (!sessionIds.length) return new Map();
     const rows = await this.bookings
       .createQueryBuilder('b')
       .select('b.sessionId', 'sessionId')
       .addSelect('COUNT(*)', 'count')
       .where('b.sessionId IN (:...ids)', { ids: sessionIds })
-      .andWhere('b.status IN (:...statuses)', { statuses: ACTIVE_BOOKING_STATUSES })
+      .andWhere('b.status IN (:...statuses)', { statuses })
       .groupBy('b.sessionId')
       .getRawMany<{ sessionId: string; count: string }>();
     return new Map(rows.map((r) => [r.sessionId, Number(r.count)]));
+  }
+
+  /** Turning spot selection on: give the people already in the class the first free numbers. */
+  private async numberHeldPlaces(manager: EntityManager, session: ClassSession): Promise<void> {
+    const held = await manager.find(Booking, {
+      where: { sessionId: session.id, status: In(HOLDING_STATUSES) },
+      order: { createdAt: 'ASC' },
+    });
+    const taken = new Set(held.map((b) => b.spotNumber).filter((n): n is number => typeof n === 'number'));
+    for (const booking of held.filter((b) => b.spotNumber === null)) {
+      booking.spotNumber = firstFreeSpot(taken, session.capacity);
+      if (booking.spotNumber !== null) taken.add(booking.spotNumber);
+      await manager.save(booking);
+    }
   }
 
   private async resolveCoach(coachId: string): Promise<{ id: string; name: string }> {
