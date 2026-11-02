@@ -9,7 +9,7 @@ import {
   WebSocketGateway,
 } from '@nestjs/websockets';
 import type { Namespace, Socket } from 'socket.io';
-import { AccessDecision, DeviceEventsPayload, DeviceUserSync } from '@app/common';
+import { AccessDecision, DeviceEventsPayload, DeviceEventsResult, DeviceUserSync } from '@app/common';
 import { AccessService } from '../access/access.service';
 import { DoorsService } from '../doors/doors.service';
 import { AccessMembersService } from '../members/access-members.service';
@@ -101,19 +101,27 @@ export class AgentsGateway implements OnGatewayInit<Namespace>, OnGatewayConnect
   async onDeviceEvents(
     @ConnectedSocket() socket: Socket,
     @MessageBody() body: DeviceEventsPayload,
-  ): Promise<{ accepted: number }> {
+  ): Promise<DeviceEventsResult> {
     const { agentId } = socket.data as AgentSocketData;
     try {
       return await this.access.recordDeviceEvents(agentId as string, body);
     } catch (err) {
       this.logger.error(`device.events failed: ${(err as Error).message}`);
-      return { accepted: 0 };
+      return { accepted: 0, duplicates: 0, rejected: 0 };
     }
   }
 
+  /**
+   * Member list for the agent's ZKTeco terminals. Agents without an active terminal that takes it
+   * get nothing (security review, finding 11): names and badges only go where they are enrolled.
+   */
   @SubscribeMessage('members.sync')
-  async onMembersSync(): Promise<DeviceUserSync[]> {
+  async onMembersSync(@ConnectedSocket() socket: Socket): Promise<DeviceUserSync[]> {
+    const { agentId, agentName } = socket.data as AgentSocketData;
     try {
+      const scope = agentId ? await this.doors.memberSyncScope(agentId) : 'none';
+      if (scope === 'none') this.logger.warn(`members.sync from agent "${agentName}" refused: no active ZKTeco terminal`);
+      if (scope !== 'on') return [];
       return await this.members.deviceUsers();
     } catch (err) {
       this.logger.error(`members.sync failed: ${(err as Error).message}`);

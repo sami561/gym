@@ -81,6 +81,11 @@ export class CreateDoorDto {
   @IsBoolean()
   isActive?: boolean;
 
+  /** Members may open the door from the app (default true). */
+  @IsOptional()
+  @IsBoolean()
+  allowAppOpen?: boolean;
+
   @IsOptional()
   @IsUUID()
   agentId?: string;
@@ -114,6 +119,11 @@ export class UpdateDoorDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  /** Members may open the door from the app (default true). */
+  @IsOptional()
+  @IsBoolean()
+  allowAppOpen?: boolean;
 
   @IsOptional()
   @IsUUID()

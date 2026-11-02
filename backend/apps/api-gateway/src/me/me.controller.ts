@@ -1,9 +1,11 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Ip, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import {
+  ACCESS_ROTATE_KEY_PATTERN,
   AccessDecision,
   AccessKey,
+  AccessKeyRotation,
   AccessLogDto,
   AuthUser,
   BookingDto,
@@ -16,11 +18,14 @@ import {
   MemberDoor,
   MemberDto,
   MemberProfile,
+  OpenByAppRequest,
   PATTERNS,
   PtSessionDto,
   Role,
   Roles,
+  RotateAccessKeyRequest,
   RpcClient,
+  toActor,
   UserDto,
   WorkoutProgramDto,
 } from '@app/common';
@@ -63,19 +68,39 @@ export class MeController {
     return this.rpc.send<AccessKey>(PATTERNS.access.key, { memberId: user.id });
   }
 
+  /** New QR secret (phone lost or code shared): the codes shown until now stop working at once. */
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @HttpCode(200)
+  @Post('access-key/rotate')
+  async rotateAccessKey(@CurrentUser() user: AuthUser): Promise<AccessKey> {
+    const { key } = await this.rpc.send<AccessKeyRotation, RotateAccessKeyRequest>(ACCESS_ROTATE_KEY_PATTERN, {
+      memberId: user.id,
+      actor: toActor(user),
+    });
+    return key;
+  }
+
+  /** Doors the member may open from the app (active, allowAppOpen). */
   @Get('doors')
   doors(@CurrentUser() user: AuthUser) {
     return this.rpc.send<MemberDoor[]>(PATTERNS.doors.listForMember, { memberId: user.id });
   }
 
+  /** The caller's address (req.ip, see TRUST_PROXY) is checked against APP_OPEN_ALLOWED_NETWORKS. */
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('doors/:doorId/open')
   openDoor(
     @CurrentUser() user: AuthUser,
     @Param('doorId', ParseUUIDPipe) doorId: string,
     @Body() dto: OpenDoorDto,
+    @Ip() clientIp: string | undefined,
   ) {
-    return this.rpc.send<AccessDecision>(PATTERNS.access.openByApp, { memberId: user.id, doorId, ...dto });
+    return this.rpc.send<AccessDecision, OpenByAppRequest>(PATTERNS.access.openByApp, {
+      ...dto,
+      memberId: user.id,
+      doorId,
+      ...(clientIp ? { clientIp } : {}),
+    });
   }
 
   @Get('visits')

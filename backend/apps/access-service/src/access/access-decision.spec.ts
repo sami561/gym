@@ -1,5 +1,14 @@
 import { accessStep, buildAccessCode, MemberStatus, parseAccessCode } from '@app/common';
-import { checkDoor, checkGeofence, checkMember, checkQr, REASONS } from './access-decision';
+import {
+  appOpenContext,
+  checkAppOpen,
+  checkDoor,
+  checkGeofence,
+  checkMember,
+  checkNetwork,
+  checkQr,
+  REASONS,
+} from './access-decision';
 
 describe('access decision rules', () => {
   const today = '2026-11-02';
@@ -46,6 +55,63 @@ describe('access decision rules', () => {
     it('denies a deactivated door', () => {
       expect(checkDoor({ isActive: false })).toEqual({ ok: false, reason: REASONS.doorInactive });
       expect(checkDoor({ isActive: true })).toEqual({ ok: true });
+    });
+  });
+
+  describe('checkAppOpen', () => {
+    it('denies a door closed to the app', () => {
+      expect(checkAppOpen({ allowAppOpen: false })).toEqual({ ok: false, reason: REASONS.appOpenDisabled });
+      expect(checkAppOpen({ allowAppOpen: true })).toEqual({ ok: true });
+    });
+  });
+
+  describe('checkNetwork', () => {
+    const gymWifi = ['197.15.20.33', '2c0f:f698:1234::/48', '192.168.1.0/24'];
+
+    it('is off when no network is configured', () => {
+      expect(checkNetwork(undefined, [])).toEqual({ ok: true });
+      expect(checkNetwork('8.8.8.8', [])).toEqual({ ok: true });
+    });
+
+    it('grants a phone behind the gym connection (IPv4, IPv4-mapped or IPv6)', () => {
+      expect(checkNetwork('197.15.20.33', gymWifi)).toEqual({ ok: true });
+      expect(checkNetwork('::ffff:197.15.20.33', gymWifi)).toEqual({ ok: true });
+      expect(checkNetwork('2c0f:f698:1234:5::12', gymWifi)).toEqual({ ok: true });
+      expect(checkNetwork('192.168.1.87', gymWifi)).toEqual({ ok: true });
+    });
+
+    it('asks to join the gym Wi-Fi from any other network or without an address', () => {
+      const denied = { ok: false, reason: REASONS.network };
+      expect(checkNetwork('41.226.10.2', gymWifi)).toEqual(denied);
+      expect(checkNetwork(undefined, gymWifi)).toEqual(denied);
+      expect(checkNetwork('  ', gymWifi)).toEqual(denied);
+      expect(checkNetwork('not-an-ip', gymWifi)).toEqual(denied);
+      expect(REASONS.network).toBe('Connectez-vous au Wi-Fi de la salle pour ouvrir la porte.');
+    });
+
+    it('refuses everyone when the list is malformed', () => {
+      expect(checkNetwork('197.15.20.33', ['197.15.20.33', '192.168.1.0/99'])).toEqual({
+        ok: false,
+        reason: REASONS.network,
+      });
+    });
+  });
+
+  describe('appOpenContext', () => {
+    it('keeps what the phone sent, the distance and the address', () => {
+      expect(
+        appOpenContext({ latitude: 35.8457, longitude: 10.6179, accuracy: 12.5, clientIp: ' 197.15.20.33 ' }, 13.7),
+      ).toEqual({ latitude: 35.8457, longitude: 10.6179, accuracy: 12.5, distanceMeters: 14, clientIp: '197.15.20.33' });
+    });
+
+    it('uses null for missing or invalid values', () => {
+      expect(appOpenContext({ latitude: Number.NaN, longitude: 10 }, undefined)).toEqual({
+        latitude: null,
+        longitude: 10,
+        accuracy: null,
+        distanceMeters: null,
+        clientIp: null,
+      });
     });
   });
 

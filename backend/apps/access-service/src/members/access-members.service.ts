@@ -1,25 +1,26 @@
 import { ConflictException, Injectable, Logger, NotFoundException, OnApplicationBootstrap } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import {
   ACCESS_CODE_PERIOD_SECONDS,
   AccessKey,
+  AccessKeyRotation,
   DateWindow,
   DeviceUserSync,
   Entitlement,
   EntitlementChangedEvent,
   EntitlementsRequest,
-  fullName,
   MemberCreatedEvent,
   MemberStatus,
   MemberUpdatedEvent,
   PATTERNS,
   randomSecret,
+  RotateAccessKeyRequest,
   RpcClient,
   SetCardRequest,
 } from '@app/common';
-import { checkMember } from '../access/access-decision';
+import { toDeviceUser } from '../agents/device-sync';
 import { AccessMember } from './access-member.entity';
 
 interface MemberRow {
@@ -34,8 +35,19 @@ interface MemberRow {
 
 export const RECONCILE_EVERY_MS = 10 * 60_000;
 
-/** ZKTeco terminals store at most 24 characters per user name. */
-const DEVICE_NAME_MAX = 24;
+/**
+ * A member deleted from membership-service stays as an anonymous, badge-less row: members.sync
+ * keeps listing it as inactive so the agents disable it on the terminals (they only touch the
+ * users they are sent). Finders skip these rows.
+ */
+const TOMBSTONE = `
+  "removedAt" = now(),
+  "firstName" = 'Membre',
+  "lastName" = 'supprimé',
+  "windows" = '[]'::jsonb,
+  "cardNumber" = NULL,
+  "lastQrStep" = NULL,
+  "syncedAt" = now()`;
 
 @Injectable()
 export class AccessMembersService implements OnApplicationBootstrap {
@@ -55,15 +67,15 @@ export class AccessMembersService implements OnApplicationBootstrap {
 
   findById(memberId?: string | null): Promise<AccessMember | null> {
     if (!memberId || typeof memberId !== 'string') return Promise.resolve(null);
-    return this.repo.findOne({ where: { memberId } });
+    return this.repo.findOne({ where: { memberId, removedAt: IsNull() } });
   }
 
   findByCode(memberCode: string): Promise<AccessMember | null> {
-    return this.repo.findOne({ where: { memberCode } });
+    return this.repo.findOne({ where: { memberCode, removedAt: IsNull() } });
   }
 
   findByDeviceUid(deviceUid: number): Promise<AccessMember | null> {
-    return this.repo.findOne({ where: { deviceUid } });
+    return this.repo.findOne({ where: { deviceUid, removedAt: IsNull() } });
   }
 
   // ---- read-model sync -------------------------------------------------------------------
@@ -92,13 +104,18 @@ export class AccessMembersService implements OnApplicationBootstrap {
     );
   }
 
+  /** member.deleted: the row becomes a tombstone (see TOMBSTONE). */
   async remove(memberId: string): Promise<void> {
-    await this.repo.delete({ memberId });
+    await this.repo.query(`UPDATE access_members SET ${TOMBSTONE} WHERE "memberId" = $1 AND "removedAt" IS NULL`, [
+      memberId,
+    ]);
   }
 
   /**
    * Insert-or-update keeping the door credentials (secret, badge, device uid, QR step).
-   * With `onlyIfSyncedBefore`, rows written by an event after that instant are left alone.
+   * With `onlyIfSyncedBefore` (reconciliation), rows written by an event after that instant are
+   * left alone, and a member membership-service still lists is brought back from a tombstone;
+   * an event never brings back a deleted member.
    */
   private async upsert(row: MemberRow, onlyIfSyncedBefore?: Date): Promise<void> {
     const params: unknown[] = [
@@ -119,10 +136,13 @@ export class AccessMembersService implements OnApplicationBootstrap {
         "lastName" = EXCLUDED."lastName",
         "status" = EXCLUDED."status",
         ${row.windows !== undefined ? '"windows" = EXCLUDED."windows",' : ''}
+        ${onlyIfSyncedBefore ? '"removedAt" = NULL,' : ''}
         "syncedAt" = now()`;
     if (onlyIfSyncedBefore) {
       params.push(onlyIfSyncedBefore);
       sql += ` WHERE access_members."syncedAt" < $8`;
+    } else {
+      sql += ` WHERE access_members."removedAt" IS NULL`;
     }
     await this.repo.query(sql, params);
   }
@@ -149,7 +169,8 @@ export class AccessMembersService implements OnApplicationBootstrap {
         await this.upsertEntitlement(entitlement, startedAt);
       }
       const removed: [unknown[], number] | unknown[] = await this.repo.query(
-        `DELETE FROM access_members WHERE "syncedAt" < $1 AND NOT ("memberId" = ANY($2::varchar[]))`,
+        `UPDATE access_members SET ${TOMBSTONE}
+         WHERE "removedAt" IS NULL AND "syncedAt" < $1 AND NOT ("memberId" = ANY($2::varchar[]))`,
         [startedAt, entitlements.map((e) => e.memberId)],
       );
       const removedCount = Array.isArray(removed) && typeof removed[1] === 'number' ? removed[1] : 0;
@@ -168,20 +189,35 @@ export class AccessMembersService implements OnApplicationBootstrap {
   async accessKey(memberId: string): Promise<AccessKey> {
     const member = await this.findById(memberId);
     if (!member) throw new NotFoundException('Accès pas encore configuré, réessayez dans un instant.');
-    return {
-      memberCode: member.memberCode,
-      secret: member.accessSecret,
-      period: ACCESS_CODE_PERIOD_SECONDS,
-      format: 'MLR1.{memberCode}.{step}.{sig}',
-    };
+    return toAccessKey(member.memberCode, member.accessSecret);
   }
 
-  /** Atomically records the QR step; false when it was already used (replay or concurrent scan). */
-  async consumeQrStep(memberId: string, step: number): Promise<boolean> {
+  /**
+   * New QR secret (lost or shared phone, security review finding 9): codes built with the old one
+   * fail their signature from now on. The anti-replay step is reset so the new code works at once;
+   * agents and terminals hold nothing derived from the secret (QR codes are checked here).
+   */
+  async rotateAccessKey(request: RotateAccessKeyRequest): Promise<AccessKeyRotation> {
+    const member = await this.findById(request?.memberId);
+    if (!member) throw new NotFoundException('Membre introuvable.');
+    const secret = randomSecret();
+    await this.repo.update({ memberId: member.memberId }, { accessSecret: secret, lastQrStep: null });
+    const actor = request.actor;
+    this.logger.log(
+      `QR secret of member ${member.memberCode} rotated${actor ? ` by ${actor.role} ${actor.id}` : ''}`,
+    );
+    return { key: toAccessKey(member.memberCode, secret), rotatedAt: new Date().toISOString() };
+  }
+
+  /**
+   * Atomically records the QR step; false when it was already used (replay or concurrent scan),
+   * or when the secret the code was checked with has been rotated in the meantime.
+   */
+  async consumeQrStep(memberId: string, step: number, secret: string): Promise<boolean> {
     const result: [unknown[], number] = await this.repo.query(
       `UPDATE access_members SET "lastQrStep" = $2
-       WHERE "memberId" = $1 AND ("lastQrStep" IS NULL OR "lastQrStep" < $2)`,
-      [memberId, step],
+       WHERE "memberId" = $1 AND "accessSecret" = $3 AND ("lastQrStep" IS NULL OR "lastQrStep" < $2)`,
+      [memberId, step, secret],
     );
     return Array.isArray(result) && result[1] === 1;
   }
@@ -203,18 +239,19 @@ export class AccessMembersService implements OnApplicationBootstrap {
     return this.repo.save(member);
   }
 
-  /** Users the door agents enrol (active) or disable (inactive) on ZKTeco terminals. */
+  /** Users the door agents enrol (active) or disable (inactive, without their badge) on ZKTeco terminals. */
   async deviceUsers(): Promise<DeviceUserSync[]> {
     const members = await this.repo.find({ order: { deviceUid: 'ASC' } });
-    return members.map((member) => ({
-      deviceUid: member.deviceUid,
-      name: fullName(member).slice(0, DEVICE_NAME_MAX),
-      cardNumber: member.cardNumber,
-      active: checkMember(member).ok,
-    }));
+    return members.map((member) => toDeviceUser(member));
   }
 
   allMemberIds(): Promise<string[]> {
-    return this.repo.find({ select: { memberId: true } }).then((rows) => rows.map((row) => row.memberId));
+    return this.repo
+      .find({ select: { memberId: true }, where: { removedAt: IsNull() } })
+      .then((rows) => rows.map((row) => row.memberId));
   }
+}
+
+function toAccessKey(memberCode: string, secret: string): AccessKey {
+  return { memberCode, secret, period: ACCESS_CODE_PERIOD_SECONDS, format: 'MLR1.{memberCode}.{step}.{sig}' };
 }

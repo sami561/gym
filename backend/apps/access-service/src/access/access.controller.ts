@@ -1,8 +1,10 @@
 import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
+  ACCESS_ROTATE_KEY_PATTERN,
   AccessDecision,
   AccessKey,
+  AccessKeyRotation,
   AccessLogDto,
   AllRpcExceptionsFilter,
   CheckinStats,
@@ -15,6 +17,7 @@ import {
   MemberAccessInfo,
   OpenByAppRequest,
   PATTERNS,
+  RotateAccessKeyRequest,
   ScanRequest,
   SetCardRequest,
   TodayAccessStats,
@@ -44,6 +47,12 @@ export class AccessController {
   @MessagePattern(PATTERNS.access.key)
   key(@Payload() request: MemberIdRequest): Promise<AccessKey> {
     return this.members.accessKey(request?.memberId);
+  }
+
+  /** New QR secret: the codes shown until now stop working at once (lost or shared phone). */
+  @MessagePattern(ACCESS_ROTATE_KEY_PATTERN)
+  rotateKey(@Payload() request: RotateAccessKeyRequest): Promise<AccessKeyRotation> {
+    return this.members.rotateAccessKey(request);
   }
 
   @MessagePattern(PATTERNS.access.openByApp)

@@ -1,16 +1,23 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { DoorDriver } from '@app/common';
+import { assertOutboundAllowed, DoorDriver, OutboundPolicy, parseOutboundUrl } from '@app/common';
 import { AgentRegistry } from '../agents/agent-registry.service';
 import { Door } from '../doors/door.entity';
+import { buildRelayRequest, RelayRequest } from '../doors/relay-config';
+import { DEFAULT_RELAY_NETWORKS, readNetworkList } from '../shared/networks';
 import { REASONS } from './access-decision';
+import { agentFailure, RELAY_ERRORS } from './open-failures';
 
 export interface OpenResult {
   ok: boolean;
+  /** French message for the caller and the access log. */
   error?: string;
+  /** Technical cause, for the service log only (may quote a controller or a relay). */
+  detail?: string;
 }
 
 export const AGENT_ACK_TIMEOUT_MS = 8_000;
+/** Upper bound of a relay call made by this service (the gateway gives up on the RPC after 10 s). */
 export const HTTP_RELAY_TIMEOUT_MS = 5_000;
 
 /**
@@ -21,8 +28,16 @@ export const HTTP_RELAY_TIMEOUT_MS = 5_000;
 @Injectable()
 export class DoorOpener {
   private readonly logger = new Logger(DoorOpener.name);
+  /** Relays called from the server: public addresses, or private ones in RELAY_ALLOWED_NETWORKS. */
+  private readonly relayPolicy: OutboundPolicy;
 
-  constructor(private readonly registry: AgentRegistry) {}
+  constructor(private readonly registry: AgentRegistry) {
+    const networks = readNetworkList('RELAY_ALLOWED_NETWORKS', DEFAULT_RELAY_NETWORKS);
+    if (networks.error) {
+      this.logger.error(`RELAY_ALLOWED_NETWORKS: ${networks.error} Relay doors without an agent will not open.`);
+    }
+    this.relayPolicy = { allowPrivateCidrs: networks.networks };
+  }
 
   async open(door: Door): Promise<OpenResult> {
     if (door.agentId) return this.openThroughAgent(door);
@@ -47,32 +62,51 @@ export class DoorOpener {
         | OpenResult
         | undefined;
       if (ack?.ok) return { ok: true };
-      return { ok: false, error: ack?.error || "Le contrôleur n'a pas pu ouvrir la porte." };
+      return agentFailure(ack?.error);
     } catch {
       return { ok: false, error: REASONS.agentTimeout };
     }
   }
 
+  /**
+   * SSRF guard (security review, finding 7): the URL is checked right before each call (public
+   * address, or a private one in RELAY_ALLOWED_NETWORKS; loopback, link-local and cloud metadata
+   * never), redirects are not followed, and the response body is never read.
+   */
   private async openHttpRelay(door: Door): Promise<OpenResult> {
-    const config = door.config as { url?: unknown; method?: unknown; headers?: unknown; body?: unknown };
-    if (typeof config.url !== 'string' || !config.url) return { ok: false, error: 'URL du relais non configurée.' };
-    const body =
-      config.body === undefined || config.body === null
-        ? undefined
-        : typeof config.body === 'string'
-          ? config.body
-          : JSON.stringify(config.body);
+    let request: RelayRequest;
+    let url: URL;
     try {
-      const response = await fetch(config.url, {
-        method: typeof config.method === 'string' ? config.method : 'GET',
-        headers: (config.headers as Record<string, string>) ?? undefined,
-        body,
-        signal: AbortSignal.timeout(HTTP_RELAY_TIMEOUT_MS),
-      });
-      return response.ok ? { ok: true } : { ok: false, error: `Le relais a répondu ${response.status}.` };
+      request = buildRelayRequest(door.config ?? {}, { seconds: door.unlockSeconds, doorId: door.id });
+      url = parseOutboundUrl(request.url);
     } catch (err) {
-      this.logger.warn(`HTTP relay of door "${door.name}" failed: ${(err as Error).message}`);
-      return { ok: false, error: 'Relais de porte injoignable.' };
+      return { ok: false, error: RELAY_ERRORS.invalidConfig, detail: (err as Error).message };
+    }
+    try {
+      await assertOutboundAllowed(url, this.relayPolicy);
+    } catch (err) {
+      return { ok: false, error: RELAY_ERRORS.forbidden, detail: (err as Error).message };
+    }
+    try {
+      const response = await fetch(url, {
+        method: request.method,
+        headers: request.headers,
+        body: request.body,
+        redirect: 'manual',
+        signal: AbortSignal.timeout(Math.min(request.timeoutMs, HTTP_RELAY_TIMEOUT_MS)),
+      });
+      // Only the status matters: release the connection without reading the body.
+      await response.body?.cancel().catch(() => undefined);
+      if (response.status >= 300 && response.status < 400) {
+        return {
+          ok: false,
+          error: RELAY_ERRORS.status(response.status),
+          detail: `Redirection refusée (HTTP ${response.status})`,
+        };
+      }
+      return response.ok ? { ok: true } : { ok: false, error: RELAY_ERRORS.status(response.status) };
+    } catch (err) {
+      return { ok: false, error: RELAY_ERRORS.unreachable, detail: (err as Error).message };
     }
   }
 }

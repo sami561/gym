@@ -6,6 +6,7 @@ import {
   AccessLogDto,
   AuthUser,
   CurrentUser,
+  ListLogsRequest,
   PATTERNS,
   Role,
   Roles,
@@ -21,9 +22,14 @@ import { ListLogsQuery, ScanDto } from './access.dto';
 export class AccessController {
   constructor(private readonly rpc: RpcClient) {}
 
+  /** ADMIN also gets the position and address of app openings (`context`). */
   @Get('logs')
-  logs(@Query() q: ListLogsQuery) {
-    return this.rpc.send<AccessLogDto[]>(PATTERNS.access.logs, { ...q, limit: q.limit ?? 50 });
+  logs(@CurrentUser() user: AuthUser, @Query() q: ListLogsQuery) {
+    return this.rpc.send<AccessLogDto[], ListLogsRequest>(PATTERNS.access.logs, {
+      ...q,
+      limit: q.limit ?? 50,
+      includeContext: user.role === Role.ADMIN,
+    });
   }
 
   /** QR code scanned at the reception / kiosk: opens the door when the member is entitled. */

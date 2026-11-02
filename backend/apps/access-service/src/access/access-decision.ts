@@ -1,6 +1,8 @@
 import {
+  AppOpenContext,
   DateWindow,
   distanceMeters,
+  ipInCidrs,
   isWithinWindows,
   LatLng,
   MemberStatus,
@@ -17,6 +19,8 @@ export const REASONS = {
   notStarted: (from: string) => `Abonnement valable à partir du ${formatDay(from)}.`,
   expired: (until: string) => `Abonnement expiré le ${formatDay(until)}. Merci de le renouveler.`,
   doorInactive: 'Porte désactivée.',
+  appOpenDisabled: 'Cette porte ne peut pas être ouverte depuis l’application.',
+  network: 'Connectez-vous au Wi-Fi de la salle pour ouvrir la porte.',
   invalidQr: 'QR code invalide.',
   expiredQr: 'QR code expiré. Actualisez le code dans l’application.',
   replayedQr: 'QR code déjà utilisé. Attendez le prochain code.',
@@ -24,6 +28,7 @@ export const REASONS = {
   tooFar: (meters: number) => `Vous êtes trop loin de la salle (${meters} m). Approchez-vous de l’entrée.`,
   agentOffline: 'Contrôleur de porte hors ligne.',
   agentTimeout: 'Le contrôleur de porte ne répond pas.',
+  agentFailed: 'Le contrôleur n’a pas pu ouvrir la porte.',
   foreignDoor: 'Porte non gérée par cet agent.',
 } as const;
 
@@ -59,6 +64,26 @@ export function checkDoor(door: { isActive: boolean }): Check {
   return door.isActive ? OK : { ok: false, reason: REASONS.doorInactive };
 }
 
+/** The door must be open to the app (Door.allowAppOpen); GET /me/doors lists only those. */
+export function checkAppOpen(door: { allowAppOpen: boolean }): Check {
+  return door.allowAppOpen ? OK : { ok: false, reason: REASONS.appOpenDisabled };
+}
+
+/**
+ * With APP_OPEN_ALLOWED_NETWORKS set, the phone must reach the gateway from one of those networks
+ * (the gym Wi-Fi). An empty list turns the check off; a malformed one refuses everyone (logged at boot).
+ */
+export function checkNetwork(clientIp: string | null | undefined, networks: string[]): Check {
+  if (networks.length === 0) return OK;
+  const ip = typeof clientIp === 'string' ? clientIp.trim() : '';
+  if (!ip) return { ok: false, reason: REASONS.network };
+  try {
+    return ipInCidrs(ip, networks) ? OK : { ok: false, reason: REASONS.network };
+  } catch {
+    return { ok: false, reason: REASONS.network };
+  }
+}
+
 export interface Position {
   latitude: number;
   longitude: number;
@@ -83,6 +108,24 @@ export function checkGeofence(position: Position, gym: LatLng, radiusMeters: num
   const allowance = Math.min(accuracy, MAX_ACCURACY_ALLOWANCE);
   if (distance - allowance <= radiusMeters) return { ok: true, distance };
   return { ok: false, reason: REASONS.tooFar(Math.round(distance)), distance };
+}
+
+const finiteOrNull = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null;
+
+/** What an app opening is logged with, whatever the decision, so abuse can be investigated. */
+export function appOpenContext(
+  request: Partial<Position> & { clientIp?: unknown },
+  distance: number | undefined,
+): AppOpenContext {
+  const accuracy = finiteOrNull(request.accuracy);
+  return {
+    latitude: finiteOrNull(request.latitude),
+    longitude: finiteOrNull(request.longitude),
+    accuracy: accuracy === null ? null : Math.max(0, accuracy),
+    distanceMeters: distance === undefined || !Number.isFinite(distance) ? null : Math.round(distance),
+    clientIp: typeof request.clientIp === 'string' && request.clientIp.trim() ? request.clientIp.trim().slice(0, 64) : null,
+  };
 }
 
 /**
