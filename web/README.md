@@ -68,7 +68,8 @@ Typed API contracts mirror `backend/libs/common/src/contracts` by hand (`src/api
 
 ## Auth and security
 
-- Access token in memory, refresh token in `localStorage`. On a 401 the client refreshes once (single-flight), and refresh tokens rotate, so the newest one is always saved.
+- Access token in memory, refresh token in `localStorage`, or in memory for the tab when the browser blocks storage. On a 401 the client refreshes once (single-flight), and refresh tokens rotate, so the newest one is always saved.
+- A refresh answer is ignored if the stored refresh token changed while it ran (sign-out, sign-in, password change, another tab), and the request waiting on it is not replayed under the new session.
 - Changing the password (key icon in the top bar) signs out every other session and stores the fresh tokens.
-- The live feed reconnects after the server drops the socket when the token expires.
+- The live feed refreshes the token and reconnects after the server drops the socket when the token expires. If the refresh fails but keeps the session (server down, rate limit, no network), the feed stays offline and tries again after 2 s, doubling the wait up to 60 s. It stops on sign-out.
 - Door secrets come back masked (`********`). Leaving a secret field empty keeps the stored value.
