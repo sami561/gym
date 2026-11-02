@@ -1,0 +1,212 @@
+@import "tailwindcss";
+
+/* ---------- Brand tokens (static) ----------
+   Taken from the gym itself: the shield (pure black), the corrugated facade
+   cladding (steel greys), the LED hexagon ceiling (cool white) and the red hammer. */
+@theme {
+  --font-sans: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --color-shield: #000000;
+  --color-led: #e9f2ff;
+  --color-chalk: #f4f5f6;
+
+  --color-brand-300: #f6777a;
+  --color-brand-400: #ef3b40;
+  --color-brand-500: #d7141a;
+  --color-brand-600: #b51016;
+  --color-brand-700: #8f0c11;
+
+  --color-steel-950: #141517;
+  --color-steel-900: #1d1f22;
+  --color-steel-800: #272a2e;
+  --color-steel-700: #363a3f;
+  --color-steel-600: #4a4e54;
+  --color-steel-500: #62666d;
+  --color-steel-400: #8b9097;
+  --color-steel-300: #b3b7bd;
+  --color-steel-200: #d6d9dc;
+  --color-steel-100: #eceef0;
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ---------- Semantic admin tokens (switch with data-theme) ---------- */
+@theme inline {
+  --color-page: var(--page);
+  --color-card: var(--card);
+  --color-card-2: var(--card-2);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-muted: var(--muted);
+  --color-good: var(--good-text);
+  --color-bad: var(--bad-text);
+  --color-warn: var(--warn);
+}
+
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --card: #1a1a19;
+  --card-2: #232322;
+  --line: #2c2c2a;
+  --fg: #f0efec;
+  --fg-2: #c3c2b7;
+  --muted: #898781;
+  --good-text: #0ca30c;
+  --bad-text: #e66767;
+  --warn: #fab219;
+  /* Chart roles (dataviz skill: validated categorical slots 1-2, dark steps) */
+  --chart-surface: #1a1a19;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  /* Employee positions: categorical slots 1-6 in fixed order (validated, dark steps) */
+  --pos-1: #3987e5;
+  --pos-2: #d95926;
+  --pos-3: #199e70;
+  --pos-4: #c98500;
+  --pos-5: #d55181;
+  --pos-6: #008300;
+  /* Ordered categories (age groups): ordinal blue ramp, validated --ordinal on dark */
+  --ord-1: #b7d3f6;
+  --ord-2: #6da7ec;
+  --ord-3: #3987e5;
+  --ord-4: #256abf;
+  --ord-5: #184f95;
+  --other: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --hover-wash: rgba(255, 255, 255, 0.05);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --page: #f4f4f1;
+  --card: #fcfcfb;
+  --card-2: #f0efec;
+  --line: #e1e0d9;
+  --fg: #0b0b0b;
+  --fg-2: #52514e;
+  --muted: #6f6d68;
+  --good-text: #006300;
+  --bad-text: #b3261e;
+  --warn: #b57a00;
+  --chart-surface: #fcfcfb;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --pos-1: #2a78d6;
+  --pos-2: #eb6834;
+  --pos-3: #1baf7a;
+  --pos-4: #eda100;
+  --pos-5: #e87ba4;
+  --pos-6: #008300;
+  --ord-1: #86b6ef;
+  --ord-2: #5598e7;
+  --ord-3: #2a78d6;
+  --ord-4: #1c5cab;
+  --ord-5: #104281;
+  --other: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --hover-wash: rgba(11, 11, 11, 0.04);
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand-400);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--color-brand-500);
+  color: #fff;
+}
+
+/* Thin, quiet scrollbars inside admin panels */
+.scroll-thin { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Corrugated steel cladding of the facade: vertical ribs with a light edge */
+.bg-corrugated {
+  background-color: var(--color-steel-800);
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.07) 0,
+    rgba(255, 255, 255, 0.07) 1px,
+    rgba(0, 0, 0, 0.22) 1px,
+    rgba(0, 0, 0, 0.22) 3px,
+    transparent 3px,
+    transparent 16px
+  );
+}
+
+/* Hexagon pattern, echoing the LED ceiling */
+.bg-hex {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='98' viewBox='0 0 56 98'%3E%3Cpath d='M28 66L0 50L0 16L28 0L56 16L56 50L28 66L28 100' fill='none' stroke='%23ffffff' stroke-opacity='0.06' stroke-width='1.5'/%3E%3Cpath d='M28 0L28 34L0 50L0 84L28 100L56 84L56 50L28 34' fill='none' stroke='%23ffffff' stroke-opacity='0.04' stroke-width='1.5'/%3E%3C/svg%3E");
+}
+
+.text-balance { text-wrap: balance; }
+
+/* Arabic: Cairo, no widened letterforms or tracking (it would break the joined script). */
+:root[lang="ar"] {
+  --font-sans: "Cairo", "Archivo", system-ui, sans-serif;
+}
+:root[lang="ar"] .type-display,
+:root[lang="ar"] .type-wide {
+  font-stretch: normal;
+  letter-spacing: 0;
+}
+:root[lang="ar"] .type-display {
+  line-height: 1.15;
+}
+
+/* Display type: Archivo at its widest, like the lettering on the facade. */
+.type-display {
+  font-stretch: 125%;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  line-height: 0.92;
+}
+.type-wide {
+  font-stretch: 112%;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+}
+
+/* Numbers that align in columns (tables, axis ticks) */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Receipt printing: only the ticket */
+@media print {
+  body * { visibility: hidden; }
+  .receipt, .receipt * { visibility: visible; }
+  .receipt { position: absolute; inset-inline-start: 0; top: 0; width: 80mm; color: #000; }
+}
+
+/* Recharts: keep keyboard focus visible but drop the default box */
+.recharts-surface:focus { outline: none; }
+.recharts-wrapper:focus-visible { outline: 2px solid var(--color-brand-400); outline-offset: 4px; border-radius: 8px; }
