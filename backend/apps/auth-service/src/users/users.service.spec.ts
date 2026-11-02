@@ -143,6 +143,22 @@ describe('UsersService — sessions', () => {
     expect(manager.exists).toHaveBeenCalledWith(User, { where: { email: 'autre@example.com' } });
   });
 
+  it('refuses to create an account with an e-mail already used', async () => {
+    const repository = { exists: jest.fn().mockResolvedValue(true), create: jest.fn(), save: jest.fn() };
+    const events = { publish: jest.fn() };
+    const service = new UsersService(
+      repository as unknown as Repository<User>,
+      {} as DataSource,
+      {} as RefreshSessionsService,
+      events as unknown as EventBus,
+    );
+    const request = { email: ' Amira@Example.com ', password: 'Membre2026!', role: Role.MEMBER, firstName: 'Amira', lastName: 'J.' };
+    await expect(service.create(request)).rejects.toThrow(new ConflictException('Un compte existe déjà avec cet e-mail.'));
+    expect(repository.exists).toHaveBeenCalledWith({ where: { email: 'amira@example.com' } });
+    expect(repository.save).not.toHaveBeenCalled();
+    expect(events.publish).not.toHaveBeenCalled();
+  });
+
   it('a login writes lastLoginAt only, so it cannot undo a deactivation or a password change', async () => {
     const repository = { update: jest.fn(), save: jest.fn() };
     const service = new UsersService(
