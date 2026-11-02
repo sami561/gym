@@ -9,13 +9,26 @@ function transportKind(): 'redis' | 'nats' {
   return env('BUS_TRANSPORT', 'redis') === 'nats' ? 'nats' : 'redis';
 }
 
+/**
+ * Bus credentials: REDIS_PASSWORD (requirepass, or the password of the Redis 6+ ACL user
+ * REDIS_USERNAME) and NATS_TOKEN (server started with --auth). Unset means no auth, as
+ * with a local Homebrew Redis.
+ */
 function redisOptions() {
   return {
     host: env('REDIS_HOST', '127.0.0.1'),
     port: envInt('REDIS_PORT', 6379),
+    username: process.env.REDIS_USERNAME || undefined,
     password: process.env.REDIS_PASSWORD || undefined,
     retryAttempts: 20,
     retryDelay: 1000,
+  };
+}
+
+function natsOptions() {
+  return {
+    servers: env('NATS_URL', 'nats://127.0.0.1:4222').split(','),
+    ...(process.env.NATS_TOKEN ? { token: process.env.NATS_TOKEN } : {}),
   };
 }
 
@@ -27,10 +40,7 @@ export function serverTransport(service: string, opts: { broadcast?: boolean } =
   if (transportKind() === 'nats') {
     return {
       transport: Transport.NATS,
-      options: {
-        servers: env('NATS_URL', 'nats://127.0.0.1:4222').split(','),
-        ...(opts.broadcast ? {} : { queue: service }),
-      },
+      options: { ...natsOptions(), ...(opts.broadcast ? {} : { queue: service }) },
     };
   }
   return { transport: Transport.REDIS, options: redisOptions() };
@@ -39,10 +49,7 @@ export function serverTransport(service: string, opts: { broadcast?: boolean } =
 /** Options for a client that sends RPCs / publishes events on the bus. */
 export function clientTransport(): ClientOptions {
   if (transportKind() === 'nats') {
-    return {
-      transport: Transport.NATS,
-      options: { servers: env('NATS_URL', 'nats://127.0.0.1:4222').split(',') },
-    };
+    return { transport: Transport.NATS, options: natsOptions() };
   }
   return { transport: Transport.REDIS, options: redisOptions() };
 }
