@@ -1,4 +1,5 @@
 import { createHmac } from 'crypto';
+import { WebhookKeys } from './webhook-keys';
 
 export const MAX_ATTEMPTS = 6;
 export const WEBHOOK_TIMEOUT_MS = 10_000;
@@ -11,15 +12,22 @@ export interface WebhookEnvelope {
   data: unknown;
 }
 
-/** `sha256=<hex HMAC-SHA256(raw body, secret)>`, verified by n8n before trusting the payload. */
-export function signWebhookBody(body: string, secret: string): string {
-  return `sha256=${createHmac('sha256', secret).update(body, 'utf8').digest('hex')}`;
+/**
+ * `sha256=<hex HMAC-SHA256(secret, "<timestamp>.<raw body>")>`, verified by n8n before trusting
+ * the payload; n8n also refuses a timestamp more than 5 minutes away from its clock (replays).
+ */
+export function signWebhook(timestamp: number, body: string, secret: string): string {
+  return `sha256=${createHmac('sha256', secret).update(`${timestamp}.${body}`, 'utf8').digest('hex')}`;
 }
 
-/** Exact body and headers of one delivery attempt (the signature covers this exact string). */
+/**
+ * Exact body and headers of one delivery attempt. Each attempt gets its own timestamp (unix
+ * seconds), so retries stay within n8n's window; the signature covers it and this exact body.
+ */
 export function buildWebhookRequest(
   envelope: WebhookEnvelope,
-  secret: string,
+  keys: WebhookKeys,
+  timestamp = Math.floor(Date.now() / 1000),
 ): { body: string; headers: Record<string, string> } {
   const body = JSON.stringify({
     id: envelope.id,
@@ -32,11 +40,10 @@ export function buildWebhookRequest(
     'User-Agent': 'meliora-notification-service/1.0',
     'X-Meliora-Event': envelope.event,
     'X-Meliora-Delivery': envelope.id,
+    'X-Meliora-Timestamp': String(timestamp),
   };
-  if (secret) {
-    headers.Authorization = `Bearer ${secret}`;
-    headers['X-Meliora-Signature'] = signWebhookBody(body, secret);
-  }
+  if (keys.authToken) headers.Authorization = `Bearer ${keys.authToken}`;
+  if (keys.secret) headers['X-Meliora-Signature'] = signWebhook(timestamp, body, keys.secret);
   return { body, headers };
 }
 

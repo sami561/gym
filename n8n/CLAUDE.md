@@ -5,6 +5,10 @@ validator in `scripts/`. Background, event list and rules: the meliora-n8n-autom
 
 - `npm run check` validates every workflow against n8n-nodes-base 2.45.6 and renders all templates to
   `preview/` (git-ignored) — run it after any change and open a few previews.
-- Events arrive on the Webhook node `meliora-events` (Header Auth `Authorization: Bearer <WEBHOOK_SECRET>`),
-  feeds come from `$env.MELIORA_API_URL/api/automation/*` with the Meliora API key credential.
+- Events arrive on the Webhook node `meliora-events` (Header Auth `Authorization: Bearer <WEBHOOK_AUTH_TOKEN>`,
+  never the signing key: n8n stores headers in executions). Workflow 01 then checks
+  `X-Meliora-Signature: sha256=HMAC-SHA256(WEBHOOK_SECRET, "<X-Meliora-Timestamp>.<raw body>")` with the
+  Crypto credential and refuses timestamps more than 300 s from now (`webhook.prepareCheck` in
+  `scripts/n8n-code.mjs`; the validator signs fixtures like notification-service).
+- Feeds come from `$env.MELIORA_API_URL/api/automation/*` with the Meliora API key credential.
 - Keep a static fallback for every AI-written text (workflows 03 and 06).

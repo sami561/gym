@@ -105,6 +105,42 @@ export function runtime() {
 }
 
 /* ---------------------------------------------------------------------------------------------
+ * 01 · Webhook check. notification-service sends X-Meliora-Timestamp (unix seconds) and
+ * X-Meliora-Signature = sha256=<hex HMAC-SHA256(WEBHOOK_SECRET, "<timestamp>.<raw body>")>.
+ * The Crypto node recomputes the HMAC with the "Meliora webhook signature" credential.
+ * ------------------------------------------------------------------------------------------- */
+export const webhook = {
+  /**
+   * Adds the exact signed string ($json.signedPayload) and whether the timestamp is within 5 minutes
+   * of now ($json.timestampValid: an older request is a replay). The bearer token is removed from
+   * the headers so the next nodes do not copy it into their output.
+   */
+  async prepareCheck() {
+    const MAX_CLOCK_SKEW_SECONDS = 300;
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const received = $input.all();
+    const prepared = [];
+    for (let index = 0; index < received.length; index++) {
+      const item = received[index];
+      const headers = { ...(item.json.headers ?? {}) };
+      delete headers.authorization;
+      const timestamp = String(headers['x-meliora-timestamp'] ?? '');
+      // Raw bytes (Webhook option "Raw Body"): the signature covers them, not the parsed $json.body.
+      // `helpers` (not `this.helpers`) resolves in both task-runner modes (secure and insecure).
+      const rawBody = item.binary?.data
+        ? Buffer.from(await helpers.getBinaryDataBuffer(index, 'data')).toString('utf8')
+        : '';
+      const timestampValid = /^\d{1,12}$/.test(timestamp) && Math.abs(nowSeconds - Number(timestamp)) <= MAX_CLOCK_SKEW_SECONDS;
+      prepared.push({
+        json: { ...item.json, headers, signedPayload: `${timestamp}.${rawBody}`, timestampValid },
+        pairedItem: { item: index },
+      });
+    }
+    return prepared;
+  },
+};
+
+/* ---------------------------------------------------------------------------------------------
  * 01 · Customer events (webhook). Items come from the Webhook node: $json.body = { id, event, occurredAt, data }.
  * ------------------------------------------------------------------------------------------- */
 export const events = {

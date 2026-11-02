@@ -17,7 +17,7 @@
       "typeVersion": 2,
       "position": [
         0,
-        300
+        200
       ],
       "credentials": {
         "httpHeaderAuth": {
@@ -29,10 +29,23 @@
     },
     {
       "parameters": {
+        "jsCode": "// Meliora Gym — chaîne signée « horodatage.corps brut » et contrôle de l’horodatage (5 min)\n// Généré par n8n/scripts/build.mjs : modifiez n8n/templates/*.html ou n8n/scripts/n8n-code.mjs,\n// puis `npm run build` et réimportez le workflow.\nconst TEMPLATES = {};\n\nconst env = (key, fallback = '') => {\n  try {\n    const value = $env[key];\n    return value === undefined || value === null || value === '' ? fallback : String(value);\n  } catch (error) {\n    return fallback; // N8N_BLOCK_ENV_ACCESS_IN_NODE=true\n  }\n};\nconst BRAND = {\n  logoUrl: env('MELIORA_LOGO_URL', 'https://meliora-gym.tn/images/logo.jpg'),\n  websiteUrl: env('MELIORA_WEBSITE_URL', 'https://meliora-gym.tn'),\n  appUrl: env('MELIORA_APP_URL', 'https://meliora-gym.tn/app'),\n  adminUrl: env('MELIORA_ADMIN_URL', 'https://meliora-gym.tn/admin'),\n  mapsUrl: env('MELIORA_MAPS_URL', 'https://maps.app.goo.gl/CVWB98nx2RdSd8Mw8'),\n  instagramUrl: 'https://www.instagram.com/gymmeliora/',\n  instagramHandle: '@gymmeliora',\n  address: 'Khzema Est, Rue Colonel Garnaoui, Sousse 4051',\n  phone: env('MELIORA_GYM_PHONE'),\n};\nconst FROM = env('MELIORA_FROM_EMAIL', 'Meliora Gym <contact@meliora-gym.tn>');\nconst OWNER = env('MELIORA_OWNER_EMAIL');\nconst STAFF = env('MELIORA_STAFF_EMAIL', OWNER);\nconst MEMBER_NOTE = 'Vous recevez cet e-mail car vous êtes membre de Meliora Gym. Répondez « STOP » pour ne plus recevoir nos messages.';\nconst TZ = 'Africa/Tunis';\n\nconst esc = (value) =>\n  String(value ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);\n// {{#if key}}…{{/if}} blocks, then {{{raw}}} / {{escaped}} values in a single pass (values are never re-scanned).\nconst render = (template, vars) =>\n  template\n    .replace(/\\{\\{#if (\\w+)\\}\\}([\\s\\S]*?)\\{\\{\\/if\\}\\}/g, (_, key, inner) => (vars[key] ? inner : ''))\n    .replace(/\\{\\{\\{(\\w+)\\}\\}\\}|\\{\\{(\\w+)\\}\\}/g, (_, raw, key) => (raw ? String(vars[raw] ?? '') : esc(vars[key])));\n\nconst asDate = (value) =>\n  typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) ? new Date(`${value}T12:00:00Z`) : new Date(value);\nconst fmt = (value, options) => {\n  if (!value) return '';\n  const date = asDate(value);\n  return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat('fr-FR', { timeZone: TZ, ...options }).format(date);\n};\nconst longDate = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst dayMonth = (value) => fmt(value, { weekday: 'long', day: 'numeric', month: 'long' });\nconst shortDate = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric' });\nconst dateTime = (value) => fmt(value, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });\nconst hour = (value) => fmt(value, { hour: '2-digit', minute: '2-digit' });\nconst dayKey = (value) => fmt(value, { year: 'numeric', month: '2-digit', day: '2-digit' }).split('/').reverse().join('-');\nconst capitalize = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : '');\nconst money = (amount) =>\n  `${Number(amount || 0).toLocaleString('fr-FR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} DT`;\nconst plural = (count, one, many) => `${count} ${Math.abs(Number(count)) === 1 ? one : many}`;\nconst firstWord = (name) => String(name || '').trim().split(/\\s+/)[0] || '';\nconst weekRange = (from, to) => `${fmt(from, { day: 'numeric', month: 'long' })} au ${fmt(to, { day: 'numeric', month: 'long', year: 'numeric' })}`;\n\nconst METHODS = { CASH: 'Espèces', CARD: 'Carte bancaire', TRANSFER: 'Virement bancaire', D17: 'D17' };\nconst SOURCES = {\n  WALK_IN: 'Passage à l’accueil',\n  INSTAGRAM: 'Instagram',\n  FACEBOOK: 'Facebook',\n  WEBSITE: 'Site web',\n  REFERRAL: 'Parrainage',\n  PHONE: 'Téléphone',\n  OTHER: 'Autre',\n};\nconst PRIORITIES = { LOW: 'basse', MEDIUM: 'moyenne', HIGH: 'haute', URGENT: 'urgente' };\n\n/** One e-mail item for the \"Send Email\" node, or null when there is no usable recipient. */\nconst email = (template, { to, subject, preheader = '', vars = {}, footerNote = '' }) => {\n  const recipient = String(to || '').trim();\n  if (!recipient.includes('@')) return null;\n  const html = render(TEMPLATES[template], {\n    ...BRAND,\n    year: new Date().getFullYear(),\n    subject,\n    preheader,\n    footerNote,\n    ...vars,\n  });\n  return { json: { from: FROM, to: recipient, subject, html } };\n};\n\n/** Bordered list used in owner digests: rows of { title, detail }. */\nconst listTable = (rows, empty = 'Rien à signaler ✅') => {\n  if (!rows.length) return `<p style=\"margin:0 0 14px;color:#2e7d32;\">${esc(empty)}</p>`;\n  const body = rows\n    .map(\n      (row) =>\n        `<tr><td style=\"padding:11px 16px;border-bottom:1px solid #f1f1f1;font-size:14px;\"><strong style=\"color:#0b0b0c;\">${esc(row.title)}</strong>` +\n        (row.detail ? `<br><span style=\"color:#6b6b6b;font-size:13px;\">${esc(row.detail)}</span>` : '') +\n        '</td></tr>',\n    )\n    .join('');\n  return `<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:8px 0 18px;border:1px solid #ececec;border-radius:10px;border-collapse:separate;border-spacing:0;\">${body}</table>`;\n};\n\nconst MAX_CLOCK_SKEW_SECONDS = 300;\nconst nowSeconds = Math.floor(Date.now() / 1000);\nconst received = $input.all();\nconst prepared = [];\nfor (let index = 0; index < received.length; index++) {\n  const item = received[index];\n  const headers = { ...(item.json.headers ?? {}) };\n  delete headers.authorization;\n  const timestamp = String(headers['x-meliora-timestamp'] ?? '');\n  // Raw bytes (Webhook option \"Raw Body\"): the signature covers them, not the parsed $json.body.\n  // `helpers` (not `this.helpers`) resolves in both task-runner modes (secure and insecure).\n  const rawBody = item.binary?.data\n    ? Buffer.from(await helpers.getBinaryDataBuffer(index, 'data')).toString('utf8')\n    : '';\n  const timestampValid = /^\\d{1,12}$/.test(timestamp) && Math.abs(nowSeconds - Number(timestamp)) <= MAX_CLOCK_SKEW_SECONDS;\n  prepared.push({\n    json: { ...item.json, headers, signedPayload: `${timestamp}.${rawBody}`, timestampValid },\n    pairedItem: { item: index },\n  });\n}\nreturn prepared;"
+      },
+      "id": "dad36c33-2675-5def-9df4-d5f24e68d676",
+      "name": "Préparer la vérification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        200
+      ]
+    },
+    {
+      "parameters": {
         "action": "hmac",
         "type": "SHA256",
-        "binaryData": true,
-        "binaryPropertyName": "data",
+        "binaryData": false,
+        "value": "={{ $json.signedPayload }}",
         "dataPropertyName": "signature",
         "encoding": "hex"
       },
@@ -41,8 +54,8 @@
       "type": "n8n-nodes-base.crypto",
       "typeVersion": 2,
       "position": [
-        240,
-        300
+        480,
+        200
       ],
       "credentials": {
         "crypto": {
@@ -80,8 +93,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        480,
-        300
+        720,
+        200
       ]
     },
     {
@@ -93,8 +106,55 @@
       "type": "n8n-nodes-base.stopAndError",
       "typeVersion": 1,
       "position": [
-        720,
-        480
+        960,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2e78af72-930b-5380-b53c-fd6a0cce1f6c",
+              "leftValue": "={{ $json.timestampValid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "13683c46-7b17-5544-aeed-6f90f5c7c489",
+      "name": "Horodatage récent ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "Horodatage X-Meliora-Timestamp absent ou à plus de 5 minutes : événement ignoré (rejeu, ou horloge du serveur Meliora ou de n8n à régler)."
+      },
+      "id": "e7004d68-c458-5028-a707-2659c4d2b91a",
+      "name": "Horodatage refusé",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        400
       ]
     },
     {
@@ -110,7 +170,7 @@
       "type": "n8n-nodes-base.removeDuplicates",
       "typeVersion": 2,
       "position": [
-        720,
+        1200,
         200
       ]
     },
@@ -367,7 +427,7 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        960,
+        1440,
         200
       ]
     },
@@ -387,7 +447,7 @@
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
       "position": [
-        1520,
+        2000,
         200
       ],
       "credentials": {
@@ -406,7 +466,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1240,
+        1720,
         -520
       ]
     },
@@ -419,7 +479,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1240,
+        1720,
         -360
       ]
     },
@@ -432,7 +492,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1240,
+        1720,
         -200
       ]
     },
@@ -445,7 +505,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1240,
+        1720,
         -40
       ]
     },
@@ -458,7 +518,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1240,
+        1720,
         120
       ]
     },
@@ -471,7 +531,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1240,
+        1720,
         280
       ]
     },
@@ -484,7 +544,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1240,
+        1720,
         440
       ]
     },
@@ -497,7 +557,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1240,
+        1720,
         600
       ]
     },
@@ -510,7 +570,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1240,
+        1720,
         760
       ]
     },
@@ -523,13 +583,24 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1240,
+        1720,
         920
       ]
     }
   ],
   "connections": {
     "Événements Meliora": {
+      "main": [
+        [
+          {
+            "node": "Préparer la vérification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer la vérification": {
       "main": [
         [
           {
@@ -555,7 +626,7 @@
       "main": [
         [
           {
-            "node": "Ignorer les doublons",
+            "node": "Horodatage récent ?",
             "type": "main",
             "index": 0
           }
@@ -563,6 +634,24 @@
         [
           {
             "node": "Signature invalide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Horodatage récent ?": {
+      "main": [
+        [
+          {
+            "node": "Ignorer les doublons",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Horodatage refusé",
             "type": "main",
             "index": 0
           }

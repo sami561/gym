@@ -1,4 +1,5 @@
 /* Sample data used by validate.mjs to run every Code node the way n8n would. */
+import { createHmac } from 'node:crypto';
 
 const DAY = 86_400_000;
 const now = Date.now();
@@ -25,6 +26,34 @@ const envelope = (event, data) => ({
   headers: { 'x-meliora-event': event },
   body: { id: `evt-${event}`, event, occurredAt: iso(0), data },
 });
+
+/** HMAC-SHA256 hex, as notification-service (signWebhook) and the Crypto node compute it. */
+export const hmacHex = (secret, text) => createHmac('sha256', secret).update(text, 'utf8').digest('hex');
+
+/**
+ * One request as the Webhook node outputs it with the option "Raw Body" (raw bytes in binary
+ * "data", base64), signed like notification-service: X-Meliora-Timestamp: <unix seconds> and
+ * X-Meliora-Signature: sha256=<hex HMAC-SHA256(secret, "<timestamp>.<raw body>")>.
+ */
+export function signedDelivery(body, { secret, timestamp, authToken = 'test-bearer-token' }) {
+  const raw = JSON.stringify(body);
+  return {
+    json: {
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${authToken}`,
+        'x-meliora-event': body.event,
+        'x-meliora-delivery': body.id,
+        'x-meliora-timestamp': String(timestamp),
+        'x-meliora-signature': `sha256=${hmacHex(secret, `${timestamp}.${raw}`)}`,
+      },
+      params: {},
+      query: {},
+      body: JSON.parse(raw),
+    },
+    binary: { data: { data: Buffer.from(raw, 'utf8').toString('base64'), mimeType: 'application/json' } },
+  };
+}
 
 export const WEBHOOK_EVENTS = {
   'member.created': envelope('member.created', {
