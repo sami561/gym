@@ -1,0 +1,183 @@
+# Dependabot opens its pull requests into sandbox, so updates follow the release flow like any other
+# change (sandbox → prod → main). Every Monday; minor and patch updates come grouped, one PR per
+# folder and ecosystem, majors one by one. Commits: build(deps) for what ships (runtime packages,
+# Docker images), chore(deps) for dev tooling, ci(deps) for GitHub Actions.
+# npm releases younger than 7 days are not proposed: compromised versions are usually pulled by then.
+# Security updates are separate: GitHub opens them on main, change their base to sandbox.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /backend
+    target-branch: sandbox
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Africa/Tunis
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: build(deps)
+      prefix-development: chore(deps)
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      # The Node.js major changes on purpose, everywhere at once (Dockerfiles, CI, @types/node).
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: npm
+    directory: /web
+    target-branch: sandbox
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Africa/Tunis
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: build(deps)
+      prefix-development: chore(deps)
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: npm
+    directory: /mobile
+    target-branch: sandbox
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Africa/Tunis
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: build(deps)
+      prefix-development: chore(deps)
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+    # The Expo SDK sets these versions: they move together with an SDK upgrade
+    # (npx expo install expo@^<sdk> --fix) or npx expo install --fix, never one by one.
+    ignore:
+      # Their major is the SDK number (expo-router 58.x = SDK 58).
+      - dependency-name: expo
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "expo-*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@expo/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: jest-expo
+        update-types: ["version-update:semver-major"]
+      - dependency-name: eslint-config-expo
+        update-types: ["version-update:semver-major"]
+      # react and react-dom must equal the renderer inside react-native (exact check at start-up),
+      # and react-native 0.x breaks in minors: no update of these three on its own.
+      - dependency-name: react
+      - dependency-name: react-dom
+      - dependency-name: react-native
+      # Native modules pinned by the SDK, and the React types: patches only.
+      - dependency-name: "react-native-*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@types/react"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+
+  - package-ecosystem: npm
+    directory: /door-agent
+    target-branch: sandbox
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Africa/Tunis
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: build(deps)
+      prefix-development: chore(deps)
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: sandbox
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Africa/Tunis
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: ci(deps)
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directory: /backend
+    target-branch: sandbox
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Africa/Tunis
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: build(deps)
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: docker
+    directory: /web
+    target-branch: sandbox
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Africa/Tunis
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: build(deps)
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: docker
+    directory: /door-agent
+    target-branch: sandbox
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Africa/Tunis
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: build(deps)
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]

@@ -1,0 +1,220 @@
+# Repository rules (CONTRIBUTING.md), on every push, on pull requests into the release branches and
+# every Monday:
+# - commit messages are type(scope): subject and work branches are type/topic;
+# - gitleaks scans every commit of every branch for secrets (.gitleaks.toml);
+# - npm audit reports advisories in the production dependencies: a report, it never blocks.
+# Builds and tests are in ci.yml, the release order in branch-flow.yml.
+name: Quality
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [sandbox, prod, main]
+  schedule:
+    - cron: '0 5 * * 1' # Monday 06:00 in Tunis
+  workflow_dispatch:
+
+concurrency:
+  group: quality-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  commits:
+    name: commit messages
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: New commits are type(scope) subject
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          pattern='^(feat|fix|docs|chore|build|ci|refactor|test|perf|style|revert)(\([a-z0-9-]+\))?!?: .+'
+          if [ "$EVENT" = pull_request ]; then
+            range="origin/$BASE_REF..$PR_HEAD"
+          else
+            case "$GITHUB_REF_NAME" in
+              sandbox|prod|main)
+                # What this push added: merged work branches, or a promotion.
+                if ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+                  echo "No earlier $GITHUB_REF_NAME commit to compare with: nothing to check"
+                  exit 0
+                fi
+                range="$BEFORE..$GITHUB_SHA" ;;
+              *)
+                # Everything the work branch would bring into sandbox.
+                base=origin/sandbox
+                git rev-parse -q --verify "$base^{commit}" >/dev/null || base="origin/$DEFAULT_BRANCH"
+                range="$base..$GITHUB_SHA" ;;
+            esac
+          fi
+
+          log=$(git log --no-merges --format='%h %s' "$range")
+          checked=0
+          bad=()
+          while read -r sha subject; do
+            [ -n "$sha" ] || continue
+            checked=$((checked + 1))
+            [[ $subject =~ $pattern ]] || bad+=("$sha $subject")
+          done <<< "$log"
+          echo "Checked $checked commit(s) in $range"
+          [ ${#bad[@]} -eq 0 ] && exit 0
+
+          printf '  %s\n' "${bad[@]}"
+          echo "::error title=Commit messages::${#bad[@]} commit(s) are not type(scope): subject (list above and in the summary)"
+          {
+            echo "### Commit messages to reword"
+            echo
+            printf -- "- \`%s\`\n" "${bad[@]}"
+            echo
+            echo "Expected \`type(scope): subject\`, type one of feat, fix, docs, chore, build, ci, refactor, test, perf, style, revert (CONTRIBUTING.md)."
+            echo "On your work branch: \`git rebase -i origin/sandbox\`, mark them \`reword\`, then \`git push --force-with-lease\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+  branch:
+    name: branch name
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Work branches are type/topic
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          case "$BRANCH" in
+            sandbox|prod|main) echo "$BRANCH is a release branch"; exit 0 ;;
+          esac
+          pattern='^(feat|fix|docs|chore|build|ci|refactor|test|perf|revert|dependabot)/.+'
+          if [[ $BRANCH =~ $pattern ]]; then
+            echo "$BRANCH follows type/topic"
+            exit 0
+          fi
+          echo "::error title=Branch name::$BRANCH is not type/topic (feat/…, fix/…, docs/…, chore/…, build/…, ci/…, refactor/…, test/…, perf/…, revert/…). Rename it: git branch -m <type>/<topic>, push it and delete the old one."
+          exit 1
+
+  secrets:
+    name: secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install gitleaks
+        env:
+          VERSION: 8.30.1
+          SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb # gitleaks_8.30.1_linux_x64.tar.gz
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/gitleaks.tar.gz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v$VERSION/gitleaks_${VERSION}_linux_x64.tar.gz"
+          echo "$SHA256  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+
+      - name: Scan every commit of every branch
+        run: |
+          "$RUNNER_TEMP/gitleaks" git --config .gitleaks.toml --redact --verbose --no-banner --no-color \
+            --report-format json --report-path "$RUNNER_TEMP/gitleaks.json" .
+
+      - name: List the findings (values redacted)
+        if: failure()
+        run: |
+          [ -s "$RUNNER_TEMP/gitleaks.json" ] || exit 0
+          {
+            echo "### Secret scan: $(jq length "$RUNNER_TEMP/gitleaks.json") finding(s)"
+            echo
+            echo "| Rule | File | Commit | Date |"
+            echo "|---|---|---|---|"
+            jq -r '.[] | "| \(.RuleID) | `\(.File):\(.StartLine)` | `\(.Commit[0:12])` | \(.Date[0:10]) |"' "$RUNNER_TEMP/gitleaks.json"
+            echo
+            echo "A real secret that reached GitHub is compromised: revoke and replace it first, then clean the history (CONTRIBUTING.md, Security). A fake value belongs in a test file or in .gitleaks.toml."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  audit:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # A report, not a gate: an advisory without an upstream fix must not stop a release.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: npm audit --omit=dev --audit-level=high
+        run: |
+          # npm audit reads package-lock.json: no install needed.
+          rows=""
+          flagged=()
+          missing=()
+          for dir in backend web mobile door-agent; do
+            json=$(cd "$dir" && npm audit --omit=dev --json 2>/dev/null) || true
+            counts=$(jq -r '.metadata.vulnerabilities // empty | "\(.critical) \(.high) \(.moderate) \(.low)"' <<< "$json" 2>/dev/null) || true
+            if [ -z "$counts" ]; then
+              rows+="| \`$dir\` | ? | ? | ? | ? | no report, see the log |"$'\n'
+              missing+=("$dir")
+              echo "::warning title=npm audit ($dir)::npm audit returned no report"
+              (cd "$dir" && npm audit --omit=dev) || true
+              continue
+            fi
+            read -r critical high moderate low <<< "$counts"
+            if (( critical + high > 0 )); then
+              rows+="| \`$dir\` | $critical | $high | $moderate | $low | **to fix** |"$'\n'
+              flagged+=("$dir")
+              echo "::warning title=npm audit ($dir)::$critical critical and $high high advisories in production dependencies. Details: cd $dir && npm audit --omit=dev"
+            else
+              rows+="| \`$dir\` | $critical | $high | $moderate | $low | OK |"$'\n'
+            fi
+          done
+
+          {
+            echo "## Dependency audit (production dependencies)"
+            echo
+            if (( ${#flagged[@]} + ${#missing[@]} == 0 )); then
+              echo "No high or critical advisory."
+            else
+              echo "> [!WARNING]"
+              if (( ${#flagged[@]} )); then
+                echo "> High or critical advisories in **${flagged[*]}**. This report never blocks a merge or a deploy: fix it in a \`fix/…\` branch (update the package or the one that pulls it in), or write down why it does not apply."
+              fi
+              if (( ${#missing[@]} )); then
+                echo "> No report for **${missing[*]}**: npm audit failed, see the log."
+              fi
+            fi
+            echo
+            echo "| Folder | Critical | High | Moderate | Low | Result |"
+            echo "|---|---:|---:|---:|---:|---|"
+            printf '%s' "$rows"
+            for dir in "${flagged[@]}"; do
+              echo
+              echo "<details><summary><code>$dir</code>: npm audit --omit=dev --audit-level=high</summary>"
+              echo
+              echo '```'
+              (cd "$dir" && npm audit --omit=dev --audit-level=high 2>&1) || true
+              echo '```'
+              echo
+              echo "</details>"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

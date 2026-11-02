@@ -14,16 +14,29 @@ type AppLang = 'fr' | 'en' | 'ar';
 const LOCALES: Record<AppLang, string> = { fr: 'fr-FR', en: 'en-GB', ar: 'ar-TN' };
 const CURRENCY: Record<AppLang, string> = { fr: 'DT', en: 'DT', ar: 'د.ت' };
 
+/** signDisplay 'negative' needs Chrome 106, Firefox 116 or Safari 15.4; older engines throw on it. */
+function negativeSignOnly(): { signDisplay?: 'negative' } {
+  try {
+    new Intl.NumberFormat('en', { signDisplay: 'negative' });
+    return { signDisplay: 'negative' };
+  } catch {
+    return {};
+  }
+}
+
+// Latin digits in every language; a value that rounds to zero prints "0", never "-0" (where supported).
+const NUMBERS = { numberingSystem: 'latn', ...negativeSignOnly() } as const;
+
 let LANG: AppLang = 'fr';
 let LOCALE = LOCALES.fr;
 let formatters = buildFormatters(LOCALE);
 
 function buildFormatters(locale: string) {
   return {
-    tnd: new Intl.NumberFormat(locale, { minimumFractionDigits: 3, maximumFractionDigits: 3, numberingSystem: 'latn' }),
-    tndShort: new Intl.NumberFormat(locale, { maximumFractionDigits: 0, numberingSystem: 'latn' }),
-    compact: new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1, numberingSystem: 'latn' }),
-    integer: new Intl.NumberFormat(locale, { numberingSystem: 'latn' }),
+    tnd: new Intl.NumberFormat(locale, { minimumFractionDigits: 3, maximumFractionDigits: 3, ...NUMBERS }),
+    tndShort: new Intl.NumberFormat(locale, { maximumFractionDigits: 0, ...NUMBERS }),
+    compact: new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1, ...NUMBERS }),
+    integer: new Intl.NumberFormat(locale, NUMBERS),
     relative: new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }),
   };
 }
@@ -64,11 +77,11 @@ export function formatInt(value: number | null | undefined): string {
 }
 
 export function formatNumber(value: number, maxDigits = 1): string {
-  return new Intl.NumberFormat(LOCALE, { maximumFractionDigits: maxDigits, numberingSystem: 'latn' }).format(value);
+  return new Intl.NumberFormat(LOCALE, { maximumFractionDigits: maxDigits, ...NUMBERS }).format(value);
 }
 
 export function formatPercent(ratio: number, digits = 0): string {
-  return new Intl.NumberFormat(LOCALE, { style: 'percent', maximumFractionDigits: digits, numberingSystem: 'latn' }).format(ratio);
+  return new Intl.NumberFormat(LOCALE, { style: 'percent', maximumFractionDigits: digits, ...NUMBERS }).format(ratio);
 }
 
 /** Accepts ISO date-times and date-only strings (YYYY-MM-DD, read as local dates). */

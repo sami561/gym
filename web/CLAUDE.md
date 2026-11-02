@@ -14,8 +14,13 @@ lazy-loaded with its own dictionary). Background and structure: `README.md`.
   no dual axis.
 - The three.js ceiling (`src/landing/three/`) stays lazy, paused off-screen, with the static fallback.
 - Use the gym's real photos in `public/images/` (copies of `assets/images/`); don't invent visuals.
+- Tests: Vitest, `*.test.ts(x)` next to the code. DOM tests opt into jsdom with a docblock and
+  render through `renderInLang` (`src/test/`). The config pins `TZ=Africa/Tunis`; never hit the
+  network (stub `fetch` / `localStorage` with `vi.stubGlobal`); normalise raw Intl output instead of
+  asserting ICU spacing. New label maps go into `LABEL_MAPS` in `src/lib/labels-ops.test.ts`, which
+  checks them against the backend enums. Skipped tests pin known bugs — unskip them with the fix.
 
 ```bash
 npm run dev          # :5173, proxies /api and /socket.io to VITE_PROXY_TARGET (gateway :4000)
-npm run typecheck && npm run lint && npm run build
+npm test && npm run typecheck && npm run lint && npm run build
 ```
