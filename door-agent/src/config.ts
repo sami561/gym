@@ -18,6 +18,12 @@ export interface AgentConfig {
   eventBufferMax: number;
 }
 
+/**
+ * Shortest ZKTeco timeout that works: zkteco-js resolves the user list 1 s after the terminal
+ * starts answering, while its own no-reply timer equals the timeout.
+ */
+export const ZK_TIMEOUT_MIN_MS = 2000;
+
 export class ConfigError extends Error {
   constructor(public readonly problems: string[]) {
     super(`Invalid configuration:\n  - ${problems.join('\n  - ')}`);
@@ -101,7 +107,7 @@ export function parseConfig(env: Env, options: { isTTY?: boolean } = {}): AgentC
     logLevel: oneOf('LOG_LEVEL', ['debug', 'info', 'warn', 'error'] as const, 'info'),
     logFormat: logFormatRaw === 'auto' ? (options.isTTY ? 'pretty' : 'json') : logFormatRaw,
     zk: {
-      timeoutMs: int('ZK_TIMEOUT_MS', 5000, 500, 60_000),
+      timeoutMs: int('ZK_TIMEOUT_MS', 5000, ZK_TIMEOUT_MIN_MS, 60_000),
       inport: int('ZK_UDP_INPORT', 5200, 1, 65535),
       keepAliveMs: int('ZK_KEEPALIVE_SECONDS', 60, 10, 3600) * 1000,
     },

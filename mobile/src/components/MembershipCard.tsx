@@ -1,25 +1,38 @@
 import { StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import type { MemberProfile } from '@/api/types';
+import type { MemberProfile, SubscriptionDto } from '@/api/types';
 import { useI18n } from '@/i18n';
 import { formatDate } from '@/lib/format';
 import { colors, radius, spacing } from '@/theme';
 import { AppText } from './AppText';
 import { StatusPill, Tone } from './StatusPill';
 
-export type MembershipKind = 'active' | 'frozen' | 'expired' | 'suspended' | 'none';
+/** Labelled by `membership.<kind>`, here and on the pass screen: those texts take no placeholders. */
+export type MembershipKind = 'active' | 'frozen' | 'scheduled' | 'expired' | 'suspended' | 'none';
+
+/**
+ * The paused subscription, if any. membership-service never counts a FROZEN subscription as current or upcoming
+ * and keeps it FROZEN until it resumes (its end date is pushed back by the days paused only then), so it is
+ * paused whatever its dates, even past its end date.
+ */
+function frozenSubscription(subscriptions: SubscriptionDto[]): SubscriptionDto | null {
+  return subscriptions.find((s) => s.status === 'FROZEN') ?? null;
+}
 
 export function membershipKind(profile: MemberProfile): MembershipKind {
   if (profile.member.status === 'SUSPENDED') return 'suspended';
   if (profile.membership.active) return 'active';
-  if (profile.membership.current?.status === 'FROZEN') return 'frozen';
+  if (frozenSubscription(profile.subscriptions)) return 'frozen';
+  // Paid in advance: the next subscription has not started yet.
+  if (profile.membership.upcoming) return 'scheduled';
   return profile.subscriptions.length ? 'expired' : 'none';
 }
 
 const toneByKind: Record<MembershipKind, Tone> = {
   active: 'success',
   frozen: 'info',
+  scheduled: 'info',
   expired: 'danger',
   suspended: 'danger',
   none: 'neutral',
@@ -36,7 +49,9 @@ export function MembershipCard({ profile }: { profile: MemberProfile }) {
   const { t, locale } = useI18n();
   const { member, membership, subscriptions } = profile;
   const kind = membershipKind(profile);
-  const latest = membership.current ?? subscriptions[0] ?? null;
+  // The subscription the status is about: running, else paused, else starting later, else the newest one.
+  const latest =
+    membership.current ?? frozenSubscription(subscriptions) ?? membership.upcoming ?? subscriptions[0] ?? null;
   const planName = latest?.plan.name ?? t('membership.none');
   const statusLabel = t(`membership.${kind === 'none' ? 'none' : kind}` as const);
 
@@ -75,10 +90,15 @@ export function MembershipCard({ profile }: { profile: MemberProfile }) {
         {membership.validUntil && kind === 'active' ? (
           <AppText variant="label">{t('membership.validUntil', { date: formatDate(membership.validUntil, locale) })}</AppText>
         ) : null}
+        {kind === 'scheduled' && membership.upcoming ? (
+          <AppText variant="label">
+            {t('membership.startsOn', { date: formatDate(membership.upcoming.startDate, locale) })}
+          </AppText>
+        ) : null}
         {kind === 'expired' && latest ? (
           <AppText variant="label">{t('membership.expiredOn', { date: formatDate(latest.endDate, locale) })}</AppText>
         ) : null}
-        {membership.upcoming ? (
+        {membership.upcoming && kind !== 'scheduled' ? (
           <AppText variant="caption">
             {t('membership.upcoming', { date: formatDate(membership.upcoming.startDate, locale) })}
           </AppText>

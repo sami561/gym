@@ -34,10 +34,21 @@ describe('notificationRoute', () => {
     expect(notificationRoute({ url: 'meliora://history' })).toBeNull();
   });
 
-  // Known bug in src/hooks/usePushRegistration.ts: '//host/path' starts with '/' and passes the in-app
-  // check, but expo-router (shouldLinkExternally) opens it in the browser as https://host/path.
-  it.skip('treats protocol-relative links as external', () => {
+  // '//host/path' starts with '/', but expo-router (shouldLinkExternally) opens it in the browser as
+  // https://host/path.
+  it('treats protocol-relative links as external', () => {
     expect(notificationRoute({ url: '//example.com/promo' })).toBeNull();
+  });
+
+  it('treats a backslash or more slashes after the first one as external too', () => {
+    // URL parsers read '/\host/path' as '//host/path'.
+    expect(notificationRoute({ url: '/\\example.com/promo' })).toBeNull();
+    expect(notificationRoute({ url: '///example.com/promo' })).toBeNull();
+  });
+
+  it('follows the root path and nested in-app paths', () => {
+    expect(notificationRoute({ url: '/' })).toBe('/');
+    expect(notificationRoute({ url: '/class/session-1' })).toBe('/class/session-1');
   });
 
   it('opens the class rather than a url when both are given', () => {

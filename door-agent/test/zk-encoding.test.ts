@@ -8,13 +8,21 @@ import {
   MAX_CARD_NUMBER,
   MAX_DEVICE_UID,
   parseCardNumber,
+  parseUserList72,
+  parseUserPacket72,
+  USER_LIST_REQUEST,
   ZK_COMMANDS,
+  ZK_EVENT,
   ZK_PRIVILEGE,
+  ZK_REPLY,
 } from '../src/doors/zk-protocol';
 import { allocateUid, parseZktecoConfig } from '../src/doors/zkteco';
 
 // zkteco-js ships its own command table and record decoder: the agent's payloads must agree with them.
-const { COMMANDS } = require('zkteco-js/src/helper/command') as { COMMANDS: Record<string, number> };
+const { COMMANDS, REQUEST_DATA } = require('zkteco-js/src/helper/command') as {
+  COMMANDS: Record<string, number>;
+  REQUEST_DATA: Record<string, Buffer>;
+};
 const { decodeUserData72 } = require('zkteco-js/src/helper/utils') as {
   decodeUserData72(record: Buffer): { uid: number; role: number; name: string; cardno: number; userId: string };
 };
@@ -40,6 +48,58 @@ test('command ids match the ZKTeco protocol table of zkteco-js', () => {
   assert.equal(ZK_COMMANDS.USER_WRQ, COMMANDS.CMD_USER_WRQ);
   assert.equal(ZK_COMMANDS.DELETE_USER, COMMANDS.CMD_DELETE_USER);
   assert.equal(ZK_COMMANDS.REFRESH_DATA, COMMANDS.CMD_REFRESHDATA);
+  assert.equal(ZK_COMMANDS.REG_EVENT, COMMANDS.CMD_REG_EVENT);
+  assert.equal(ZK_EVENT.ATTLOG, COMMANDS.EF_ATTLOG);
+  for (const [name, code] of Object.entries(ZK_REPLY)) assert.equal(code, COMMANDS[`CMD_${name}`], name);
+  assert.deepEqual(USER_LIST_REQUEST, REQUEST_DATA.GET_USERS);
+});
+
+test('user records are read back field by field, a full 24-character name included', () => {
+  const user = {
+    uid: 513,
+    userId: '987654321',
+    name: 'Rania Ben Hedi Ghannouch', // 24 characters: no NUL before the card number
+    privilege: ZK_PRIVILEGE.DISABLED,
+    password: '12345678',
+    card: 3_000_000_123,
+    groupId: '1',
+  };
+  const packet = buildUserPacket72(user);
+  assert.deepEqual(parseUserPacket72(packet), user);
+  // zkteco-js reads such a name on into the card number: the reason for the agent's own decoder
+  assert.notEqual(decodeUserData72(packet).name, user.name);
+  assert.deepEqual(parseUserPacket72(buildUserPacket72({ uid: 1, userId: '1', name: '' })), {
+    uid: 1,
+    userId: '1',
+    name: '',
+    privilege: 0,
+    password: '',
+    card: 0,
+    groupId: '',
+  });
+  assert.throws(() => parseUserPacket72(packet.subarray(0, 71)), RangeError);
+});
+
+test('user lists: size first, then 72-byte records; anything incomplete is refused', () => {
+  const records = [1, 2, 3].map((uid) => buildUserPacket72({ uid, userId: String(uid * 10), name: `User ${uid}` }));
+  const size = Buffer.alloc(4);
+  size.writeUInt32LE(3 * 72, 0);
+  const list = Buffer.concat([size, ...records]);
+  assert.deepEqual(
+    parseUserList72(list).map((user) => [user.uid, user.userId, user.name]),
+    [
+      [1, '10', 'User 1'],
+      [2, '20', 'User 2'],
+      [3, '30', 'User 3'],
+    ],
+  );
+  assert.equal(parseUserList72(Buffer.concat([list, Buffer.alloc(80)])).length, 3, 'bytes after the list are not users');
+  assert.deepEqual(parseUserList72(Buffer.alloc(4)), [], 'an empty terminal');
+  assert.throws(() => parseUserList72(list.subarray(0, list.length - 1)), /Incomplete user list from the terminal \(215 of 216 bytes\)/);
+  assert.throws(() => parseUserList72(Buffer.alloc(0)), /Incomplete user list/);
+  const odd = Buffer.alloc(4 + 28);
+  odd.writeUInt32LE(28, 0);
+  assert.throws(() => parseUserList72(odd), /not 72-byte records/);
 });
 
 test('unlock payload is 4 bytes, uint32 little-endian, in tenths of a second', () => {

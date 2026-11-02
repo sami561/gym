@@ -163,46 +163,61 @@ describe('HttpRelayDriver', { concurrency: true }, () => {
     assert.ok(!JSON.stringify(entries).includes('s3cret'));
   });
 
-  it(
-    'credentials in the URL never leak into errors and are sent as Basic auth',
-    {
-      todo:
-        'BUG src/doors/http-relay.ts: fetch() refuses URLs with credentials, so every open fails, and the error ' +
-        '(logged, kept in status() and sent in heartbeats) contains the plaintext password',
-    },
-    async (t) => {
-      const relay = await startRelay(t);
-      const { driver } = relayDriver({ url: `${relay.base.replace('http://', 'http://admin:s3cret@')}/relay/0?turn=on` });
-      const failure = await driver.open(3).then(
-        () => null,
-        (err: Error) => err,
-      );
-      assert.ok(!String(failure?.message).includes('s3cret'), 'password in the open() error');
-      assert.ok(!(driver.status().error ?? '').includes('s3cret'), 'password in status()');
-      assert.equal(failure, null);
-      assert.equal(relay.requests[0]?.headers.authorization, basic('admin:s3cret'));
-    },
-  );
+  it('a URL the relay cannot be reached with keeps its password out of logs and errors', async () => {
+    const { driver, entries } = relayDriver({ url: 'http://admin:s3c@ret@192.168.1.50:99999/relay' }); // port out of range
+    await driver.start();
+    assert.equal(entries.find((entry) => entry.msg === 'relay ready')?.url, 'http://admin:***@192.168.1.50:99999/relay');
+    await assert.rejects(driver.open(3), (err: Error) => !err.message.includes('s3c'));
+    assert.ok(!(driver.status().error ?? '').includes('s3c'));
+    assert.ok(!JSON.stringify(entries).includes('s3c@ret'));
+  });
 
-  it(
-    'a configured content-type is kept as is for an object body',
-    {
-      todo:
-        'BUG src/doors/http-relay.ts: the JSON default is added unless the exact key "Content-Type" exists, ' +
-        'so a lowercase "content-type" header goes out as "text/plain, application/json"',
-    },
-    async (t) => {
-      const relay = await startRelay(t);
-      const { driver } = relayDriver({
-        url: `${relay.base}/open`,
-        method: 'POST',
-        headers: { 'content-type': 'text/plain' },
-        body: { seconds: '{seconds}' },
-      });
-      await driver.open(3);
-      assert.equal(relay.requests[0].headers['content-type'], 'text/plain');
-    },
-  );
+  it('credentials in the URL never leak into errors and are sent as Basic auth', async (t) => {
+    const relay = await startRelay(t);
+    const { driver, entries } = relayDriver({ url: `${relay.base.replace('http://', 'http://admin:s3cret@')}/relay/0?turn=on` });
+    await driver.start();
+    const failure = await driver.open(3).then(
+      () => null,
+      (err: Error) => err,
+    );
+    assert.ok(!String(failure?.message).includes('s3cret'), 'password in the open() error');
+    assert.ok(!(driver.status().error ?? '').includes('s3cret'), 'password in status()');
+    assert.equal(failure, null);
+    assert.equal(relay.requests[0]?.headers.authorization, basic('admin:s3cret'));
+    assert.equal(relay.requests[0]?.url, '/relay/0?turn=on');
+    assert.ok(!JSON.stringify(entries).includes('s3cret'), 'password in the logs');
+
+    // A relay that answers 401 or cannot be reached: the error still holds no password.
+    relay.answer = { status: 401, body: 'unauthorized' };
+    await assert.rejects(driver.open(3), { message: 'Relay answered HTTP 401: unauthorized' });
+    const port = await freePort();
+    const unreachable = relayDriver({ url: `http://admin:s3cret@127.0.0.1:${port}/relay/0` }).driver;
+    await assert.rejects(unreachable.open(3), (err: Error) => !err.message.includes('s3cret'));
+    assert.ok(!(unreachable.status().error ?? '').includes('s3cret'));
+  });
+
+  it('a configured content-type is kept as is for an object body', async (t) => {
+    const relay = await startRelay(t);
+    const { driver } = relayDriver({
+      url: `${relay.base}/open`,
+      method: 'POST',
+      headers: { 'content-type': 'text/plain' },
+      body: { seconds: '{seconds}' },
+    });
+    await driver.open(3);
+    assert.equal(relay.requests[0].headers['content-type'], 'text/plain');
+  });
+
+  it('basicAuth replaces an authorization header written in another case, without sending both', async (t) => {
+    const relay = await startRelay(t);
+    const { driver } = relayDriver({
+      url: `${relay.base}/open`,
+      headers: { authorization: 'Bearer old-token' },
+      basicAuth: { username: 'admin', password: 'secret' },
+    });
+    await driver.open(3);
+    assert.equal(relay.requests[0].headers.authorization, basic('admin:secret'));
+  });
 });
 
 test('relay config: defaults, method and URL validation', () => {
@@ -220,6 +235,30 @@ test('relay config: defaults, method and URL validation', () => {
   }
 });
 
+test('relay config: user:password@ moves from the URL to a Basic auth header', () => {
+  const relay = parseHttpRelayConfig({ url: 'http://admin:s3cret@192.168.1.50/relay/0?turn=on&t={seconds}' });
+  assert.equal(relay.url, 'http://192.168.1.50/relay/0?turn=on&t={seconds}');
+  assert.deepEqual(relay.headers, { Authorization: basic('admin:s3cret') });
+
+  // percent-encoded characters, an @ in the password (the last @ ends the credentials), no password
+  assert.equal(parseHttpRelayConfig({ url: 'https://ad%20min:p%3Ass@relay.local/x' }).headers.Authorization, basic('ad min:p:ss'));
+  const at = parseHttpRelayConfig({ url: 'http://admin:p@ss@10.0.0.9:8080/open' });
+  assert.equal(at.url, 'http://10.0.0.9:8080/open');
+  assert.equal(at.headers.Authorization, basic('admin:p@ss'));
+  assert.equal(parseHttpRelayConfig({ url: 'http://admin@10.0.0.9/open' }).headers.Authorization, basic('admin:'));
+  // an @ after the host is part of the path or query, not credentials
+  for (const url of ['http://10.0.0.9/open?by=me@gym', 'http://10.0.0.9/@open', 'http://10.0.0.9\\@evil/']) {
+    const parsed = parseHttpRelayConfig({ url });
+    assert.equal(parsed.url, url);
+    assert.deepEqual(parsed.headers, {}, url);
+  }
+  // basicAuth, then an explicit Authorization header (any case), win over URL credentials; the URL loses them anyway
+  const both = parseHttpRelayConfig({ url: 'http://old:pw@x/', basicAuth: { username: 'admin', password: 'new' } });
+  assert.deepEqual([both.url, both.headers], ['http://x/', { Authorization: basic('admin:new') }]);
+  const header = parseHttpRelayConfig({ url: 'http://old:pw@x/', headers: { authorization: 'Bearer t0k3n' } });
+  assert.deepEqual([header.url, header.headers], ['http://x/', { authorization: 'Bearer t0k3n' }]);
+});
+
 test('relay config: headers, Basic auth, text bodies and timeouts', () => {
   assert.deepEqual(parseHttpRelayConfig({ url: 'http://x', headers: { 'X-A': 1, 'X-B': null, 'X-C': undefined, 'X-D': true } }).headers, {
     'X-A': '1',
@@ -231,6 +270,9 @@ test('relay config: headers, Basic auth, text bodies and timeouts', () => {
   const text = parseHttpRelayConfig({ url: 'http://x', method: 'POST', body: 'on={seconds}' });
   assert.equal(text.body, 'on={seconds}');
   assert.equal(text.headers['Content-Type'], undefined);
+
+  const json = parseHttpRelayConfig({ url: 'http://x', method: 'POST', body: { a: 1 }, headers: { 'CONTENT-TYPE': 'application/vnd.relay+json' } });
+  assert.deepEqual(json.headers, { 'CONTENT-TYPE': 'application/vnd.relay+json' }, 'no second content-type');
 
   const timeouts: [unknown, number][] = [
     [3000, 3000],

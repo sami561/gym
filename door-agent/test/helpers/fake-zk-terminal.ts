@@ -64,7 +64,8 @@ function frame(command: number, session: number, replyId: number, payload: Buffe
   return Buffer.concat([top, body]);
 }
 
-function punchFrame(userId: string, at: Date): Buffer {
+/** Live attendance event as the terminal pushes it: 52-byte payload, PIN in 24 bytes, local time. */
+export function punchFrame(userId: string, at: Date): Buffer {
   const payload = Buffer.alloc(52);
   payload.write(userId, 0, 24, 'latin1');
   payload.writeUInt8(1, 24); // verify mode
@@ -88,6 +89,10 @@ export class FakeZkTerminal {
   readonly received: { command: number; payload: Buffer }[] = [];
   /** Reply code per command id (default ACK_OK); null = never answer. */
   readonly replies = new Map<number, number | null>();
+  /** Bytes sent just before the reply to a command (e.g. a punch racing the answer). */
+  readonly preludes = new Map<number, Buffer>();
+  /** The user list announces every record but the last one is not sent (a download cut short). */
+  truncateUserList = false;
   readonly slots = new Map<number, Buffer>();
   connections = 0;
   private readonly sockets = new Set<net.Socket>();
@@ -125,8 +130,12 @@ export class FakeZkTerminal {
 
   /** Several attendance events in a single TCP write (a burst of badges). */
   sendPunches(punches: { userId: string; at: Date }[]): void {
-    const frames = Buffer.concat(punches.map(({ userId, at }) => punchFrame(userId, at)));
-    for (const socket of this.sockets) socket.write(frames);
+    this.sendRaw(Buffer.concat(punches.map(({ userId, at }) => punchFrame(userId, at))));
+  }
+
+  /** Writes bytes as they are to the connected agents. */
+  sendRaw(bytes: Buffer): void {
+    for (const socket of this.sockets) socket.write(bytes);
   }
 
   async close(): Promise<void> {
@@ -156,6 +165,8 @@ export class FakeZkTerminal {
     this.received.push({ command, payload });
     const code = this.replies.has(command) ? this.replies.get(command)! : ZK.ACK_OK;
     if (code === null) return;
+    const prelude = this.preludes.get(command);
+    if (prelude) socket.write(prelude);
     const reply = (data?: Buffer) => socket.write(frame(code, this.session, replyId, data));
     if (code !== ZK.ACK_OK) return void reply();
 
@@ -164,7 +175,8 @@ export class FakeZkTerminal {
         const records = [...this.slots.entries()].sort(([a], [b]) => a - b).map(([, record]) => record);
         const size = Buffer.alloc(4);
         size.writeUInt32LE(records.length * 72, 0);
-        socket.write(frame(ZK.DATA, this.session, replyId, Buffer.concat([size, ...records])));
+        const sent = this.truncateUserList ? records.slice(0, -1) : records;
+        socket.write(frame(ZK.DATA, this.session, replyId, Buffer.concat([size, ...sent])));
         return;
       }
       case ZK.USER_WRQ:

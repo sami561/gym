@@ -21,7 +21,7 @@ const ROLE_OPTIONS = (['ADMIN', 'STAFF', 'COACH'] as Role[]).map((r) => ({ value
 function fields(isNew: boolean): FieldDef[] {
   return [
     { name: 'firstName', label: 'Prénom', required: true },
-    { name: 'lastName', label: 'Nom', required: true },
+    { name: 'lastName', label: 'Nom de famille', required: true },
     { name: 'email', label: 'E-mail de connexion', type: 'email', required: true },
     { name: 'phone', label: 'Téléphone', type: 'tel' },
     { name: 'role', label: 'Rôle', type: 'select', required: true, options: ROLE_OPTIONS },

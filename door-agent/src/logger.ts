@@ -1,3 +1,5 @@
+import { inspect } from 'util';
+
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 export type LogFormat = 'json' | 'pretty';
 export type LogFields = Record<string, unknown>;
@@ -52,18 +54,31 @@ function serialize(fields: LogFields): LogFields {
   return out;
 }
 
-/** Message of anything thrown (zkteco-js throws nested plain objects shaped { err, command }). */
+/**
+ * Message of anything thrown (zkteco-js throws nested plain objects shaped { err, command }).
+ * Never throws: it runs in catch blocks, such as the one that answers `door.open`.
+ */
 export function errorMessage(err: unknown, depth = 0): string {
-  if (err instanceof Error) return err.message || err.name;
-  if (err && typeof err === 'object' && depth < 5) {
-    const e = err as { message?: unknown; err?: unknown; command?: unknown; code?: unknown };
-    if (e.err !== undefined && e.err !== err) {
-      const inner = errorMessage(e.err, depth + 1);
-      const command = typeof e.command === 'string' ? e.command : '';
-      return command && !inner.startsWith(`${command}: `) ? `${command}: ${inner}` : inner;
+  try {
+    if (err instanceof Error) return typeof err.message === 'string' && err.message ? err.message : String(err.name);
+    if (err && typeof err === 'object' && depth < 5) {
+      const e = err as { message?: unknown; err?: unknown; command?: unknown; code?: unknown };
+      if (e.err !== undefined && e.err !== err) {
+        const inner = errorMessage(e.err, depth + 1);
+        const command = typeof e.command === 'string' ? e.command : '';
+        return command && !inner.startsWith(`${command}: `) ? `${command}: ${inner}` : inner;
+      }
+      if (typeof e.message === 'string' && e.message) return e.message;
+      if (typeof e.code === 'string') return e.code;
     }
-    if (typeof e.message === 'string' && e.message) return e.message;
-    if (typeof e.code === 'string') return e.code;
+    if (typeof err === 'string') return err;
+    try {
+      return JSON.stringify(err) ?? String(err);
+    } catch {
+      // circular object, BigInt...
+      return inspect(err, { depth: 2, breakLength: Infinity });
+    }
+  } catch {
+    return 'unknown error';
   }
-  return typeof err === 'string' ? err : JSON.stringify(err) ?? String(err);
 }

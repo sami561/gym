@@ -47,12 +47,19 @@ describe('classAction', () => {
       expect(classAction(closesEarly, ms('2026-11-10T16:00:00.001Z'), false)).toEqual({ kind: 'closed' });
     });
 
-    // Known bug in src/lib/classState.ts: class-service (assertBookingOpen) refuses bookings from closesAt
-    // itself (now >= closesAt) but the app offers "Book" until it has passed (now > bookingClosesAt).
-    // With the default policy closesAt is the start time, so the server answers "already started".
-    it.skip('is closed from bookingClosesAt itself, like the backend', () => {
+    // class-service (assertBookingOpen) refuses bookings from closesAt itself (now >= closesAt). With the
+    // default policy closesAt is the start time, where the server answers "already started".
+    it('is closed from bookingClosesAt itself, like the backend', () => {
       const session = classSession();
       expect(classAction(session, ms(session.bookingClosesAt), false)).toEqual({ kind: 'closed' });
+    });
+
+    it('is closed from an earlier bookingClosesAt itself too, and open until the millisecond before', () => {
+      const closesEarly = classSession({ bookingClosesAt: '2026-11-10T16:00:00.000Z' });
+      expect(classAction(closesEarly, ms(closesEarly.bookingClosesAt), false)).toEqual({ kind: 'closed' });
+      expect(classAction(closesEarly, ms(closesEarly.bookingClosesAt) - 1, false)).toEqual({ kind: 'book' });
+      const session = classSession();
+      expect(classAction(session, ms(session.bookingClosesAt) - 1, false)).toEqual({ kind: 'book' });
     });
 
     it('is not open before bookingOpensAt and says when it opens', () => {
