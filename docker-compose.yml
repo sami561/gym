@@ -1,0 +1,192 @@
+# Meliora Gym — whole platform in Docker.
+#   cp .env.example .env   # then set the secrets
+#   docker compose up -d --build
+# Website + admin: http://localhost:8080 · API: http://localhost:4000/api · Swagger: http://localhost:4000/docs
+# n8n: http://localhost:5678 · Door agent (on the gym LAN): docker compose --profile agent up -d door-agent
+
+name: meliora
+
+x-backend: &backend
+  build:
+    context: ./backend
+  image: meliora/backend:latest
+  restart: unless-stopped
+  environment: &backend-env
+    NODE_ENV: production
+    TZ: Africa/Tunis
+    BUS_TRANSPORT: ${BUS_TRANSPORT:-redis}
+    REDIS_HOST: redis
+    REDIS_PORT: "6379"
+    NATS_URL: nats://nats:4222
+    DB_HOST: postgres
+    DB_PORT: "5432"
+    DB_USER: ${POSTGRES_USER:-meliora}
+    DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    # No migrations yet: TypeORM creates/updates tables from the entities.
+    DB_SYNCHRONIZE: ${DB_SYNCHRONIZE:-true}
+    JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
+    JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env}
+    AUTOMATION_API_KEY: ${AUTOMATION_API_KEY:?set AUTOMATION_API_KEY in .env}
+    WEBHOOK_SECRET: ${WEBHOOK_SECRET:?set WEBHOOK_SECRET in .env}
+    N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://n8n:5678/webhook/meliora-events}
+    ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@meliora-gym.tn}
+    ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+    CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+    ACCESS_WS_HOST: access-service
+    ACCESS_WS_PORT: "4004"
+    GEOFENCE_METERS: ${GEOFENCE_METERS:-150}
+    EXPIRY_REMINDER_DAYS: ${EXPIRY_REMINDER_DAYS:-3}
+    GYM_PHONE: ${GYM_PHONE:-+216 00 000 000}
+    GYM_EMAIL: ${GYM_EMAIL:-contact@meliora-gym.tn}
+    GYM_LAT: ${GYM_LAT:-35.8456}
+    GYM_LNG: ${GYM_LNG:-10.6178}
+    GYM_OPENING_HOURS: ${GYM_OPENING_HOURS:-Lun – Sam|06:00|22:00;Dimanche|08:00|14:00}
+  depends_on: &backend-deps
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-meliora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: postgres
+      POSTGRES_MULTIPLE_DATABASES: meliora_auth,meliora_membership,meliora_class,meliora_access,meliora_notification,meliora_staff,meliora_facility,meliora_commerce,meliora_training,meliora_workflow
+      TZ: Africa/Tunis
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Production bus with load balancing across replicas: set BUS_TRANSPORT=nats and
+  # start with `--profile nats`.
+  nats:
+    image: nats:2.10-alpine
+    restart: unless-stopped
+    profiles: ["nats"]
+
+  api-gateway:
+    <<: *backend
+    command: ["node", "dist/apps/api-gateway/main.js"]
+    environment:
+      <<: *backend-env
+      GATEWAY_PORT: "4000"
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/api/public/gym >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  auth-service:
+    <<: *backend
+    command: ["node", "dist/apps/auth-service/main.js"]
+
+  membership-service:
+    <<: *backend
+    command: ["node", "dist/apps/membership-service/main.js"]
+
+  class-service:
+    <<: *backend
+    command: ["node", "dist/apps/class-service/main.js"]
+
+  access-service:
+    <<: *backend
+    command: ["node", "dist/apps/access-service/main.js"]
+
+  notification-service:
+    <<: *backend
+    command: ["node", "dist/apps/notification-service/main.js"]
+
+  staff-service:
+    <<: *backend
+    command: ["node", "dist/apps/staff-service/main.js"]
+
+  facility-service:
+    <<: *backend
+    command: ["node", "dist/apps/facility-service/main.js"]
+
+  commerce-service:
+    <<: *backend
+    command: ["node", "dist/apps/commerce-service/main.js"]
+
+  training-service:
+    <<: *backend
+    command: ["node", "dist/apps/training-service/main.js"]
+
+  workflow-service:
+    <<: *backend
+    command: ["node", "dist/apps/workflow-service/main.js"]
+
+  # Landing page + back-office (static build behind nginx, which proxies /api,
+  # /socket.io, /agent-socket and /docs to the gateway).
+  web:
+    build:
+      context: ./web
+    image: meliora/web:latest
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - api-gateway
+
+  n8n:
+    image: n8nio/n8n:2.45.7
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      TZ: Africa/Tunis
+      GENERIC_TIMEZONE: Africa/Tunis
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${N8N_PUBLIC_URL:-http://localhost:5678/}
+      N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE:-false}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?set N8N_ENCRYPTION_KEY in .env}
+      # Read by the Meliora workflows ({{$env.MELIORA_API_URL}}).
+      MELIORA_API_URL: http://api-gateway:4000
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/workflows:ro
+      - ./n8n/templates:/templates:ro
+
+  # Runs inside the gym network, next to the ZKTeco terminal / relays. Create the
+  # agent in the back-office (Accès → Contrôleurs) and put its key in AGENT_KEY.
+  door-agent:
+    build:
+      context: ./door-agent
+    image: meliora/door-agent:latest
+    restart: unless-stopped
+    profiles: ["agent"]
+    environment:
+      SERVER_URL: ${DOOR_AGENT_SERVER_URL:-http://api-gateway:4000}
+      AGENT_KEY: ${DOOR_AGENT_KEY:-}
+      DEFAULT_DOOR_ID: ${DOOR_AGENT_DEFAULT_DOOR_ID:-}
+      LOCAL_SCAN_PORT: "8787"
+    volumes:
+      - door_agent_data:/data
+
+volumes:
+  pgdata:
+  n8n_data:
+  door_agent_data:
