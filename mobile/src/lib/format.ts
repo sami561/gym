@@ -60,11 +60,12 @@ export function formatWeekday(date: Date, locale: string): string {
   return new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(date).replace('.', '');
 }
 
-/** TND with 3 decimals: "120,500 DT" (fr) / "120.500 TND" (en). */
+/** TND with 3 decimals: "120,500 DT" (fr) / "120.500 TND" (en) / "120,500 د.ت" (ar). */
 export function formatMoney(amount: number, locale: string): string {
   const formatted = new Intl.NumberFormat(locale, { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(
     amount,
   );
+  if (locale.startsWith('ar')) return `${formatted} د.ت`;
   return locale.startsWith('fr') ? `${formatted} DT` : `${formatted} TND`;
 }
 

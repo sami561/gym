@@ -18,6 +18,7 @@ import { useI18n } from '@/i18n';
 import { bookingTone, classAction, isBlocked, isCancellable } from '@/lib/classState';
 import { formatDate, formatTime } from '@/lib/format';
 import { colors, radius, spacing } from '@/theme';
+import { mirrorInRTL } from '@/lib/direction';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -47,7 +48,7 @@ export default function ClassDetailScreen() {
   const topBar = (
     <View style={styles.topBar}>
       <Pressable onPress={back} hitSlop={12} style={styles.back} accessibilityRole="button" accessibilityLabel={t('common.close')}>
-        <Ionicons name="chevron-back" size={22} color={colors.text} />
+        <Ionicons name="chevron-back" size={22} color={colors.text} style={mirrorInRTL} />
       </Pressable>
       <AppText variant="heading">{t('classes.details')}</AppText>
     </View>
@@ -208,8 +209,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl * 3 },
-  headerCard: { gap: spacing.sm, paddingLeft: spacing.xl },
-  accent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 5 },
+  headerCard: { gap: spacing.sm, paddingStart: spacing.xl },
+  accent: { position: 'absolute', start: 0, top: 0, bottom: 0, width: 5 },
   infoLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   statusCard: { gap: spacing.md },
   capacity: { gap: 2 },

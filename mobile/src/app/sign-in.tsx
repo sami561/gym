@@ -56,7 +56,7 @@ export default function SignInScreen() {
         textContentType="emailAddress"
         returnKeyType="next"
         onSubmitEditing={() => passwordRef.current?.focus()}
-        placeholder="vous@exemple.tn"
+        placeholder={t('auth.emailPlaceholder')}
       />
       <TextField
         ref={passwordRef}

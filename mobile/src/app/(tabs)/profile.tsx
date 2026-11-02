@@ -1,5 +1,5 @@
 import { ComponentProps, useCallback, useState } from 'react';
-import { Alert, Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, I18nManager, Linking, Pressable, StyleSheet, View } from 'react-native';
 import Constants from 'expo-constants';
 import { router, useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -15,9 +15,10 @@ import { SegmentedControl } from '@/components/SegmentedControl';
 import { ErrorState, LoadingState } from '@/components/States';
 import { useGymInfo, useMe } from '@/hooks/queries';
 import { getPushStatus, PushStatus } from '@/hooks/usePushRegistration';
-import { Lang, useI18n } from '@/i18n';
+import { isRTLLang, Lang, LANGUAGES, translate, useI18n } from '@/i18n';
 import { formatDate, initials } from '@/lib/format';
 import { colors, radius, spacing } from '@/theme';
+import { mirrorInRTL } from '@/lib/direction';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -40,7 +41,7 @@ function MenuRow({ icon, label, onPress, right }: { icon: IconName; label: strin
       <AppText variant="body" style={styles.flex}>
         {label}
       </AppText>
-      {right ?? (onPress ? <Ionicons name="chevron-forward" size={18} color={colors.textFaint} /> : null)}
+      {right ?? (onPress ? <Ionicons name="chevron-forward" size={18} color={colors.textFaint} style={mirrorInRTL} /> : null)}
     </Pressable>
   );
 }
@@ -57,6 +58,27 @@ export default function ProfileScreen() {
       getPushStatus().then(setPushStatus);
     }, []),
   );
+
+  /** Switching to/from Arabic flips the layout direction, which needs an app restart. */
+  const changeLanguage = (next: Lang) => {
+    if (next === lang) return;
+    if (isRTLLang(next) === I18nManager.isRTL) {
+      setLang(next);
+      return;
+    }
+    const label = LANGUAGES.find((option) => option.value === next)?.label ?? next;
+    Alert.alert(t('profile.restartTitle'), t('profile.restartBody', { language: label }), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('profile.restartNow'),
+        onPress: async () => {
+          const result = await setLang(next);
+          if (result === 'restart-required') Alert.alert(label, translate(next, 'profile.restartManual'));
+          if (result === 'expo-go') Alert.alert(label, translate(next, 'profile.rtlExpoGo'));
+        },
+      },
+    ]);
+  };
 
   const confirmLogout = () =>
     Alert.alert(t('profile.logout'), t('profile.logoutConfirm'), [
@@ -119,21 +141,14 @@ export default function ProfileScreen() {
                 onPress={pushStatus === 'denied' ? () => Linking.openSettings() : undefined}
               />
               <View style={styles.divider} />
-              <View style={styles.langRow}>
-                <Ionicons name="language-outline" size={20} color={colors.text} />
-                <AppText variant="body" style={styles.flex}>
-                  {t('profile.language')}
-                </AppText>
-                <View style={styles.langControl}>
-                  <SegmentedControl<Lang>
-                    value={lang}
-                    onChange={setLang}
-                    options={[
-                      { value: 'fr', label: 'FR' },
-                      { value: 'en', label: 'EN' },
-                    ]}
-                  />
+              <View style={styles.langBlock}>
+                <View style={styles.langHeader}>
+                  <Ionicons name="language-outline" size={20} color={colors.text} />
+                  <AppText variant="body" style={styles.flex}>
+                    {t('profile.language')}
+                  </AppText>
                 </View>
+                <SegmentedControl<Lang> value={lang} onChange={changeLanguage} options={LANGUAGES} />
               </View>
             </Card>
           </Animated.View>
@@ -218,9 +233,9 @@ const styles = StyleSheet.create({
   infoCard: { gap: spacing.lg },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   menuRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, minHeight: 56 },
-  divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: spacing.lg + 32 },
-  langRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, minHeight: 64 },
-  langControl: { width: 120 },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginStart: spacing.lg + 32 },
+  langBlock: { gap: spacing.md, padding: spacing.lg },
+  langHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   gymCard: { gap: spacing.lg },
   gymHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   hours: { gap: spacing.sm, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },

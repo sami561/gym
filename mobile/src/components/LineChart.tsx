@@ -3,7 +3,8 @@ import { GestureResponderEvent, LayoutChangeEvent, StyleSheet, View } from 'reac
 import Animated, { FadeIn } from 'react-native-reanimated';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 import { formatShortDate } from '@/lib/format';
-import { colors, fonts, radius, spacing } from '@/theme';
+import { useI18n } from '@/i18n';
+import { colors, fontFor, fonts, radius, spacing } from '@/theme';
 import { AppText } from './AppText';
 
 export interface ChartPoint {
@@ -51,6 +52,7 @@ function dayValue(date: string): number {
  * Time is proportional on X (measurements are irregular). Y does not start at zero, so no area fill.
  */
 export function LineChart({ points, locale, formatValue, height = 210, color = colors.red, accessibilityLabel }: Props) {
+  const { lang } = useI18n();
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState<number | null>(null);
 
@@ -89,7 +91,8 @@ export function LineChart({ points, locale, formatValue, height = 210, color = c
 
   return (
     <View
-      style={{ height }}
+      // Time runs left to right in every language; tooltip offsets are computed in LTR coordinates.
+      style={{ height, direction: 'ltr' }}
       onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}
       accessible
       accessibilityRole="image"
@@ -116,14 +119,14 @@ export function LineChart({ points, locale, formatValue, height = 210, color = c
               x={PAD.left - 8}
               y={geometry.y(tick) + 4}
               fontSize={11}
-              fontFamily={fonts.regular}
+              fontFamily={fontFor(fonts.regular, lang)}
               fill={colors.textFaint}
               textAnchor="end"
             >
               {Number.isInteger(tick) ? tick : tick.toFixed(1)}
             </SvgText>
           ))}
-          <SvgText x={geometry.coords[0].x} y={height - 6} fontSize={11} fontFamily={fonts.regular} fill={colors.textFaint} textAnchor="start">
+          <SvgText x={geometry.coords[0].x} y={height - 6} fontSize={11} fontFamily={fontFor(fonts.regular, lang)} fill={colors.textFaint} textAnchor="start">
             {formatShortDate(points[0].date, locale)}
           </SvgText>
           {last > 0 ? (
@@ -131,7 +134,7 @@ export function LineChart({ points, locale, formatValue, height = 210, color = c
               x={geometry.coords[last].x}
               y={height - 6}
               fontSize={11}
-              fontFamily={fonts.regular}
+              fontFamily={fontFor(fonts.regular, lang)}
               fill={colors.textFaint}
               textAnchor="end"
             >
@@ -163,7 +166,7 @@ export function LineChart({ points, locale, formatValue, height = 210, color = c
               x={geometry.coords[last].x + 10}
               y={geometry.coords[last].y + 4}
               fontSize={12}
-              fontFamily={fonts.semibold}
+              fontFamily={fontFor(fonts.semibold, lang)}
               fill={colors.text}
               textAnchor="start"
             >

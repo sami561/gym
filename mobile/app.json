@@ -52,6 +52,24 @@
           "color": "#D7141A",
           "defaultChannel": "default"
         }
+      ],
+      [
+        "expo-localization",
+        {
+          "supportedLocales": {
+            "ios": [
+              "fr",
+              "en",
+              "ar"
+            ],
+            "android": [
+              "fr",
+              "en",
+              "ar"
+            ]
+          },
+          "supportsRTL": true
+        }
       ]
     ],
     "experiments": {

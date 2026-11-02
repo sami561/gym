@@ -18,11 +18,12 @@ import { useNow } from '@/hooks/useNow';
 import { TranslationKey, useI18n } from '@/i18n';
 import { formatDate, formatDateTime, formatMoney, formatNumber, formatShortDate, formatTime } from '@/lib/format';
 import { colors, fonts, radius, spacing } from '@/theme';
+import { mirrorInRTL } from '@/lib/direction';
 
 type Tab = 'programs' | 'progress' | 'coaching';
 type Metric = 'weightKg' | 'bodyFatPct' | 'waistCm';
 
-const METRIC_UNITS: Record<Metric, string> = { weightKg: 'kg', bodyFatPct: '%', waistCm: 'cm' };
+const METRIC_UNITS: Record<Metric, TranslationKey | '%'> = { weightKg: 'units.kg', bodyFatPct: '%', waistCm: 'units.cm' };
 const METRIC_LABELS: Record<Metric, TranslationKey> = {
   weightKg: 'training.weight',
   bodyFatPct: 'training.bodyFat',
@@ -68,7 +69,7 @@ function ProgramsTab() {
                     .join(' · ')}
                 </AppText>
               </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+              <Ionicons name="chevron-forward" size={20} color={colors.textMuted} style={mirrorInRTL} />
             </View>
             {program.goal ? (
               <View style={styles.goal}>
@@ -146,7 +147,9 @@ function ProgressTab() {
   const lastWeight = weights[weights.length - 1]?.weightKg ?? null;
   const delta = firstWeight !== null && lastWeight !== null && weights.length > 1 ? lastWeight - firstWeight : null;
   const latestBmi = [...sorted].reverse().find((m) => m.bmi !== null)?.bmi ?? null;
-  const unit = METRIC_UNITS[metric];
+  const unitKey = METRIC_UNITS[metric];
+  const unit = unitKey === '%' ? '%' : t(unitKey);
+  const kg = t('units.kg');
   const format = (value: number) => `${formatNumber(value, locale)} ${unit}`;
 
   return (
@@ -154,13 +157,13 @@ function ProgressTab() {
       <View style={styles.tiles}>
         <StatTile
           label={t('training.weight')}
-          value={lastWeight !== null ? `${formatNumber(lastWeight, locale)} kg` : '—'}
+          value={lastWeight !== null ? `${formatNumber(lastWeight, locale)} ${kg}` : '—'}
           detail={
             delta !== null ? (
               <View style={styles.delta}>
                 <Ionicons name={delta > 0 ? 'arrow-up' : delta < 0 ? 'arrow-down' : 'remove'} size={12} color={colors.textMuted} />
                 <AppText variant="caption">
-                  {`${delta > 0 ? '+' : ''}${formatNumber(delta, locale)} kg · ${t('training.change')}`}
+                  {`${delta > 0 ? '+' : ''}${formatNumber(delta, locale)} ${kg} · ${t('training.change')}`}
                 </AppText>
               </View>
             ) : null
@@ -220,13 +223,13 @@ function ProgressTab() {
             </AppText>
             <View style={styles.historyValues}>
               <AppText variant="label" style={styles.num}>
-                {m.weightKg !== null ? `${formatNumber(m.weightKg, locale)} kg` : '—'}
+                {m.weightKg !== null ? `${formatNumber(m.weightKg, locale)} ${kg}` : '—'}
               </AppText>
               <AppText variant="label" style={styles.num}>
                 {m.bodyFatPct !== null ? `${formatNumber(m.bodyFatPct, locale)} %` : '—'}
               </AppText>
               <AppText variant="label" style={styles.num}>
-                {m.waistCm !== null ? `${formatNumber(m.waistCm, locale)} cm` : '—'}
+                {m.waistCm !== null ? `${formatNumber(m.waistCm, locale)} ${t('units.cm')}` : '—'}
               </AppText>
             </View>
           </View>

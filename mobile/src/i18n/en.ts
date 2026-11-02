@@ -13,7 +13,10 @@ export const en: Dictionary = {
     yes: 'Yes',
     no: 'No',
     optional: 'optional',
-    days: { one: '{count} day', other: '{count} days' },
+  },
+  units: {
+    kg: 'kg',
+    cm: 'cm',
   },
   errors: {
     network: 'Cannot reach the server. Check your internet connection.',
@@ -43,6 +46,9 @@ export const en: Dictionary = {
     confirmPassword: 'Confirm password',
     register: 'Create my account',
     haveAccount: 'Already a member?',
+    emailPlaceholder: 'you@example.com',
+    showPassword: 'Show password',
+    hidePassword: 'Hide password',
     validation: {
       required: 'Required',
       email: 'Invalid email address',
@@ -277,5 +283,10 @@ export const en: Dictionary = {
     newPassword: 'New password',
     passwordChanged: 'Password changed',
     emergencyPlaceholder: 'Name and phone',
+    restartTitle: 'Change language',
+    restartBody: 'The app will restart to switch to {language}.',
+    restartNow: 'Restart',
+    restartManual: 'Close and reopen the app to apply the layout direction.',
+    rtlExpoGo: 'In Expo Go, the layout direction follows the phone language. It is fully applied in the installed app.',
   },
 };

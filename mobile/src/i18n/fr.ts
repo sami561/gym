@@ -11,7 +11,10 @@ export const fr = {
     yes: 'Oui',
     no: 'Non',
     optional: 'facultatif',
-    days: { one: '{count} jour', other: '{count} jours' },
+  },
+  units: {
+    kg: 'kg',
+    cm: 'cm',
   },
   errors: {
     network: 'Impossible de joindre le serveur. Vérifiez votre connexion internet.',
@@ -41,6 +44,9 @@ export const fr = {
     confirmPassword: 'Confirmer le mot de passe',
     register: "Créer mon compte",
     haveAccount: 'Déjà membre ?',
+    emailPlaceholder: 'vous@exemple.tn',
+    showPassword: 'Afficher le mot de passe',
+    hidePassword: 'Masquer le mot de passe',
     validation: {
       required: 'Champ obligatoire',
       email: 'Adresse e-mail invalide',
@@ -275,6 +281,12 @@ export const fr = {
     newPassword: 'Nouveau mot de passe',
     passwordChanged: 'Mot de passe modifié',
     emergencyPlaceholder: 'Nom et téléphone',
+    restartTitle: 'Changer de langue',
+    restartBody: "L'application va redémarrer pour passer en {language}.",
+    restartNow: 'Redémarrer',
+    restartManual: "Fermez puis rouvrez l'application pour appliquer le sens d'affichage.",
+    rtlExpoGo:
+      "Dans Expo Go, le sens d'affichage suit la langue du téléphone. Il s'applique entièrement dans l'application installée.",
   },
 };
 

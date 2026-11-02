@@ -14,13 +14,14 @@ import { useDoneExercises } from '@/hooks/useDoneExercises';
 import { useI18n } from '@/i18n';
 import { formatNumber } from '@/lib/format';
 import { colors, radius, spacing } from '@/theme';
+import { mirrorInRTL } from '@/lib/direction';
 
 function ExerciseRow({ exercise, done, onToggle }: { exercise: ProgramExercise; done: boolean; onToggle: () => void }) {
   const { t, locale } = useI18n();
   const details = [
     `${exercise.sets} ${t('training.sets')}`,
     `${exercise.reps} ${t('training.reps')}`,
-    exercise.weightKg ? `${formatNumber(exercise.weightKg, locale)} kg` : null,
+    exercise.weightKg ? `${formatNumber(exercise.weightKg, locale)} ${t('units.kg')}` : null,
     exercise.restSeconds ? t('training.rest', { seconds: exercise.restSeconds }) : null,
   ].filter(Boolean);
 
@@ -70,7 +71,7 @@ export default function ProgramScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.topBar}>
         <Pressable onPress={() => router.back()} hitSlop={12} style={styles.back} accessibilityRole="button">
-          <Ionicons name="chevron-back" size={22} color={colors.text} />
+          <Ionicons name="chevron-back" size={22} color={colors.text} style={mirrorInRTL} />
         </Pressable>
         <AppText variant="heading" numberOfLines={1} style={styles.flex}>
           {program?.title ?? t('training.programs')}

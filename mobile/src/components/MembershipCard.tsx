@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
     minHeight: 230,
   },
   bgImage: { ...StyleSheet.absoluteFill, opacity: 0.9 },
-  accent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, backgroundColor: colors.red },
+  accent: { position: 'absolute', start: 0, top: 0, bottom: 0, width: 4, backgroundColor: colors.red },
   content: { padding: spacing.xl, gap: spacing.sm },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   daysRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },

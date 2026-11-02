@@ -5,7 +5,7 @@ import { Tabs } from 'expo-router/js-tabs';
 import { useAuth } from '@/auth/AuthProvider';
 import { useNotificationNavigation, usePushRegistration } from '@/hooks/usePushRegistration';
 import { useI18n } from '@/i18n';
-import { colors, fonts } from '@/theme';
+import { colors, fontFor, fonts } from '@/theme';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -17,7 +17,7 @@ function tabIcon(active: IconName, inactive: IconName) {
 }
 
 export default function TabsLayout() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { status } = useAuth();
   usePushRegistration(status === 'signedIn');
   useNotificationNavigation(status === 'signedIn');
@@ -29,7 +29,7 @@ export default function TabsLayout() {
         tabBarActiveTintColor: colors.white,
         tabBarInactiveTintColor: colors.textFaint,
         tabBarStyle: styles.bar,
-        tabBarLabelStyle: styles.label,
+        tabBarLabelStyle: [styles.label, { fontFamily: fontFor(fonts.medium, lang) }],
         tabBarHideOnKeyboard: true,
         sceneStyle: { backgroundColor: colors.bg },
         animation: 'shift',

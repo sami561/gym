@@ -9,6 +9,11 @@ import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
 import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
 import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
 import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
+// Arabic UI font (Bebas Neue and Inter have no Arabic glyphs).
+import { Cairo_400Regular } from '@expo-google-fonts/cairo/400Regular';
+import { Cairo_500Medium } from '@expo-google-fonts/cairo/500Medium';
+import { Cairo_600SemiBold } from '@expo-google-fonts/cairo/600SemiBold';
+import { Cairo_700Bold } from '@expo-google-fonts/cairo/700Bold';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
@@ -16,6 +21,7 @@ import { ToastProvider } from '@/components/Toast';
 import { I18nProvider } from '@/i18n';
 import { bindAppFocus, queryClient } from '@/lib/queryClient';
 import { colors } from '@/theme';
+import { pushAnimation } from '@/lib/direction';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
@@ -56,13 +62,13 @@ function RootNavigator() {
         <Stack.Screen name="edit-profile" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="change-password" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="add-measurement" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="program/[id]" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="history" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="class/[id]" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="program/[id]" options={{ animation: pushAnimation }} />
+        <Stack.Screen name="history" options={{ animation: pushAnimation }} />
+        <Stack.Screen name="class/[id]" options={{ animation: pushAnimation }} />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
-        <Stack.Screen name="register" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="register" options={{ animation: pushAnimation }} />
       </Stack.Protected>
     </Stack>
   );
@@ -75,6 +81,10 @@ export default function RootLayout() {
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
+    Cairo_400Regular,
+    Cairo_500Medium,
+    Cairo_600SemiBold,
+    Cairo_700Bold,
   });
 
   useEffect(() => bindAppFocus(), []);

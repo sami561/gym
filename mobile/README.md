@@ -2,10 +2,11 @@
 
 Application mobile des membres de **Meliora Gym** (Sousse) : abonnement, pass QR rotatif, ouverture de la porte
 depuis le téléphone, réservation des cours (places numérotées, liste d'attente), entraînement (programme,
-progression, coaching), historique et profil. FR par défaut, EN disponible dans le profil.
+progression, coaching), historique et profil. Trois langues : français (par défaut), anglais et arabe
+(mise en page de droite à gauche).
 
 Stack : Expo SDK 58 · React Native 0.88 · Expo Router (routes dans `src/app/`) · TanStack Query ·
-Reanimated 4 · expo-secure-store / location / notifications / brightness / haptics.
+Reanimated 4 · expo-secure-store / location / notifications / brightness / haptics / localization.
 
 ## Prérequis
 
@@ -51,6 +52,25 @@ back-office. Les comptes staff (ADMIN / STAFF / COACH) sont refusés : l'app est
 - **Entraînement** — programme actif (exercices cochés localement pour la séance du jour), progression
   (graphique poids / masse grasse / tour de taille, IMC, « Ajouter ma pesée »), séances de coaching.
 - **Session** — jetons dans `expo-secure-store`, renouvellement automatique sur 401 (`src/api/client.ts`).
+
+## Langues et RTL
+
+- Langues : **Français** (par défaut), **English**, **العربية**. Au premier lancement, la langue du téléphone
+  est utilisée si elle est prise en charge (`expo-localization`), sinon le français. Le choix fait dans
+  Profil → Langue est gardé dans le trousseau sécurisé.
+- Toutes les chaînes passent par `t()` ; `src/i18n/fr.ts` est la référence et définit le type `Dictionary`,
+  donc `en.ts` et `ar.ts` doivent avoir exactement les mêmes clés (vérifié par `tsc`).
+- Arabe : arabe standard avec l'usage tunisien (منخرط, حصة, اللقب), police **Cairo** à la place de
+  Bebas Neue / Inter, sans espacement des lettres. Dates et nombres via `Intl` en `ar-TN` avec chiffres
+  occidentaux (`ar-TN-u-nu-latn`), montants en « د.ت ».
+- RTL : passer à l'arabe (ou en sortir) bascule `I18nManager.allowRTL/forceRTL` puis redémarre l'app
+  (`reloadAppAsync` d'`expo`). Les chevrons sont inversés, les transitions glissent depuis la gauche,
+  le graphique de progression garde un axe du temps de gauche à droite.
+- **Expo Go** réinitialise la préférence RTL à l'ouverture d'un projet : le texte passe en arabe mais la mise
+  en page suit la langue du téléphone. Pour tester le RTL complet, utiliser un *development build*, ou mettre
+  le téléphone en arabe.
+- Les messages d'erreur renvoyés par le serveur (et les données comme les horaires) restent en **français**,
+  dans toutes les langues de l'app.
 
 ## Notifications push
 
@@ -103,7 +123,7 @@ src/
   auth/                AuthProvider (session, rôle MEMBER uniquement)
   components/          kit UI (Button, Card, ClassCard, SpotPicker, LineChart, CountdownRing…)
   hooks/               requêtes TanStack Query, clé d'accès, push, actions de réservation
-  i18n/                fr.ts (référence), en.ts
+  i18n/                fr.ts (référence), en.ts, ar.ts
   lib/                 code QR, formats (TND, dates), stockage sécurisé, état d'un cours
   theme/               couleurs Meliora (noir, acier, rouge #D7141A), typo, espacements
 assets/images/         photos et logo de la salle

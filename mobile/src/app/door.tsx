@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
   grabber: { width: 40, height: 5, borderRadius: 3, backgroundColor: colors.surfaceHigh },
   closeBtn: {
     position: 'absolute',
-    right: spacing.lg,
+    end: spacing.lg,
     top: spacing.sm,
     width: 36,
     height: 36,

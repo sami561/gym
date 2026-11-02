@@ -1,5 +1,6 @@
-import { StyleSheet, Text, TextProps } from 'react-native';
-import { colors, fonts } from '@/theme';
+import { StyleSheet, Text, TextProps, TextStyle } from 'react-native';
+import { useI18n } from '@/i18n';
+import { colors, fontFor, fonts } from '@/theme';
 
 type Variant = 'hero' | 'display' | 'title' | 'heading' | 'body' | 'bodyStrong' | 'label' | 'caption' | 'overline';
 
@@ -9,13 +10,27 @@ interface Props extends TextProps {
   align?: 'left' | 'center' | 'right';
 }
 
+/**
+ * Arabic: Cairo instead of Bebas/Inter, no letter-spacing (it breaks the joined script),
+ * a smaller display size (Bebas is condensed, Cairo is not) and taller lines for diacritics.
+ */
+function arabicStyle(style: TextStyle): TextStyle {
+  const display = style.fontFamily === fonts.display;
+  const fontSize = style.fontSize ? (display ? Math.round(style.fontSize * 0.78) : style.fontSize) : undefined;
+  return {
+    fontFamily: fontFor(style.fontFamily, 'ar'),
+    letterSpacing: 0,
+    textTransform: 'none',
+    ...(fontSize ? { fontSize, lineHeight: Math.round(fontSize * 1.5) } : null),
+  };
+}
+
 export function AppText({ variant = 'body', color, align, style, ...rest }: Props) {
-  return (
-    <Text
-      {...rest}
-      style={[styles[variant], color ? { color } : null, align ? { textAlign: align } : null, style]}
-    />
-  );
+  const { lang } = useI18n();
+  const composed = [styles[variant], color ? { color } : null, align ? { textAlign: align } : null, style];
+  if (lang !== 'ar') return <Text {...rest} style={composed} />;
+  const flat = StyleSheet.flatten(composed) ?? {};
+  return <Text {...rest} style={[flat, arabicStyle(flat)]} />;
 }
 
 const styles = StyleSheet.create({

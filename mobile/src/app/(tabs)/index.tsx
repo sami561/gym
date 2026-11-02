@@ -19,6 +19,7 @@ import { useNow } from '@/hooks/useNow';
 import { useI18n } from '@/i18n';
 import { formatDate, formatShortDate, formatWeekday, isSameDay } from '@/lib/format';
 import { colors, radius, spacing } from '@/theme';
+import { mirrorInRTL } from '@/lib/direction';
 
 function Stat({ icon, value, label }: { icon: ComponentProps<typeof Ionicons>['name']; value: string; label: string }) {
   return (
@@ -112,7 +113,7 @@ export default function HomeScreen() {
                   {t('home.openDoorHint')}
                 </AppText>
               </View>
-              <Ionicons name="chevron-forward" size={22} color={colors.white} />
+              <Ionicons name="chevron-forward" size={22} color={colors.white} style={mirrorInRTL} />
             </Pressable>
           </Animated.View>
 
@@ -164,7 +165,7 @@ export default function HomeScreen() {
                 <AppText variant="heading">{t('home.myTraining')}</AppText>
                 <AppText variant="caption">{t('home.myTrainingHint')}</AppText>
               </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+              <Ionicons name="chevron-forward" size={20} color={colors.textMuted} style={mirrorInRTL} />
             </Pressable>
           </Animated.View>
         </>

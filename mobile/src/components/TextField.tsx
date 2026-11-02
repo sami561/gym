@@ -1,7 +1,8 @@
 import { forwardRef, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, TextInputInstance, TextInputProps, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, fonts, radius, spacing } from '@/theme';
+import { useI18n } from '@/i18n';
+import { colors, fontFor, fonts, radius, spacing } from '@/theme';
 import { AppText } from './AppText';
 
 interface Props extends TextInputProps {
@@ -14,6 +15,7 @@ export const TextField = forwardRef<TextInputInstance, Props>(function TextField
   { label, error, hint, secureTextEntry, style, ...rest },
   ref,
 ) {
+  const { t, lang } = useI18n();
   const [focused, setFocused] = useState(false);
   const [hidden, setHidden] = useState(!!secureTextEntry);
 
@@ -35,7 +37,7 @@ export const TextField = forwardRef<TextInputInstance, Props>(function TextField
             setFocused(false);
             rest.onBlur?.(e);
           }}
-          style={[styles.input, style]}
+          style={[styles.input, { fontFamily: fontFor(fonts.regular, lang) }, style]}
           {...rest}
         />
         {secureTextEntry ? (
@@ -43,7 +45,7 @@ export const TextField = forwardRef<TextInputInstance, Props>(function TextField
             onPress={() => setHidden((v) => !v)}
             hitSlop={12}
             accessibilityRole="button"
-            accessibilityLabel={hidden ? 'Afficher le mot de passe' : 'Masquer le mot de passe'}
+            accessibilityLabel={hidden ? t('auth.showPassword') : t('auth.hidePassword')}
           >
             <Ionicons name={hidden ? 'eye-outline' : 'eye-off-outline'} size={20} color={colors.steel} />
           </Pressable>

@@ -14,6 +14,7 @@ import { useMe, useVisits } from '@/hooks/queries';
 import { TranslationKey, useI18n } from '@/i18n';
 import { formatDate, formatDateTime, formatMoney } from '@/lib/format';
 import { colors, radius, spacing } from '@/theme';
+import { mirrorInRTL } from '@/lib/direction';
 
 type Tab = 'visits' | 'payments' | 'subscriptions';
 type IconName = ComponentProps<typeof Ionicons>['name'];
@@ -138,7 +139,7 @@ export default function HistoryScreen() {
   const header = (
     <View style={styles.topBar}>
       <Pressable onPress={() => router.back()} hitSlop={12} style={styles.back} accessibilityRole="button">
-        <Ionicons name="chevron-back" size={22} color={colors.text} />
+        <Ionicons name="chevron-back" size={22} color={colors.text} style={mirrorInRTL} />
       </Pressable>
     </View>
   );

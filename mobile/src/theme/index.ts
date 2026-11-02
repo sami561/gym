@@ -33,6 +33,20 @@ export const fonts = {
   bold: 'Inter_700Bold',
 } as const;
 
+/** Cairo replaces Bebas Neue / Inter when the app is in Arabic (Bebas has no Arabic glyphs). */
+const ARABIC_FONTS: Record<string, string> = {
+  [fonts.display]: 'Cairo_700Bold',
+  [fonts.regular]: 'Cairo_400Regular',
+  [fonts.medium]: 'Cairo_500Medium',
+  [fonts.semibold]: 'Cairo_600SemiBold',
+  [fonts.bold]: 'Cairo_700Bold',
+};
+
+export function fontFor(family: string | undefined, lang: string): string | undefined {
+  if (lang !== 'ar') return family;
+  return (family && ARABIC_FONTS[family]) || ARABIC_FONTS[fonts.regular];
+}
+
 export const spacing = {
   xs: 4,
   sm: 8,

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutChangeEvent, Pressable, StyleSheet, View } from 'react-native';
+import { I18nManager, LayoutChangeEvent, Pressable, StyleSheet, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { colors, fonts, radius } from '@/theme';
@@ -18,7 +18,8 @@ export function SegmentedControl<T extends string>({ options, value, onChange }:
 
   const indicatorStyle = useAnimatedStyle(() => ({
     width: segment - 6,
-    transform: [{ translateX: withTiming(index * segment + 3, { duration: 220 }) }],
+    // Anchored at the start edge; in RTL the next segments are to the left, so move negatively.
+    transform: [{ translateX: withTiming((I18nManager.isRTL ? -1 : 1) * (index * segment + 3), { duration: 220 }) }],
   }));
 
   return (
@@ -66,7 +67,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 3,
     bottom: 3,
-    left: 0,
+    start: 0,
     borderRadius: radius.sm,
     backgroundColor: colors.surfaceHigh,
   },

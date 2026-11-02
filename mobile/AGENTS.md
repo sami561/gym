@@ -46,8 +46,11 @@ Docs: https://docs.expo.dev/eas/index.md
   (never import from `../backend`).
 - Node ≥ 22.13 is required (SDK 58 / RN 0.88); the default nvm Node 20 fails.
 - Every user-facing string goes through `useI18n().t()`: add the key to `src/i18n/fr.ts` first (the
-  reference type), then to `en.ts`. Server error messages are already French and are shown as-is
-  (`src/lib/errors.ts`).
+  reference type), then to `en.ts` and `ar.ts` (same placeholders). Server error messages are French and
+  are shown as-is in every language (`src/lib/errors.ts`).
+- Arabic is RTL: use logical styles (`start`/`end`, `marginStart`, `paddingStart`) instead of left/right,
+  mirror directional glyphs with `mirrorInRTL`, and render text through `AppText` (it swaps in the Cairo
+  font). Direction changes reload the app (`src/lib/direction.ts`); Expo Go cannot apply forced RTL.
 - Data access goes through the hooks in `src/hooks/queries.ts`; invalidate the related query keys after mutations.
 - Reanimated shared values: use `.get()` / `.set()` (React Compiler lint rule), and respect `useReducedMotion()`
   for looping animations.
