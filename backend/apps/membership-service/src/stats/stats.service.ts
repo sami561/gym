@@ -356,11 +356,13 @@ export class StatsService {
     const indexes = new Map<string, number>();
     const text = sql.replace(/(?<!:):([a-zA-Z]\w*)/g, (_, name: string) => {
       if (!(name in params)) return `:${name}`;
-      if (!indexes.has(name)) {
+      let index = indexes.get(name);
+      if (index === undefined) {
         values.push(params[name]);
-        indexes.set(name, values.length);
+        index = values.length;
+        indexes.set(name, index);
       }
-      return `$${indexes.get(name)}`;
+      return `$${index}`;
     });
     return this.db.query(text, values);
   }

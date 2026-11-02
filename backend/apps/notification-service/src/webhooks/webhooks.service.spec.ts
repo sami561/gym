@@ -26,7 +26,7 @@ describe('WebhooksService', () => {
 
   beforeEach(() => {
     fetchMock.mockReset().mockResolvedValue({ ok: true, status: 200, text: async () => '' });
-    global.fetch = fetchMock as unknown as typeof fetch;
+    global.fetch = fetchMock;
     warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     process.env = { ...savedEnv, N8N_WEBHOOK_URL: 'http://n8n:5678/webhook/meliora-events' };

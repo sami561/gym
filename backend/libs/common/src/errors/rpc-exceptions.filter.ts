@@ -38,9 +38,11 @@ export class AllRpcExceptionsFilter implements RpcExceptionFilter<unknown> {
     }
     if (exception instanceof RpcException) {
       const error = exception.getError();
+      if (typeof error === 'string') return { statusCode: 400, message: error };
+      // An object without a status would reach the caller as "[object Object]".
       return typeof error === 'object' && error !== null && 'statusCode' in error
         ? (error as RpcErrorPayload)
-        : { statusCode: 400, message: String(error) };
+        : { statusCode: 400, message: 'Requête invalide.' };
     }
     if (exception instanceof QueryFailedError) {
       const code = (exception as QueryFailedError & { code?: string }).code;

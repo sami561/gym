@@ -149,7 +149,7 @@ All of them must pass before a merge, except the dependency audit. Run them loca
 
 ```bash
 # CI, from the repo root (after a pull or a package-lock.json change: `npm ci` in that folder first)
-(cd backend    && npm run typecheck && npm test -- --ci && npm run build)
+(cd backend    && npm run typecheck && npm run lint && npm test -- --ci && npm run build)
 (cd web        && npm run lint && npm test && npm run build)
 (cd mobile     && npm run typecheck && npm run lint && npm test)   # Node ≥ 22.13
 (cd door-agent && npm run typecheck && npx tsc -p test/tsconfig.json && npm test && npm run build)

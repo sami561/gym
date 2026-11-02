@@ -102,7 +102,7 @@ describe('automation runner', () => {
     const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
     expect(url.href).toBe('http://n8n:5678/webhook/onboarding');
     expect(init).toMatchObject({ method: 'POST', redirect: 'manual' });
-    expect(JSON.parse(String(init.body))).toMatchObject({ runId: 'run-1', task: { id: 'task-1' }, member: 'Amira' });
+    expect(JSON.parse(init.body as string)).toMatchObject({ runId: 'run-1', task: { id: 'task-1' }, member: 'Amira' });
     expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'GET', body: undefined, redirect: 'manual' });
   });
 

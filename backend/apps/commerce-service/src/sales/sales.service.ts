@@ -16,7 +16,6 @@ import {
   StockMovementType,
 } from '@app/common';
 import { Sale } from './sale.entity';
-import { Counter } from './counter.entity';
 import { computeSaleTotals, formatSaleNumber, mergeSaleItems } from './sale.totals';
 import { Product } from '../products/product.entity';
 import { applyStockChange } from '../products/stock.ledger';

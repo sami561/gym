@@ -9,9 +9,20 @@ export function lookup(context: Record<string, unknown>, path: string): unknown 
 }
 
 function stringify(value: unknown): string {
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
+  switch (typeof value) {
+    case 'undefined':
+      return '';
+    case 'object':
+      return value === null ? '' : JSON.stringify(value);
+    case 'string':
+      return value;
+    case 'number':
+    case 'boolean':
+    case 'bigint':
+    case 'symbol':
+    case 'function':
+      return String(value);
+  }
 }
 
 /** Unknown placeholders become empty strings. `encode` is applied to each inserted value (e.g. URLs). */

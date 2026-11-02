@@ -111,7 +111,7 @@ export class ProductsService {
 
   /** Products with history are deactivated rather than deleted. */
   async remove({ id }: IdRequest): Promise<OkResult> {
-    const product = await this.findOrFail(id);
+    await this.findOrFail(id);
     const hasHistory = await this.movements.exists({ where: { productId: id } });
     if (hasHistory) {
       await this.products.update({ id }, { isActive: false });

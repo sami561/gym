@@ -55,10 +55,11 @@ export function requiredText(value: unknown, field: string): string {
   return value.trim();
 }
 
-/** undefined stays undefined, empty strings become null. */
+/** undefined stays undefined, empty strings become null; numbers are taken as text, objects refused. */
 export function optionalText(value: unknown): string | null | undefined {
   if (value === undefined) return undefined;
   if (value === null) return null;
+  if (typeof value !== 'string' && typeof value !== 'number') throw new BadRequestException('Texte invalide.');
   const text = String(value).trim();
   return text ? text : null;
 }

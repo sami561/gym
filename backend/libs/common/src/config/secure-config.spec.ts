@@ -234,7 +234,7 @@ describe('loadEnv', () => {
   it('refuses an unsafe production config, on every call', () => {
     process.env = { NODE_ENV: 'production', JWT_ACCESS_SECRET: 'change-me-access-secret-at-least-32-characters' };
     jest.isolateModules(() => {
-      const { env, loadEnv } = require('./env') as typeof import('./env');
+      const { env, loadEnv } = jest.requireActual<typeof import('./env')>('./env');
       expect(() => loadEnv()).toThrow("Configuration de production refusée : JWT_ACCESS_SECRET (valeur d'exemple)");
       expect(() => env('JWT_ACCESS_SECRET')).toThrow('Configuration de production refusée');
     });
@@ -243,7 +243,7 @@ describe('loadEnv', () => {
   it('loads a development config that still uses the example values', () => {
     process.env = { NODE_ENV: 'development', JWT_ACCESS_SECRET: 'change-me-access-secret-at-least-32-characters' };
     jest.isolateModules(() => {
-      const { env } = require('./env') as typeof import('./env');
+      const { env } = jest.requireActual<typeof import('./env')>('./env');
       expect(env('JWT_ACCESS_SECRET')).toBe('change-me-access-secret-at-least-32-characters');
     });
   });

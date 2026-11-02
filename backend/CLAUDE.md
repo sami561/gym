@@ -38,6 +38,7 @@ also serves the door-agent socket on :4004), `app.module.ts` (`databaseModule('<
 npx tsc --noEmit -p libs/common/tsconfig.lib.json
 npx tsc --noEmit -p apps/<app>/tsconfig.app.json
 npx jest apps/<app>
+npm run lint                  # ESLint, type-aware: 0 errors (no-floating-promises, no-misused-promises…)
 npx nest build <app>          # webpack; unchanged bundles keep their old mtime
 npm run build && npm start    # all apps; then curl localhost:4000/api/health
 ```

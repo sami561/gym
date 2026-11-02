@@ -23,4 +23,15 @@ describe('program days', () => {
     );
     expect(() => normalizeDays([{ label: 'A', exercises: [{ name: 'Curl', sets: 3, reps: ' ' }] }])).toThrow(BadRequestException);
   });
+
+  it('refuses reps that are not text or a number instead of storing "[object Object]"', () => {
+    const missingReps = '« Curl » : indiquez les répétitions (ex. 8-12 ou 30 s).';
+    expect(() => normalizeDays([{ label: 'A', exercises: [{ name: 'Curl', sets: 3, reps: { min: 8, max: 12 } }] }])).toThrow(
+      missingReps,
+    );
+    expect(() => normalizeDays([{ label: 'A', exercises: [{ name: 'Curl', sets: 3, reps: ['8', '12'] }] }])).toThrow(
+      missingReps,
+    );
+    expect(() => normalizeDays([{ label: 'A', exercises: [{ name: 'Curl', sets: 3, reps: true }] }])).toThrow(missingReps);
+  });
 });
