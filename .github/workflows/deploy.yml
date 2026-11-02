@@ -1,0 +1,196 @@
+# Continuous deployment: a push to sandbox deploys the sandbox server, a push to prod deploys the
+# production server (after the approval of the "prod" environment, if you enable one). main is not
+# deployed — it records what has been released. "Run workflow" on sandbox or prod redeploys it.
+# Order: CI (all build/test jobs) → images → deploy; prod refuses commits that skipped sandbox.
+# Until DEPLOY_ENVIRONMENTS lists the environment, the images are only built (to check them).
+# Setup — secrets, variables, server: deploy/README.md.
+name: Deploy
+
+on:
+  push:
+    branches: [sandbox, prod]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  ci:
+    name: ci
+    uses: ./.github/workflows/ci.yml
+
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      deploy: ${{ steps.plan.outputs.deploy }}
+      registry: ${{ steps.plan.outputs.registry }}
+      tag: ${{ steps.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - id: plan
+        env:
+          DEPLOY_ENVIRONMENTS: ${{ vars.DEPLOY_ENVIRONMENTS }}
+        run: |
+          case "$GITHUB_REF_NAME" in
+            sandbox|prod) ;;
+            *) echo "::error::Deploys run from the sandbox or prod branch only"; exit 1 ;;
+          esac
+          # Production only gets what went through sandbox first (merge commits aside).
+          if [ "$GITHUB_REF_NAME" = prod ]; then
+            extra=$(git log --no-merges --format='%h %s' "origin/sandbox..$GITHUB_SHA")
+            if [ -n "$extra" ]; then
+              echo "::error::prod has commits that never went through sandbox — not deploying:"
+              echo "$extra"
+              exit 1
+            fi
+          fi
+          deploy=false
+          IFS=', ' read -r -a enabled <<< "$DEPLOY_ENVIRONMENTS"
+          for e in "${enabled[@]}"; do
+            if [ "$e" = "$GITHUB_REF_NAME" ]; then deploy=true; fi
+          done
+          {
+            echo "deploy=$deploy"
+            echo "registry=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
+            echo "tag=$GITHUB_REF_NAME-${GITHUB_SHA::12}"
+          } >> "$GITHUB_OUTPUT"
+          if [ "$deploy" = false ]; then
+            echo "::notice::Deployment to $GITHUB_REF_NAME is off: the images are only built to check them. Add $GITHUB_REF_NAME to the DEPLOY_ENVIRONMENTS repository variable once its server secrets are set (deploy/README.md)."
+          fi
+
+  images:
+    name: image ${{ matrix.name }}
+    needs: [ci, plan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: backend
+            platforms: linux/amd64
+          - name: web
+            platforms: linux/amd64
+          - name: door-agent # runs on a Raspberry Pi or a mini PC at the gym
+            platforms: linux/amd64,linux/arm64
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-qemu-action@v3
+        if: contains(matrix.platforms, 'arm64') || contains(vars.IMAGE_PLATFORMS, 'arm64')
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: needs.plan.outputs.deploy == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.name }}
+          # IMAGE_PLATFORMS (e.g. linux/arm64) when the servers are ARM machines.
+          platforms: ${{ (matrix.name != 'door-agent' && vars.IMAGE_PLATFORMS) || matrix.platforms }}
+          push: ${{ needs.plan.outputs.deploy == 'true' }}
+          tags: |
+            ${{ needs.plan.outputs.registry }}/meliora-${{ matrix.name }}:${{ needs.plan.outputs.tag }}
+            ${{ needs.plan.outputs.registry }}/meliora-${{ matrix.name }}:${{ github.ref_name }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: |
+            VITE_APP_STORE_URL=${{ vars.VITE_APP_STORE_URL }}
+            VITE_PLAY_STORE_URL=${{ vars.VITE_PLAY_STORE_URL }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  deploy:
+    name: deploy ${{ github.ref_name }}
+    needs: [plan, images]
+    if: needs.plan.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: ${{ github.ref_name }}
+      url: ${{ vars.PUBLIC_URL }}
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_PORT: ${{ secrets.SSH_PORT }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      DEPLOY_DIR: ${{ vars.DEPLOY_PATH || '/opt/meliora' }}/${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: SSH access
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          for name in SSH_HOST SSH_USER SSH_PRIVATE_KEY; do
+            [ -n "${!name}" ] || { echo "::error::Secret $name is missing in the $GITHUB_REF_NAME environment (deploy/README.md)"; exit 1; }
+          done
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          if [ -n "$SSH_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            echo "::warning::SSH_KNOWN_HOSTS is not set — trusting the server key on first use. Set it to the output of ssh-keyscan -H <host>."
+            ssh-keyscan -p "${SSH_PORT:-22}" -H "$SSH_HOST" > ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 600 ~/.ssh/known_hosts
+          printf 'Host server\n  HostName %s\n  Port %s\n  User %s\n  IdentityFile ~/.ssh/deploy_key\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n  ServerAliveInterval 30\n' \
+            "$SSH_HOST" "${SSH_PORT:-22}" "$SSH_USER" > ~/.ssh/config
+          ssh server true
+
+      # The ssh commands below expand variables on the runner on purpose (shellcheck SC2029).
+      - name: Upload the compose bundle
+        run: |
+          # shellcheck disable=SC2029
+          tar czf -docker-compose.yml docker-compose.deploy.yml docker n8n/workflows n8n/templates deploy/remote-deploy.sh \
+            | ssh server "mkdir -p '$DEPLOY_DIR' && tar xzf - -C '$DEPLOY_DIR'"
+
+      - name: Server environment file
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+        run: |
+          # shellcheck disable=SC2029
+          if [ -n "$ENV_FILE" ]; then
+            printf '%s\n' "$ENV_FILE" | ssh server "umask 077 && cat > '$DEPLOY_DIR/.env'"
+          elif ! ssh server "test -f '$DEPLOY_DIR/.env'"; then
+            echo "::error::No $DEPLOY_DIR/.env on the server and no ENV_FILE secret (deploy/README.md)"
+            exit 1
+          fi
+
+      - name: Pull, restart and health check (rolls back on failure)
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY: ${{ needs.plan.outputs.registry }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          # shellcheck disable=SC2029
+          printf '%s\n' "$GHCR_TOKEN" | ssh server \
+            "cd '$DEPLOY_DIR' && MELIORA_REGISTRY='$REGISTRY' MELIORA_IMAGE_TAG='$TAG' COMPOSE_PROJECT_NAME='meliora-$GITHUB_REF_NAME' GHCR_USER='$GITHUB_ACTOR' bash deploy/remote-deploy.sh"
+
+      - name: Public smoke test
+        if: vars.PUBLIC_URL != ''
+        env:
+          PUBLIC_URL: ${{ vars.PUBLIC_URL }}
+        run: |
+          for path in / /api/public/gym; do
+            curl -fsS --retry 5 --retry-delay 3 --retry-all-errors -o /dev/null -w "%{http_code} $path\n" "${PUBLIC_URL%/}$path"
+          done
+
+      - name: Summary
+        if: always()
+        env:
+          TAG: ${{ needs.plan.outputs.tag }}
+          STATUS: ${{ job.status }}
+        run: echo "### $GITHUB_REF_NAME → \`$TAG\` ($STATUS)" >> "$GITHUB_STEP_SUMMARY"

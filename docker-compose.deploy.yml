@@ -1,0 +1,53 @@
+# Server override used by the deploy pipeline (deploy/remote-deploy.sh), on top of docker-compose.yml:
+# - run the images built by GitHub Actions (ghcr.io) instead of building on the server;
+# - host ports come from the environment's .env so sandbox and prod can share one machine
+#   (gateway and n8n stay on 127.0.0.1; reach the n8n editor through an SSH tunnel).
+# Needs Docker Compose >= 2.24.4 (!reset / !override).
+#   docker compose -f docker-compose.yml -f docker-compose.deploy.yml up -d
+services:
+  api-gateway:
+    image: ${MELIORA_REGISTRY:?}/meliora-backend:${MELIORA_IMAGE_TAG:?}
+    build: !reset null
+    ports: !override
+      - "${GATEWAY_BIND:-127.0.0.1}:${GATEWAY_HOST_PORT:-4000}:4000"
+  auth-service:
+    image: ${MELIORA_REGISTRY:?}/meliora-backend:${MELIORA_IMAGE_TAG:?}
+    build: !reset null
+  membership-service:
+    image: ${MELIORA_REGISTRY:?}/meliora-backend:${MELIORA_IMAGE_TAG:?}
+    build: !reset null
+  class-service:
+    image: ${MELIORA_REGISTRY:?}/meliora-backend:${MELIORA_IMAGE_TAG:?}
+    build: !reset null
+  access-service:
+    image: ${MELIORA_REGISTRY:?}/meliora-backend:${MELIORA_IMAGE_TAG:?}
+    build: !reset null
+  notification-service:
+    image: ${MELIORA_REGISTRY:?}/meliora-backend:${MELIORA_IMAGE_TAG:?}
+    build: !reset null
+  staff-service:
+    image: ${MELIORA_REGISTRY:?}/meliora-backend:${MELIORA_IMAGE_TAG:?}
+    build: !reset null
+  facility-service:
+    image: ${MELIORA_REGISTRY:?}/meliora-backend:${MELIORA_IMAGE_TAG:?}
+    build: !reset null
+  commerce-service:
+    image: ${MELIORA_REGISTRY:?}/meliora-backend:${MELIORA_IMAGE_TAG:?}
+    build: !reset null
+  training-service:
+    image: ${MELIORA_REGISTRY:?}/meliora-backend:${MELIORA_IMAGE_TAG:?}
+    build: !reset null
+  workflow-service:
+    image: ${MELIORA_REGISTRY:?}/meliora-backend:${MELIORA_IMAGE_TAG:?}
+    build: !reset null
+  web:
+    image: ${MELIORA_REGISTRY:?}/meliora-web:${MELIORA_IMAGE_TAG:?}
+    build: !reset null
+    ports: !override
+      - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-8080}:80"
+  n8n:
+    ports: !override
+      - "${N8N_BIND:-127.0.0.1}:${N8N_PORT:-5678}:5678"
+  door-agent:
+    image: ${MELIORA_REGISTRY:?}/meliora-door-agent:${MELIORA_IMAGE_TAG:?}
+    build: !reset null

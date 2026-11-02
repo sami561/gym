@@ -1,0 +1,59 @@
+# Keeps the release flow: work branch → sandbox → prod → main.
+# - Pull requests: sandbox takes work branches, prod only takes sandbox, main only takes prod.
+# - Pushes to prod / main: every commit must already be in the previous stage (merge commits aside),
+#   so nothing reaches production without going through sandbox first.
+# Make the "branch order" check required for sandbox, prod and main (deploy/README.md).
+name: Branch flow
+
+on:
+  pull_request:
+    branches: [sandbox, prod, main]
+  push:
+    branches: [prod, main]
+
+permissions:
+  contents: read
+
+jobs:
+  order:
+    name: branch order
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Pull request goes to the next stage
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+        run: |
+          case "$BASE" in
+            sandbox)
+              if [ "$HEAD" = prod ] || [ "$HEAD" = main ]; then
+                echo "::error::sandbox takes work branches (feat/…, fix/…), not $HEAD"; exit 1
+              fi ;;
+            prod)
+              [ "$HEAD" = sandbox ] || { echo "::error::prod only takes sandbox — merge $HEAD into sandbox first"; exit 1; } ;;
+            main)
+              [ "$HEAD" = prod ] || { echo "::error::main only takes prod — promote $HEAD through sandbox and prod first"; exit 1; } ;;
+          esac
+          echo "$HEAD → $BASE follows the flow"
+
+      - uses: actions/checkout@v5
+        if: github.event_name == 'push'
+        with:
+          fetch-depth: 0
+
+      - name: Pushed commits went through the previous stage
+        if: github.event_name == 'push'
+        run: |
+          case "$GITHUB_REF_NAME" in
+            prod) upstream=sandbox ;;
+            main) upstream=prod ;;
+          esac
+          extra=$(git log --no-merges --format='%h %s' "origin/$upstream..$GITHUB_SHA")
+          if [ -n "$extra" ]; then
+            echo "::error::$GITHUB_REF_NAME has commits that never went through $upstream:"
+            echo "$extra"
+            exit 1
+          fi
+          echo "Every commit on $GITHUB_REF_NAME went through $upstream"
