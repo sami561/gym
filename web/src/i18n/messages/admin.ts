@@ -287,6 +287,7 @@ export const admin = {
   'Modifier la dépense': { en: 'Edit expense', ar: 'تعديل المصروف' },
   'Dépense enregistrée.': { en: 'Expense saved.', ar: 'تم حفظ المصروف.' },
   'Prénom': { en: 'First name', ar: 'الاسم' },
+  'Nom de famille': { en: 'Last name', ar: 'اللقب' },
   'Téléphone': { en: 'Phone', ar: 'الهاتف' },
   'Source': { en: 'Source', ar: 'المصدر' },
   'Offre envisagée': { en: 'Plan of interest', ar: 'الاشتراك المرغوب' },

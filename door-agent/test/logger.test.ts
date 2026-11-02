@@ -69,16 +69,27 @@ test('errorMessage reads Errors, zkteco-js error objects and plain values', () =
   assert.equal(errorMessage({ status: 503 }), '{"status":503}');
 });
 
-test(
-  'errorMessage never throws, even for a circular error object',
-  {
-    todo:
-      'BUG src/logger.ts: the JSON.stringify fallback throws on circular objects; errorMessage runs inside catch blocks ' +
-      '(door.open handler), so the ack would never be sent',
-  },
-  () => {
-    const looped: Record<string, unknown> = { reason: 'loop' };
-    looped.err = looped;
-    assert.equal(typeof errorMessage(looped), 'string');
-  },
-);
+test('errorMessage never throws, even for a circular error object', () => {
+  const looped: Record<string, unknown> = { reason: 'loop' };
+  looped.err = looped;
+  assert.equal(typeof errorMessage(looped), 'string');
+  assert.match(errorMessage(looped), /reason: 'loop'/);
+
+  // zkteco-js-like wrappers pointing at each other: the depth limit, then the circular fallback
+  const a: Record<string, unknown> = { command: 'A' };
+  const b: Record<string, unknown> = { command: 'B', err: a };
+  a.err = b;
+  assert.equal(typeof errorMessage(a), 'string');
+
+  assert.equal(errorMessage({ attempts: 10n }), '{ attempts: 10n }');
+  assert.equal(errorMessage(Symbol('lost')), 'Symbol(lost)');
+  const hostile = {
+    get message(): string {
+      throw new Error('getter');
+    },
+  };
+  assert.equal(errorMessage(hostile), 'unknown error');
+  const odd = new Error('');
+  Object.defineProperty(odd, 'name', { value: { toString: () => 'OddError' } });
+  assert.equal(errorMessage(odd), 'OddError');
+});

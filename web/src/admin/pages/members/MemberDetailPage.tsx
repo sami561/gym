@@ -459,7 +459,7 @@ function ProfileTab({ data }: { data: MemberDetail }) {
         }}
       >
         <Input label={t('Prénom')} required value={form.firstName} onChange={set('firstName')} />
-        <Input label={t('Nom')} required value={form.lastName} onChange={set('lastName')} />
+        <Input label={t('Nom de famille')} required value={form.lastName} onChange={set('lastName')} />
         <Input label={t('E-mail')} value={m.email} disabled hint={t('Modifiable par le membre depuis l’application')} />
         <Input label={t('Téléphone')} type="tel" value={form.phone} onChange={set('phone')} />
         <Input label={t('Date de naissance')} type="date" value={form.birthDate} onChange={set('birthDate')} />

@@ -41,7 +41,7 @@ function EmployeesTab() {
   const accounts = (users.data ?? []).filter((u) => u.role !== 'MEMBER').map((u) => ({ value: u.id, label: `${fullName(u)} (${u.email})` }));
   const fields: FieldDef[] = [
     { name: 'firstName', label: 'Prénom', required: true },
-    { name: 'lastName', label: 'Nom', required: true },
+    { name: 'lastName', label: 'Nom de famille', required: true },
     { name: 'position', label: 'Poste', type: 'select', required: true, options: enumOptions(POSITION_LABELS) },
     { name: 'contractType', label: 'Contrat', type: 'select', required: true, options: enumOptions(CONTRACT_LABELS) },
     { name: 'hireDate', label: 'Date d’embauche', type: 'date', required: true },

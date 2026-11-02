@@ -288,8 +288,19 @@ describe('relativeTime', () => {
     expect(relativeTime(at(-8 * 86400))).toBe(formatDateTime(at(-8 * 86400)));
   });
 
-  // Known quirk, see the report: the unit is chosen before rounding.
-  it.todo('says "il y a 1 heure" rather than "il y a 60 minutes" from 59 min 30 s');
+  it('says "il y a 1 heure" rather than "il y a 60 minutes" from 59 min 30 s', () => {
+    expect(relativeTime(at(-(59 * 60 + 29)))).toBe('il y a 59 minutes');
+    expect(relativeTime(at(-(59 * 60 + 30)))).toBe('il y a 1 heure');
+    expect(relativeTime(at(-3590))).toBe('il y a 1 heure');
+    expect(relativeTime(at(59 * 60 + 30))).toBe('dans 1 heure');
+  });
+
+  it('moves on to days from 23 h 30, and to the date from 6 days 12 h', () => {
+    expect(relativeTime(at(-(23 * 3600 + 29 * 60)))).toBe('il y a 23 heures');
+    expect(relativeTime(at(-(23 * 3600 + 53 * 60)))).toBe('hier');
+    expect(relativeTime(at(-6.4 * 86400))).toBe('il y a 6 jours');
+    expect(relativeTime(at(-6.9 * 86400))).toBe(formatDateTime(at(-6.9 * 86400)));
+  });
 });
 
 describe('hourLabel', () => {

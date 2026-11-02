@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { landingAr, landingEn, landingFr, type LandingKey } from './landing';
 import { admin } from './messages/admin';
@@ -47,12 +48,25 @@ describe('back-office dictionary', () => {
     }
   });
 
-  // Known bug (reported): the member, lead, team and employee forms label the last name with the
-  // generic 'Nom' ("Name", الاسم), so in Arabic both name fields read الاسم. The public site and
-  // the mobile app say اللقب / "Last name"; the fix needs a dedicated key used by those forms.
-  it.skip('labels first and last name differently in every language', () => {
-    expect(admin['Prénom'].en).not.toBe(admin['Nom'].en);
-    expect(admin['Prénom'].ar).not.toBe(admin['Nom'].ar);
+  // The generic 'Nom' ("Name") is الاسم in Arabic, like 'Prénom': last-name fields use their own key.
+  it('labels first and last name differently in every language', () => {
+    expect(admin['Prénom'].en).not.toBe(admin['Nom de famille'].en);
+    expect(admin['Prénom'].ar).not.toBe(admin['Nom de famille'].ar);
+  });
+
+  it('names the last name as the public site does', () => {
+    expect(admin['Nom de famille']).toEqual({ en: landingEn['trial.lastName'], ar: landingAr['trial.lastName'] });
+  });
+
+  // Member, lead, team and employee forms: a line that labels a lastName field must use that key.
+  it('labels every last-name field of the back office with it', () => {
+    const pages = new URL('../admin/', import.meta.url);
+    const labelled = readdirSync(pages, { recursive: true, encoding: 'utf8' })
+      .filter((file) => file.endsWith('.tsx'))
+      .flatMap((file) => readFileSync(new URL(file, pages), 'utf8').split('\n'))
+      .filter((line) => line.includes('lastName') && /\blabel[=:]/.test(line));
+    expect(labelled.length).toBeGreaterThan(0);
+    expect(labelled.filter((line) => !line.includes("'Nom de famille'"))).toEqual([]);
   });
 });
 

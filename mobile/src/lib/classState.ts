@@ -22,7 +22,8 @@ export function classAction(session: ClassSessionDto, now: number, blocked: bool
   if (session.bookingOpensAt && now < new Date(session.bookingOpensAt).getTime()) {
     return { kind: 'notOpen', opensAt: session.bookingOpensAt };
   }
-  if (session.bookingClosesAt && now > new Date(session.bookingClosesAt).getTime()) return { kind: 'closed' };
+  // class-service refuses bookings from closesAt itself (assertBookingOpen: now >= closesAt).
+  if (session.bookingClosesAt && now >= new Date(session.bookingClosesAt).getTime()) return { kind: 'closed' };
   if (blocked) return { kind: 'blocked' };
   const spotsLeft = session.spotsLeft ?? Math.max(0, session.capacity - session.bookedCount);
   if (spotsLeft > 0) return session.spotSelection ? { kind: 'chooseSpot' } : { kind: 'book' };

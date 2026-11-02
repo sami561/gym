@@ -122,12 +122,13 @@ describe('session', () => {
     expect(listener.mock.calls).toEqual([[tokens(1)], [null]]);
   });
 
-  it('does not crash when the browser blocks storage', () => {
+  it('does not crash when the browser blocks storage, and keeps the refresh token for the tab', () => {
     vi.stubGlobal('localStorage', blockedStorage());
     expect(() => client.session.set(tokens(1))).not.toThrow();
     expect(client.session.getAccessToken()).toBe('access-1');
-    expect(client.session.hasRefreshToken()).toBe(false);
+    expect(client.session.hasRefreshToken()).toBe(true);
     expect(() => client.session.clear()).not.toThrow();
+    expect(client.session.hasRefreshToken()).toBe(false);
   });
 });
 
@@ -294,20 +295,40 @@ describe('refresh on 401', () => {
     expect(refreshCalls()).toHaveLength(1);
   });
 
-  // Known gap (reported): with storage blocked the refresh token is not kept at all, so the session
-  // ends when the access token expires instead of lasting for the tab as client.ts intends.
-  it.skip('keeps refreshing within the tab when the browser blocks storage', async () => {
+  it('keeps refreshing within the tab when the browser blocks storage', async () => {
     vi.stubGlobal('localStorage', blockedStorage());
     client.session.set(tokens(1));
     server.validToken = 'access-2';
     server.refresh = () => json(200, tokens(2));
     await expect(client.api('/api/members')).resolves.toEqual({ path: '/api/members' });
+
+    // access-2 expires in turn: the rotated token, kept in memory, is the one sent
+    server.validToken = 'access-3';
+    server.refresh = () => json(200, tokens(3));
+    await expect(client.api('/api/members')).resolves.toEqual({ path: '/api/members' });
+    expect(refreshCalls().map((request) => request.body)).toEqual([{ refreshToken: 'refresh-1' }, { refreshToken: 'refresh-2' }]);
+
+    // sign-out forgets it: the next 401 is returned as is
+    client.session.clear();
+    expect((await failure(client.api('/api/members'))).status).toBe(401);
+    expect(refreshCalls()).toHaveLength(2);
+  });
+
+  it('also keeps it when storage reads but refuses writes (quota, older Safari private mode)', async () => {
+    storage.setItem = () => {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    };
+    client.session.set(tokens(1));
+    server.validToken = 'access-2';
+    server.refresh = () => json(200, tokens(2));
+    await expect(client.api('/api/members')).resolves.toEqual({ path: '/api/members' });
+    expect(refreshCalls().map((request) => request.body)).toEqual([{ refreshToken: 'refresh-1' }]);
   });
 });
 
-// Known bug (reported): a refresh answer is applied even when the session changed while it was in
-// flight. mobile/src/api/client.ts guards this case; the web client does not yet.
-describe.skip('a refresh answer that arrives after the session changed', () => {
+// The session can change while /auth/refresh runs: sign-out, sign-in on the shared front-desk PC,
+// password change, another tab. mobile/src/api/client.ts has the same guard.
+describe('a refresh answer that arrives after the session changed', () => {
   it('does not sign the user back in after sign-out', async () => {
     client.session.set(tokens(1));
     const refresh = deferred<Response>();
@@ -334,6 +355,54 @@ describe.skip('a refresh answer that arrives after the session changed', () => {
 
     expect(client.session.getAccessToken()).toBe('access-9');
     expect(storage.getItem(REFRESH_KEY)).toBe('refresh-9');
+  });
+
+  it('does not swap the session of the next person to sign in for the old one', async () => {
+    client.session.set(tokens(1));
+    const refresh = deferred<Response>();
+    server.refresh = () => refresh.promise;
+
+    const pending = client.refreshSession();
+    client.session.clear();
+    client.session.set(tokens(9));
+    const listener = vi.fn();
+    client.session.subscribe(listener);
+    refresh.resolve(json(200, tokens(2)));
+
+    await expect(pending).resolves.toBeNull();
+    expect(client.session.getAccessToken()).toBe('access-9');
+    expect(storage.getItem(REFRESH_KEY)).toBe('refresh-9');
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('fails the request waiting on it instead of replaying it in a session it was not sent from', async () => {
+    client.session.set(tokens(1));
+    server.validToken = 'access-9';
+    const refresh = deferred<Response>();
+    server.refresh = () => refresh.promise;
+
+    const members = client.api('/api/members');
+    await settle(); // the 401 is in, the refresh is running
+    client.session.clear();
+    client.session.set(tokens(9));
+    refresh.resolve(json(200, tokens(2)));
+
+    expect((await failure(members)).status).toBe(401);
+    expect(callsTo('/api/members').map((request) => request.auth)).toEqual(['Bearer access-1']);
+    expect(client.session.getAccessToken()).toBe('access-9');
+  });
+
+  it('keeps the token another tab stored meanwhile', async () => {
+    client.session.set(tokens(1));
+    const refresh = deferred<Response>();
+    server.refresh = () => refresh.promise;
+
+    const pending = client.refreshSession();
+    storage.setItem(REFRESH_KEY, 'refresh-7'); // the other tab refreshed first: refresh-1 is spent
+    refresh.resolve(json(401, { statusCode: 401, message: 'Unauthorized' }));
+
+    await expect(pending).resolves.toBeNull();
+    expect(storage.getItem(REFRESH_KEY)).toBe('refresh-7');
   });
 });
 

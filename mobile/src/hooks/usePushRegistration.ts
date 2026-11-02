@@ -98,6 +98,12 @@ export async function getPushStatus(): Promise<PushStatus> {
   }
 }
 
+/**
+ * In-app path: a single leading slash. '//host/path' is protocol-relative (expo-router opens it in the browser)
+ * and URL parsers read '/\host/path' the same way.
+ */
+const IN_APP_PATH = /^\/(?![/\\])/;
+
 /** Where a tapped notification leads. Booking pushes carry { type, sessionId }. */
 export function notificationRoute(data: Record<string, unknown> | undefined): Href | null {
   if (!data) return null;
@@ -105,7 +111,7 @@ export function notificationRoute(data: Record<string, unknown> | undefined): Hr
   if (sessionId && (data.type === 'booking.promoted' || data.type === 'booking.reminder' || data.screen === 'class')) {
     return { pathname: '/class/[id]', params: { id: sessionId } };
   }
-  if (typeof data.url === 'string' && data.url.startsWith('/')) return data.url as Href;
+  if (typeof data.url === 'string' && IN_APP_PATH.test(data.url)) return data.url as Href;
   if (data.screen === 'payments') return '/history';
   if (data.screen === 'membership') return '/';
   return null;
