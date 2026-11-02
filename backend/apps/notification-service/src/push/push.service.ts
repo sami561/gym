@@ -56,6 +56,8 @@ export class PushService {
             ...(process.env.EXPO_ACCESS_TOKEN ? { Authorization: `Bearer ${process.env.EXPO_ACCESS_TOKEN}` } : {}),
           },
           body: JSON.stringify(batch),
+          // A 3xx is refused below like any other non-2xx answer, never followed.
+          redirect: 'manual',
           signal: AbortSignal.timeout(10_000),
         });
         if (!response.ok) {
