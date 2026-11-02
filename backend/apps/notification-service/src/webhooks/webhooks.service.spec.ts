@@ -52,6 +52,25 @@ describe('WebhooksService', () => {
     expect(delivery.status).toBe(DeliveryStatus.DELIVERED);
   });
 
+  it('never follows a redirect: a 3xx is a failed attempt, retried with backoff', async () => {
+    Object.assign(process.env, { NODE_ENV: 'development', WEBHOOK_SECRET: secret, WEBHOOK_AUTH_TOKEN: authToken });
+    const service = newService();
+    for (const status of [302, 307]) {
+      fetchMock.mockResolvedValueOnce(new Response('moved', { status, headers: { location: 'http://169.254.169.254/' } }));
+      const before = Date.now();
+      const delivery = await service.enqueue('member.created', { memberId: 'm1' });
+
+      expect(delivery).toMatchObject({
+        status: DeliveryStatus.PENDING,
+        attempts: 1,
+        lastError: `Redirection refusée (HTTP ${status})`,
+      });
+      expect(delivery.nextAttemptAt?.getTime()).toBeGreaterThanOrEqual(before + 60_000);
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [, init] of fetchMock.mock.calls as [string, RequestInit][]) expect(init.redirect).toBe('manual');
+  });
+
   it('fails the delivery without sending it in production when WEBHOOK_SECRET is missing', async () => {
     Object.assign(process.env, { NODE_ENV: 'production', WEBHOOK_AUTH_TOKEN: authToken });
     delete process.env.WEBHOOK_SECRET;

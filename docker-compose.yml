@@ -225,7 +225,7 @@ services:
       - ./n8n/templates:/templates:ro
 
   # Runs inside the gym network, next to the ZKTeco terminal / relays. Create the
-  # agent in the back-office (Accès → Contrôleurs) and put its key in AGENT_KEY.
+  # agent in the back-office (Accès → Agents) and put its key in DOOR_AGENT_KEY (.env).
   door-agent:
     build:
       context: ./door-agent

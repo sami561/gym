@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
@@ -16,6 +17,7 @@ import { AccessResult, DoorDriver } from '@app/common';
 
 export class ListLogsQuery {
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(500)

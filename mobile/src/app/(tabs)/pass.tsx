@@ -9,7 +9,7 @@ import { ApiError } from '@/api/client';
 import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
 import { CountdownRing } from '@/components/CountdownRing';
-import { membershipKind } from '@/components/MembershipCard';
+import { membershipKind, membershipTone } from '@/components/MembershipCard';
 import { Screen } from '@/components/Screen';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
@@ -112,10 +112,7 @@ export default function PassScreen() {
             )}
             {kind ? (
               <View style={styles.center}>
-                <StatusPill
-                  label={t(`membership.${kind}` as const)}
-                  tone={kind === 'active' ? 'success' : kind === 'frozen' ? 'info' : kind === 'none' ? 'neutral' : 'danger'}
-                />
+                <StatusPill label={t(`membership.${kind}` as const)} tone={membershipTone[kind]} />
               </View>
             ) : null}
           </View>

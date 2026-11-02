@@ -45,6 +45,14 @@ export function isCancellable(status: BookingStatus | null | undefined): boolean
   return status === 'BOOKED' || status === 'WAITLISTED';
 }
 
+/**
+ * A booked place cancelled now becomes LATE_CANCELLED, a strike: class-service decides it from the deadline
+ * itself (BookingsService.cancel: now >= cancelDeadline). Leaving the waitlist is never late.
+ */
+export function isLateCancellation(cancelDeadline: string, now: number): boolean {
+  return now >= new Date(cancelDeadline).getTime();
+}
+
 export function isBlocked(blockedUntil: string | null | undefined, now: number): boolean {
   return !!blockedUntil && new Date(blockedUntil).getTime() > now;
 }

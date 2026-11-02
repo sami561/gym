@@ -1,7 +1,9 @@
+import { Type } from 'class-transformer';
 import { IsDateString, IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export class MonthsQuery {
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(36)
@@ -10,6 +12,7 @@ export class MonthsQuery {
 
 export class DaysQuery {
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(365)

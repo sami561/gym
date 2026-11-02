@@ -1,4 +1,4 @@
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions } from '@nestjs/microservices';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -10,6 +10,7 @@ import { RpcToHttpFilter } from './common/rpc-to-http.filter';
 import { attachAgentSocketProxy } from './common/agent-proxy';
 import { corsOrigins } from './common/cors';
 import { DEFAULT_TRUST_PROXY, parseTrustProxy } from './common/trust-proxy';
+import { createValidationPipe } from './common/validation';
 
 async function bootstrap() {
   loadEnv();
@@ -25,9 +26,7 @@ async function bootstrap() {
   }
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.setGlobalPrefix('api');
-  app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, transform: true, transformOptions: { enableImplicitConversion: true } }),
-  );
+  app.useGlobalPipes(createValidationPipe());
   app.useGlobalFilters(new RpcToHttpFilter());
   app.enableShutdownHooks();
 

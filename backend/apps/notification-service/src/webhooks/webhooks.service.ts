@@ -111,9 +111,15 @@ export class WebhooksService {
         method: 'POST',
         headers,
         body,
+        // Not followed: a redirect leads to an address N8N_WEBHOOK_URL does not name, or turns the
+        // POST into a GET that "succeeds" without the event.
+        redirect: 'manual',
         signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
       });
       await response.text().catch(() => '');
+      if (response.status >= 300 && response.status < 400) {
+        throw new Error(`Redirection refusée (HTTP ${response.status})`);
+      }
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       delivery.status = DeliveryStatus.DELIVERED;
       delivery.deliveredAt = new Date();

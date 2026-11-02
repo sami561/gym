@@ -12,7 +12,8 @@ Reanimated 4 · expo-secure-store / location / notifications / brightness / hapt
 
 - **Node.js ≥ 22.13** (ou ≥ 24.3). Expo SDK 58 / React Native 0.88 ne tournent pas sur Node 20.
   `nvm install 22 && nvm use 22`, ou le Node de Homebrew (`/opt/homebrew/bin/node`).
-- L'API Meliora (gateway) qui tourne, par défaut sur le port `4000` (voir `../backend`).
+- L'API Meliora qui tourne : en local, le backend (`npm start` dans `../backend`, gateway sur le port `4000`) ;
+  avec Docker ou sur un serveur, via le conteneur web (port `8080`) ou l'URL HTTPS publique.
 - Sur téléphone : l'app **Expo Go** (App Store / Play Store), sur le même Wi-Fi que l'ordinateur.
 
 ## Lancer en développement
@@ -24,7 +25,9 @@ cp .env.example .env          # puis renseigner EXPO_PUBLIC_API_URL
 npx expo start                # scanner le QR code avec Expo Go (Android) ou l'appareil photo (iOS)
 ```
 
-`EXPO_PUBLIC_API_URL` = l'origine du gateway, **sans** `/api` :
+`EXPO_PUBLIC_API_URL` = l'origine de l'API, **sans** `/api` (l'app l'ajoute à chaque appel).
+
+Backend lancé en local (`npm start` dans `../backend`) : l'app parle directement au gateway, port `4000`.
 
 | Où tourne l'app | Valeur |
 |---|---|
@@ -32,7 +35,18 @@ npx expo start                # scanner le QR code avec Expo Go (Android) ou l'a
 | Simulateur iOS | `http://localhost:4000` |
 | Émulateur Android | `http://10.0.2.2:4000` |
 
-Le backend doit autoriser ces origines (CORS) et être joignable depuis le réseau local.
+Stack Docker (`docker compose up`) ou serveur : l'API passe par le conteneur web, dont le nginx transmet `/api`
+au gateway. Le port `4000` du gateway n'y écoute que sur `127.0.0.1` de la machine (`GATEWAY_BIND`) : un
+téléphone ne peut pas le joindre. Ne jamais pointer l'app sur le port `4000` d'un serveur.
+
+| Où tourne l'API | Valeur |
+|---|---|
+| Docker sur l'ordinateur ou sur un serveur du réseau local | `http://<IP de la machine>:8080`, ex. `http://192.168.1.20:8080` (Docker sur l'ordinateur : `http://localhost:8080` depuis le simulateur iOS, `http://10.0.2.2:8080` depuis l'émulateur Android) |
+| Serveur publié (sandbox, production) | l'URL HTTPS publique, ex. `https://sandbox.meliora-gym.tn` |
+
+Le téléphone doit pouvoir joindre cette adresse (même Wi-Fi pour une adresse locale, port ouvert dans le
+pare-feu). Le CORS ne concerne que la version web (`npm run web`) : si `CORS_ORIGINS` est restreint côté
+backend, y ajouter son origine (`http://localhost:8081`).
 Après un changement de `.env`, relancer avec `npx expo start --clear`.
 
 Comptes : un membre peut créer son compte depuis l'app (« Créer un compte »), ou l'accueil le crée depuis le
@@ -92,7 +106,8 @@ npx eas-cli@latest build --profile development --platform android   # dev build 
 npx eas-cli@latest build --profile production --platform all        # stores
 ```
 
-Définir `EXPO_PUBLIC_API_URL` (URL HTTPS publique du gateway) dans les variables d'environnement EAS
+Définir `EXPO_PUBLIC_API_URL` (URL HTTPS publique du site, ex. `https://meliora-gym.tn` : son nginx transmet
+`/api` au gateway ; jamais le port `4000` du serveur) dans les variables d'environnement EAS
 (`eas env:create`) ou dans `eas.json` pour chaque profil. Identifiants : `tn.meliora.gym` (iOS et Android).
 L'icône et le splash sont générés à partir du logo fourni (150 px) : remplacez `assets/icon.png`,
 `assets/android-icon-foreground.png` et `assets/splash-icon.png` par une version haute définition du logo

@@ -35,7 +35,7 @@ export class PromosService {
   async create(req: CreatePromoRequest): Promise<PromoCodeDto> {
     this.validate(req);
     const code = req.code.trim().toUpperCase();
-    if (await this.promos.exist({ where: { code } })) throw new ConflictException('Ce code promo existe déjà.');
+    if (await this.promos.exists({ where: { code } })) throw new ConflictException('Ce code promo existe déjà.');
     const promo = await this.promos.save(
       this.promos.create({
         code,

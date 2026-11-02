@@ -23,13 +23,19 @@ Accepted within ±1 step, each step usable once. `backend/libs/common/src/utils/
 ## Agent protocol
 Documented in `docs/API.md` ("Door agents"): `doors`, `door.open` (+ack), `qr.scanned`,
 `device.events`, `members.sync`, `heartbeat`. Agent keys are created in the back-office
-(Accès → Contrôleurs), shown once, stored hashed.
+(Accès → Agents, ADMIN only), shown once, stored hashed.
 
 ## ZKTeco specifics (door-agent)
-Unlock = `CMD_UNLOCK` (31) with uint32 LE seconds×10. Users are synced every 5 min with
-`deviceUid` as PIN and the full RFID number (the agent builds the user packet itself because
-zkteco-js truncates cards to 16 bits); expired members are disabled, not deleted, so fingerprints
-survive renewal. Punch method per door (`punchMethod`). Terminals need Comm Key 0.
+Unlock = `CMD_UNLOCK` (31) with uint32 LE seconds×10. The agent needs the terminal's TCP SDK (port
+4370; a UDP-only terminal stays offline): zkteco-js opens the session, the agent reads the answers
+itself (`ZkTcpReader`, CMD_ACK_OK on every command that changes the terminal) and builds and decodes
+the 72-byte user records (zkteco-js truncates RFID numbers). Members are synced every 5 min with
+`deviceUid` as PIN and the full RFID number; expired members are disabled, not deleted, so
+fingerprints survive renewal. The agent only changes the users it manages
+(`DATA_DIR/zkteco-users-<doorId>.json`): a plain user with a member's PIN and exact name or badge is
+taken over, administrators, enrollers and managers are never touched, and a member whose PIN belongs
+to another user is skipped (logged). Punch method per door (`punchMethod`). Terminals need Comm Key 0;
+ZK timeouts >= 2000 ms. Details: `door-agent/README.md` (ZKTECO).
 
 ## Testing without hardware
 - `door-agent`: `npm run mock-server` (fake access-service + Shelly + ZKTeco) then `npm run dev`.

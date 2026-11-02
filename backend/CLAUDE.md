@@ -12,8 +12,8 @@ also serves the door-agent socket on :4004), `app.module.ts` (`databaseModule('<
   Door `config` is `{}` unless the caller edits doors (ADMIN), and then masked (`maskDoorConfig`,
   `DOOR_SECRET_MASK`); only door agents get the real config. Error text from a device or a remote server
   goes to the service log; callers get a short French summary.
-- Server-side fetch of a configurable URL (workflow automations and door relays do it;
-  notification-service webhooks and Expo push not yet): `parseOutboundUrl` when the URL is saved, then
+- Server-side fetch of a configurable URL (workflow automations and door relays do all of it;
+  notification-service webhooks and Expo push only refuse redirects, their URLs come from env): `parseOutboundUrl` when the URL is saved, then
   right before each request `parseOutboundUrl` + `assertOutboundAllowed(url, policy)` on the final URL,
   `fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(…) })`, and any 3xx is a failure. Trust
   destinations through the policy (`allowHosts` from `hostsFromUrls(<env URL>)` / `csvEnv(…)`,
@@ -27,7 +27,9 @@ also serves the door-agent socket on :4004), `app.module.ts` (`databaseModule('<
 - Event handlers are idempotent and tolerate out-of-order delivery (unique keys, upserts, retries).
 - Cross-service reads that are optional degrade gracefully (`.catch(() => null)` / placeholder names).
 - Gateway: class-validator DTOs (Swagger plugin documents them), `@Roles`, `@Public`, `@ApiKeyAuth`,
-  `ParseUUIDPipe`, `toActor(user)`; query booleans via `ToBoolean()`. Global guards only act on HTTP and
+  `ParseUUIDPipe`, `toActor(user)`. `createValidationPipe()` converts nothing implicitly: bodies keep their
+  JSON types, query numbers need `@Type(() => Number)`, query booleans `ToBoolean()`
+  (`common/validation.spec.ts` checks every `*Query` DTO). Global guards only act on HTTP and
   run in registration order: `AuthGuard`, then `HttpThrottlerGuard` (per user when signed in, per IP on
   `@Public` / `@ApiKeyAuth` routes; `@Throttle` for tighter limits). Fields the services trust (`actor`,
   `forUser`, `clientIp`, `includeConfig`, `includeContext`) come from the token or request, written after

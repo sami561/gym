@@ -48,7 +48,7 @@ export class PlansService {
   /** Plans already sold are deactivated instead of deleted, to keep history intact. */
   async remove(id: string): Promise<{ ok: true }> {
     const plan = await this.findOrFail(id);
-    if (await this.subs.exist({ where: { planId: id } })) {
+    if (await this.subs.exists({ where: { planId: id } })) {
       plan.isActive = false;
       await this.plans.save(plan);
     } else {
