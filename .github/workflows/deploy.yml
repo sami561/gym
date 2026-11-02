@@ -84,16 +84,16 @@ jobs:
             platforms: linux/amd64,linux/arm64
     steps:
       - uses: actions/checkout@v5
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v4
         if: contains(matrix.platforms, 'arm64') || contains(vars.IMAGE_PLATFORMS, 'arm64')
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         if: needs.plan.outputs.deploy == 'true'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.name }}
           # IMAGE_PLATFORMS (e.g. linux/arm64) when the servers are ARM machines.
