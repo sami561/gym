@@ -73,7 +73,9 @@ export function parseConfig(env: Env, options: { isTTY?: boolean } = {}): AgentC
 
   let serverUrl = get('SERVER_URL') ?? '';
   if (!serverUrl) {
-    problems.push('SERVER_URL is required (e.g. https://api.meliora-gym.tn or http://192.168.1.10:4000)');
+    problems.push(
+      'SERVER_URL is required (e.g. https://meliora-gym.tn, http://192.168.1.10:8080 on the LAN, http://localhost:4000 in local development)',
+    );
   } else {
     try {
       const url = new URL(serverUrl);
