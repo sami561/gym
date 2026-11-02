@@ -19,14 +19,17 @@ export function optionalText(value: unknown): string | null {
 
 export function parseDate(value: unknown): Date | null {
   if (value === null || value === undefined || value === '') return null;
+  if (typeof value !== 'string' && typeof value !== 'number') throw new BadRequestException('Date invalide.');
   const date = new Date(String(value));
-  if (Number.isNaN(date.getTime())) throw new BadRequestException(`Date invalide : ${String(value)}.`);
+  if (Number.isNaN(date.getTime())) throw new BadRequestException(`Date invalide : ${value}.`);
   return date;
 }
 
 export function parseRole(value: unknown): Role | null {
   if (value === null || value === undefined || value === '') return null;
-  if (!Object.values(Role).includes(value as Role)) throw new BadRequestException(`Rôle inconnu : ${String(value)}.`);
+  if (!Object.values(Role).includes(value as Role)) {
+    throw new BadRequestException(typeof value === 'string' ? `Rôle inconnu : ${value}.` : 'Rôle inconnu.');
+  }
   return value as Role;
 }
 

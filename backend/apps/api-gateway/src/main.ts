@@ -21,7 +21,7 @@ async function bootstrap() {
   try {
     app.set('trust proxy', parseTrustProxy(env('TRUST_PROXY', DEFAULT_TRUST_PROXY)));
   } catch (err) {
-    throw new Error(`Invalid TRUST_PROXY: ${(err as Error).message}`);
+    throw new Error(`Invalid TRUST_PROXY: ${(err as Error).message}`, { cause: err });
   }
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.setGlobalPrefix('api');

@@ -66,12 +66,12 @@ export class AgentsGateway implements OnGatewayInit<Namespace>, OnGatewayConnect
       return;
     }
     this.registry.attach(agentId, socket);
-    this.logger.log(`Door agent "${agentName}" connected (${socket.handshake.address})`);
+    this.logger.log(`Door agent "${agentName ?? agentId}" connected (${socket.handshake.address})`);
     try {
       await this.agents.touch(agentId);
       socket.emit('doors', await this.doors.configsForAgent(agentId));
     } catch (err) {
-      this.logger.error(`Could not send doors to agent "${agentName}": ${(err as Error).message}`);
+      this.logger.error(`Could not send doors to agent "${agentName ?? agentId}": ${(err as Error).message}`);
     }
   }
 
@@ -79,7 +79,7 @@ export class AgentsGateway implements OnGatewayInit<Namespace>, OnGatewayConnect
     const { agentId, agentName } = socket.data as AgentSocketData;
     if (!agentId) return;
     this.registry.detach(agentId, socket);
-    this.logger.log(`Door agent "${agentName}" disconnected`);
+    this.logger.log(`Door agent "${agentName ?? agentId}" disconnected`);
     await this.agents.touch(agentId).catch(() => undefined);
   }
 
@@ -120,7 +120,9 @@ export class AgentsGateway implements OnGatewayInit<Namespace>, OnGatewayConnect
     const { agentId, agentName } = socket.data as AgentSocketData;
     try {
       const scope = agentId ? await this.doors.memberSyncScope(agentId) : 'none';
-      if (scope === 'none') this.logger.warn(`members.sync from agent "${agentName}" refused: no active ZKTeco terminal`);
+      if (scope === 'none') {
+        this.logger.warn(`members.sync from agent "${agentName ?? 'unauthenticated'}" refused: no active ZKTeco terminal`);
+      }
       if (scope !== 'on') return [];
       return await this.members.deviceUsers();
     } catch (err) {
@@ -138,7 +140,9 @@ export class AgentsGateway implements OnGatewayInit<Namespace>, OnGatewayConnect
     if (!agentId) return;
     this.registry.setHeartbeat(agentId, { version: body?.version, doors: body?.doors });
     for (const door of body?.doors ?? []) {
-      if (door?.status === 'error') this.logger.warn(`Agent "${agentName}" reports door ${door.id}: ${door.error}`);
+      if (door?.status === 'error') {
+        this.logger.warn(`Agent "${agentName ?? agentId}" reports door ${door.id}: ${door.error ?? 'no detail'}`);
+      }
     }
     await this.agents.touch(agentId).catch(() => undefined);
   }

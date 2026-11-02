@@ -34,6 +34,7 @@ export class AccessMembersController {
     try {
       await handler();
     } catch (err) {
+      let failure = err;
       // member.created and member.entitlement-changed arrive together and may insert the
       // same row concurrently: the loser of that race simply applies its change again.
       if ((err as { code?: string }).code === '23505') {
@@ -41,11 +42,11 @@ export class AccessMembersController {
           await handler();
           return;
         } catch (retryErr) {
-          err = retryErr;
+          failure = retryErr;
         }
       }
       // The 10-minute reconciliation repairs anything an event failed to apply.
-      this.logger.error(`${event} not applied: ${(err as Error).message}`);
+      this.logger.error(`${event} not applied: ${(failure as Error).message}`);
     }
   }
 }

@@ -13,7 +13,7 @@ export function normalizeDays(days: unknown): ProgramDay[] {
   if (days.length > MAX_DAYS) throw new BadRequestException(`${MAX_DAYS} jours au maximum par programme.`);
   return days.map((day: Partial<ProgramDay> | null, index) => {
     const label = optionalText(day?.label) ?? `Jour ${index + 1}`;
-    const exercises: unknown[] = Array.isArray(day?.exercises) ? day!.exercises : [];
+    const exercises: unknown[] = Array.isArray(day?.exercises) ? day.exercises : [];
     if (exercises.length > MAX_EXERCISES_PER_DAY) {
       throw new BadRequestException(`« ${label} » : ${MAX_EXERCISES_PER_DAY} exercices au maximum.`);
     }
@@ -30,7 +30,7 @@ function normalizeExercise(raw: unknown, dayLabel: string, position: number): Pr
   if (!Number.isInteger(sets) || sets < 1 || sets > 20) {
     throw new BadRequestException(`« ${name} » : le nombre de séries doit être un entier entre 1 et 20.`);
   }
-  const reps = value.reps === null || value.reps === undefined ? '' : String(value.reps).trim();
+  const reps = typeof value.reps === 'string' || typeof value.reps === 'number' ? String(value.reps).trim() : '';
   if (!reps) throw new BadRequestException(`« ${name} » : indiquez les répétitions (ex. 8-12 ou 30 s).`);
 
   const rest = optionalMetric(value.restSeconds, `« ${name} » : le repos (s)`, 0, 900);

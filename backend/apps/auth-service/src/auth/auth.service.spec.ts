@@ -77,7 +77,7 @@ function setup() {
     jwt,
     dataSource as unknown as DataSource,
   );
-  const decode = (token: string) => jwt.decode(token) as JwtPayload;
+  const decode = (token: string) => jwt.decode<JwtPayload>(token);
   const refreshToken = (claims: Partial<JwtPayload>, secret = ENV.JWT_REFRESH_SECRET) =>
     jwt.sign(
       { sub: USER_ID, role: Role.MEMBER, email: 'membre@example.com', name: 'Membre Test', type: 'refresh', ver: 2, ...claims },

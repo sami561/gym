@@ -53,28 +53,28 @@ export class FinanceService {
 
     const [membership, salesRows, expenseRows, categoryRows] = await Promise.all([
       this.membershipRevenue(months),
-      this.sales.query(
+      this.sales.query<{ month: string; total: string }[]>(
         `SELECT to_char("createdAt" AT TIME ZONE $1, 'YYYY-MM') AS month, COALESCE(SUM("total"), 0) AS total
            FROM "sales"
           WHERE "status" = $2 AND "createdAt" >= $3
           GROUP BY 1`,
         [gymTimezone(), SaleStatus.COMPLETED, windowStart],
-      ) as Promise<{ month: string; total: string }[]>,
-      this.expenses.query(
+      ),
+      this.expenses.query<{ month: string; total: string }[]>(
         `SELECT to_char("date", 'YYYY-MM') AS month, COALESCE(SUM("amount"), 0) AS total
            FROM "expenses"
           WHERE "date" >= $1
           GROUP BY 1`,
         [windowStartDay],
-      ) as Promise<{ month: string; total: string }[]>,
-      this.expenses.query(
+      ),
+      this.expenses.query<{ category: ExpenseCategory; total: string }[]>(
         `SELECT "category", COALESCE(SUM("amount"), 0) AS total
            FROM "expenses"
           WHERE "date" >= $1
           GROUP BY 1
           ORDER BY 2 DESC`,
         [windowStartDay],
-      ) as Promise<{ category: ExpenseCategory; total: string }[]>,
+      ),
     ]);
 
     const monthsData = buildFinanceMonths(keys, membership, toRecord(salesRows), toRecord(expenseRows));
@@ -101,20 +101,22 @@ export class FinanceService {
     }
 
     const [saleRows, expenseRows] = await Promise.all([
-      this.sales.query(
+      this.sales.query<
+        { month: string; status: KpiSale['status']; subtotal: string; discount: string; total: string; items: KpiSale['items'] }[]
+      >(
         `SELECT to_char("createdAt" AT TIME ZONE $1, 'YYYY-MM') AS month,
                 "status", "subtotal", "discount", "total", "items"
            FROM "sales"
           WHERE "createdAt" >= $2 AND "createdAt" < $3`,
         [gymTimezone(), parseFrom(from), parseToExclusive(to)],
-      ) as Promise<{ month: string; status: KpiSale['status']; subtotal: string; discount: string; total: string; items: KpiSale['items'] }[]>,
-      this.expenses.query(
+      ),
+      this.expenses.query<{ month: string; category: ExpenseCategory; amount: string }[]>(
         `SELECT to_char("date", 'YYYY-MM') AS month, "category", SUM("amount") AS amount
            FROM "expenses"
           WHERE "date" >= $1 AND "date" <= $2
           GROUP BY 1, 2`,
         [from, to],
-      ) as Promise<{ month: string; category: ExpenseCategory; amount: string }[]>,
+      ),
     ]);
 
     return computeCommerceKpis(

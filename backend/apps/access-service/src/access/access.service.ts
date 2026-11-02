@@ -175,9 +175,9 @@ export class AccessService {
       }
     }
 
-    if (clockAhead > 0) {
+    if (clockAhead > 0 && door) {
       this.logger.warn(
-        `Door agent ${agentId}: ${clockAhead} punch(es) on door "${door?.name}" dated more than 5 min ahead of the server, logged at reception: check the terminal clock`,
+        `Door agent ${agentId}: ${clockAhead} punch(es) on door "${door.name}" dated more than 5 min ahead of the server, logged at reception: check the terminal clock`,
       );
     }
     if (result.rejected > 0) {
@@ -211,8 +211,9 @@ export class AccessService {
   private async openAndLog(attempt: Attempt, note: string | null = null): Promise<AccessDecision> {
     const result = await this.opener.open(attempt.door);
     if (!result.ok) {
-      this.logger.warn(`Door "${attempt.door.name}" did not open: ${result.detail ?? result.error}`);
-      return this.deny(attempt, result.error ?? REASONS.agentOffline);
+      const reason = result.error ?? REASONS.agentOffline;
+      this.logger.warn(`Door "${attempt.door.name}" did not open: ${result.detail ?? reason}`);
+      return this.deny(attempt, reason);
     }
     return this.decide(attempt, AccessResult.GRANTED, note);
   }
