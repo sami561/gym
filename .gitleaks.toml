@@ -1,0 +1,24 @@
+# Secret scan of the whole git history (Quality workflow, job "secret scan"): the default gitleaks
+# rules, minus the values below that are fake by design. Same scan on your machine:
+#   gitleaks git --config .gitleaks.toml --redact --verbose .                          # every commit
+#   gitleaks git --pre-commit --staged --config .gitleaks.toml --redact --verbose .    # before committing
+# A real secret is never allowlisted: revoke it, replace it, then clean the history (CONTRIBUTING.md).
+
+title = "Meliora Gym secret scan"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "change-me-… placeholders of the .env.example files and docs (refused in production by secure-config)"
+regexes = [
+  '''(?i)^change[-_]?me''',
+]
+
+[[allowlists]]
+description = "Fake keys, passwords and tokens in unit tests (provider tokens and private keys are still reported)"
+targetRules = ["generic-api-key", "jwt"]
+paths = [
+  '''\.(?:spec|test)\.[cm]?[jt]sx?$''',
+  '''(?:^|/)(?:test|tests|__tests__)/''',
+]

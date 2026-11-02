@@ -55,3 +55,9 @@ Docs: https://docs.expo.dev/eas/index.md
 - Reanimated shared values: use `.get()` / `.set()` (React Compiler lint rule), and respect `useReducedMotion()`
   for looping animations.
 - Keep `src/lib/accessCode.ts` byte-for-byte compatible with `backend/libs/common/src/utils/access-code.ts`.
+- Tests: Jest with the `jest-expo` preset (`npm test`), `*.test.ts` next to the code, helpers in
+  `src/test/`. `jest.config.js` pins `TZ=Africa/Tunis`. The suites enforce: en/ar keys and
+  `{placeholders}` match fr, `t()` parameters match the placeholders, fonts are loaded in
+  `src/app/_layout.tsx`, access codes match fixed vectors computed with Node's crypto (the backend's
+  algorithm). Skipped tests pin known bugs — unskip them with the fix. Before declaring a task done:
+  `npm run typecheck && npm run lint && npm test`.

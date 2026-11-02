@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
@@ -27,6 +28,16 @@ export default defineConfig(({ mode }) => {
           },
         },
       },
+    },
+    // Unit tests run in Node; a test that needs the DOM starts with `// @vitest-environment jsdom`.
+    test: {
+      include: ['src/**/*.test.{ts,tsx}'],
+      // Dates are shown in the gym's timezone, whatever the machine running the tests.
+      env: { TZ: 'Africa/Tunis' },
+      setupFiles: ['src/test/setup.ts'],
+      restoreMocks: true,
+      unstubEnvs: true,
+      unstubGlobals: true,
     },
   };
 });
