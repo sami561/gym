@@ -362,8 +362,10 @@ scenario('01 webhook check: HMAC of "<timestamp>.<raw body>" and 5-minute window
   restamped.json.headers['x-meliora-timestamp'] = String(now + 60);
   check(!signatureOk(await prepare(restamped)), '01 a changed timestamp fails the HMAC check');
 
-  for (const [offset, accepted] of [[-299, true], [299, true], [-301, false], [301, false], [-86_400, false]]) {
-    const item = await prepare(F.signedDelivery(body, { secret, timestamp: now + offset }));
+  // 30 s margins around the 300 s window, with a fresh clock for each case: the node reads the time
+  // again when it runs, seconds after `now` on a slow CI runner.
+  for (const [offset, accepted] of [[-270, true], [270, true], [-330, false], [330, false], [-86_400, false]]) {
+    const item = await prepare(F.signedDelivery(body, { secret, timestamp: Math.floor(Date.now() / 1000) + offset }));
     check(signatureOk(item) && item.json.timestampValid === accepted, `01 timestamp ${offset} s should be ${accepted ? 'accepted' : 'refused'}`);
   }
   for (const value of [undefined, '', 'abc', '1.5', '-1']) {
