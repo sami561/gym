@@ -1,7 +1,11 @@
 # Dependabot opens its pull requests into sandbox, so updates follow the release flow like any other
 # change (sandbox → prod → main). Every Monday; minor and patch updates come grouped, one PR per
-# folder and ecosystem, majors one by one. Commits: build(deps) for what ships (runtime packages,
-# Docker images), chore(deps) for dev tooling, ci(deps) for GitHub Actions.
+# folder and ecosystem. Majors come one by one, except packages that only work at the same major
+# (Nest, ESLint, Jest, Vite, React, the docker/* actions): one PR per set, so CI tests them together.
+# TypeScript majors are not proposed: they are a planned upgrade of the whole repo, once
+# typescript-eslint supports them (it requires TypeScript < 6.1 today).
+# Commits: build(deps) for what ships (runtime packages, Docker images), chore(deps) for dev tooling,
+# ci(deps) for GitHub Actions.
 # npm releases younger than 7 days are not proposed: compromised versions are usually pulled by then.
 # Security updates are separate: GitHub opens them on main, change their base to sandbox.
 version: 2
@@ -21,12 +25,25 @@ updates:
     commit-message:
       prefix: build(deps)
       prefix-development: chore(deps)
+    # package.json overrides the webpack that @nestjs/cli pins with the top-level one: with two copies,
+    # the lock files Dependabot wrote were refused by npm ci (optional peer entry dropped).
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
+      nestjs-major:
+        patterns: ["@nestjs/*"]
+        update-types: [major]
+      eslint-major:
+        patterns: ["eslint", "@eslint/*", "typescript-eslint", "globals"]
+        update-types: [major]
+      jest-major:
+        patterns: ["jest", "ts-jest", "@types/jest"]
+        update-types: [major]
     ignore:
       # The Node.js major changes on purpose, everywhere at once (Dockerfiles, CI, @types/node).
       - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: typescript
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
@@ -46,8 +63,22 @@ updates:
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
+      react-major:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
+        update-types: [major]
+      vite-major:
+        patterns: ["vite", "vitest", "@vitejs/*", "@vitest/*"]
+        update-types: [major]
+      eslint-major:
+        patterns: ["eslint", "@eslint/*", "typescript-eslint", "eslint-plugin-*", "globals"]
+        update-types: [major]
+      tailwind-major:
+        patterns: ["tailwindcss", "@tailwindcss/*"]
+        update-types: [major]
     ignore:
       - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: typescript
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
@@ -81,13 +112,24 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: eslint-config-expo
         update-types: ["version-update:semver-major"]
+      # The SDK template and eslint-config-expo decide these majors as well.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
+      - dependency-name: jest
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@jest/*"
+        update-types: ["version-update:semver-major"]
       # react and react-dom must equal the renderer inside react-native (exact check at start-up),
       # and react-native 0.x breaks in minors: no update of these three on its own.
       - dependency-name: react
       - dependency-name: react-dom
       - dependency-name: react-native
-      # Native modules pinned by the SDK, and the React types: patches only.
+      # Native modules pinned by the SDK, the React Native tooling and the React types: patches only.
       - dependency-name: "react-native-*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@react-native/*"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "@types/react"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
@@ -112,6 +154,8 @@ updates:
     ignore:
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
@@ -127,6 +171,10 @@ updates:
     groups:
       actions-minor-patch:
         update-types: [minor, patch]
+      # Used together by the images job of deploy.yml, which only the sandbox Deploy run exercises.
+      docker-actions-major:
+        patterns: ["docker/*"]
+        update-types: [major]
 
   - package-ecosystem: docker
     directory: /backend
