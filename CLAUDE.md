@@ -57,13 +57,62 @@ docker compose up -d --build                                      # everything (
 - Demo/test data uses `@example.com` e-mails only — n8n sends real e-mails.
 
 ## Known gaps / gotchas
-- No TypeORM migrations yet: schemas come from `DB_SYNCHRONIZE=true`. Add migrations before production.
+- No TypeORM migrations yet: schemas come from `DB_SYNCHRONIZE=true`. Add migrations before production;
+  they must include `refresh_sessions` (auth) and `doors.allowAppOpen`, `access_logs.context`,
+  `access_members.removedAt` (access).
 - Redis transport = single replica per service; use `BUS_TRANSPORT=nats` (queue groups) to scale.
-  The NATS path is configured but has not been run end to end.
-- Login is rate limited (10/min per IP) — scripts that log in many users get 429.
+  The NATS path (with `NATS_TOKEN`) is configured but has not been run end to end.
+- Refresh tokens are single-use: every `POST /api/auth/refresh` returns a new one, and scripts and clients
+  must keep the newest. The replaced token works 30 s more (`REFRESH_REUSE_LEEWAY_SECONDS`); replaying it
+  later revokes that whole sign-in (401). Tokens issued before rotation existed get 401 once.
+- Rate limits run after auth: signed-in calls are counted per account and route (300/min by default),
+  `@Public` routes per client IP (login 10/min, register and trial 5/min) — scripts that log in many
+  users get 429.
+- `TRUST_PROXY` (gateway) decides whose `X-Forwarded-For` is believed; it feeds the per-IP limits and
+  `APP_OPEN_ALLOWED_NETWORKS`. The default trusts every private address, so on a server inside the gym
+  LAN (or with IPv6 clients reaching :8080 through Docker's proxy) set a hop count instead.
+- Docker: the gateway (4000) and the n8n editor (5678) listen on 127.0.0.1; browsers, the app and door
+  agents use :8080 (nginx). `NODE_ENV=production` refuses example, weak or reused secrets at startup, so
+  the values of `backend/.env.example` only work in development.
+- `npm run rpc`, `npm run seed` and `npm run db:create` load `.env` with dotenv, not `loadEnv()`: no
+  production check, the seed falls back to `ADMIN_PASSWORD=Meliora2026!`, and `rpc.js` sends neither
+  `REDIS_PASSWORD` nor `NATS_TOKEN`, so it cannot reach a password-protected bus.
 - Gym phone, opening hours and exact GPS point are placeholders (env `GYM_*`) — confirm with the owner.
 - Pushing needs the SSH key loaded (`ssh-add --apple-use-keychain ~/.ssh/id_rsa`).
 - Logout does not yet remove the device's Expo push token.
+
+Still open after the security review (not fixed):
+- App door opening: `APP_OPEN_ALLOWED_NETWORKS` is empty by default (check off), so a faked GPS position
+  opens any door with `allowAppOpen`; once set, anyone on the gym Wi-Fi passes. Real proof of presence
+  needs a BLE beacon / NFC tag, or the door reader scanning the phone's QR.
+- Outbound guard: DNS rebinding between `assertOutboundAllowed` and `fetch` is not covered (needs a
+  pinned-lookup dispatcher; undici is not a dependency), its DNS lookup has no timeout, and Azure's
+  `168.63.129.16` counts as public. Every path of the trusted n8n host is open to automations.
+  notification-service (n8n webhooks, Expo push) still `fetch`es its env URLs with redirects followed, and
+  the door agent's HTTP relay driver follows redirects too (LAN, by design).
+- Sessions: access tokens stay valid until they expire (≤ 15 min) after logout, password change,
+  deactivation or demotion, on HTTP and on `/live`. A refresh answer lost and retried after the 30 s
+  leeway signs the user out. A staff account signing in on the member app also ends its back-office
+  sessions (the app logs it out).
+- QR rotation does not sign out a lost phone (no route yet to end a member's sessions), and the mobile
+  pass does not refetch the key when the app comes back to the foreground.
+- Web client: `src/api/live.ts` reconnects even when the refresh failed (tight loop while auth-service is
+  down); `refreshSession` lacks the mobile guard, so a stale refresh after a password change in another
+  tab clears the new session.
+- Outside docker-compose, production does not require `REDIS_PASSWORD` / `NATS_TOKEN` (compose enforces
+  bus auth), and a webhook delivery refused for missing keys is not resent once they are set. An old
+  example `N8N_ENCRYPTION_KEY` is not detected (only n8n reads it).
+- Door agents: a stolen agent key can log GRANTED punches (≤ 7 days old) for existing members on its own
+  doors — delete the agent to revoke it. On a server error `device.events` answers `{0,0,0}` and the agent
+  drops that batch; a terminal clock more than 7 days behind gets its punches rejected.
+- Door config: secrets inside a relay body string or URL path are not masked; relay passwords and tokens
+  staff could read before this release should be changed on the relays. A relay door whose URL still
+  holds `user:password@` must move it to `basicAuth` before it can be saved again.
+- Coaches never see tasks assigned only to their employee id (the gateway does not pass `employeeId`).
+- Deleted members stay as tombstones with their unique `memberCode`: after a membership DB reset, reused
+  codes would fail to sync.
+- n8n workflow 01's signature and timestamp checks were validated against the n8n sources, not run end
+  to end: send one real event after deploying.
 
 ## Skills and workflows in this repo
 Skills (`.claude/skills/`): meliora-run-stack, meliora-git-workflow, meliora-add-microservice,

@@ -41,7 +41,7 @@ The workflows read their settings with `$env` (`N8N_BLOCK_ENV_ACCESS_IN_NODE=fal
 | Name | Type | Value |
 |---|---|---|
 | `Meliora SMTP` | SMTP | your mail server. Gmail: `smtp.gmail.com`, port 465, SSL on, user = the Gmail address, password = an [app password](https://myaccount.google.com/apppasswords) |
-| `Meliora webhook (Authorization)` | Header Auth | Name `Authorization`, Value `Bearer <WEBHOOK_SECRET>` |
+| `Meliora webhook (Authorization)` | Header Auth | Name `Authorization`, Value `Bearer <WEBHOOK_AUTH_TOKEN>` |
 | `Meliora webhook signature` | Crypto | HMAC secret = `<WEBHOOK_SECRET>` (same value as in `backend/.env`) |
 | `Meliora automation API (x-api-key)` | Header Auth | Name `x-api-key`, Value = `AUTOMATION_API_KEY` from `backend/.env` |
 | `Anthropic API (x-api-key)` | Header Auth | Name `x-api-key`, Value = your Anthropic API key (workflow 06, and 03 when `MELIORA_MOTIVATION_AI=true`) |
@@ -59,24 +59,48 @@ match it by name), then **activate** it. Schedules use the `Africa/Tunis` timezo
 
 ### 4. Connect the backend
 
-In `backend/.env`:
+In `backend/.env` (or the root `.env` with Docker), two different random values
+(`openssl rand -hex 32`):
 
 ```
 N8N_WEBHOOK_URL=http://<n8n host>:5678/webhook/meliora-events
-WEBHOOK_SECRET=<same secret as the two webhook credentials>
+WEBHOOK_SECRET=<secret of the "Meliora webhook signature" credential>
+WEBHOOK_AUTH_TOKEN=<token of the "Meliora webhook (Authorization)" credential, without "Bearer ">
 AUTOMATION_API_KEY=<same key as the "Meliora automation API" credential>
 ```
 
-Every event is `POST`ed as `{ id, event, occurredAt, data }` with the headers
-`Authorization: Bearer <WEBHOOK_SECRET>` and `X-Meliora-Signature: sha256=<HMAC-SHA256 of the raw body>`.
-Workflow 01 rejects requests without the bearer token (401), stops on a bad signature (execution in
-error), and ignores an event `id` it has already processed (backend retries never send an e-mail twice).
+Every event is `POST`ed as `{ id, event, occurredAt, data }` with the headers:
+
+```
+Authorization: Bearer <WEBHOOK_AUTH_TOKEN>
+X-Meliora-Timestamp: <unix seconds of this attempt>
+X-Meliora-Signature: sha256=<hex HMAC-SHA256(WEBHOOK_SECRET, "<X-Meliora-Timestamp>.<raw body>")>
+X-Meliora-Event: <event>   X-Meliora-Delivery: <event id>
+```
+
+Workflow 01 rejects requests without the bearer token (Header Auth), stops on a bad signature or on a
+timestamp more than 5 minutes away from n8n's clock (execution in error), and ignores an event `id`
+it has already processed (backend retries never send an e-mail twice; each retry is signed again with
+a new timestamp).
+
+The signing key itself is never sent: n8n saves the request headers with each execution, so they only
+reveal the bearer token, which cannot sign events. With `NODE_ENV=production` the backend never sends
+an unsigned event (without `WEBHOOK_SECRET` or `WEBHOOK_AUTH_TOKEN` the delivery fails at once).
+Outside production an empty `WEBHOOK_AUTH_TOKEN` falls back to `WEBHOOK_SECRET`, with a warning.
+
+**Upgrading from the body-only signature** (one step in n8n, within 30 minutes of the backend
+deploy that adds `WEBHOOK_AUTH_TOKEN`): deactivate workflow 01, set the value of
+`Meliora webhook (Authorization)` to `Bearer <WEBHOOK_AUTH_TOKEN>`, re-import workflow 01 and
+activate it. Meanwhile n8n answers 404 (inactive workflow) or 403 (bearer token of the other
+version), and the backend retries those events (6 attempts over about 30 minutes) instead of losing
+them on a failed check after n8n has already answered 200.
 
 ## How the workflows work
 
-- **01** — Webhook → HMAC check (Crypto + If) → *Remove Duplicates* on the event id → Switch on `event`
-  → one *Code* node per event renders its template → *Send Email*. Events without an e-mail address
-  (e.g. a booking made at the desk for a member without e-mail) are skipped.
+- **01** — Webhook (Header Auth, raw body) → *Code* builds `"<timestamp>.<raw body>"` and checks the
+  timestamp → HMAC check (Crypto + If, then If on the timestamp) → *Remove Duplicates* on the event id
+  → Switch on `event` → one *Code* node per event renders its template → *Send Email*. Events without
+  an e-mail address (e.g. a booking made at the desk for a member without e-mail) are skipped.
 - **02 / 05 / 08** — Schedule → automation API → *Code* (template) → *Send Email*.
 - **04** — builds one HTML schedule for the week (stops when there is no class), then sends it to
   every active member by batches of 20 with a 2 s pause.
@@ -149,8 +173,10 @@ versions against an installed n8n-nodes-base package (the workflows target n8n 2
 
 | Symptom | Check |
 |---|---|
-| Backend gets 401/403 from the webhook | `Meliora webhook (Authorization)` value is `Bearer <WEBHOOK_SECRET>` |
-| Executions fail on "Signature invalide" | the Crypto credential secret equals `WEBHOOK_SECRET` in `backend/.env` |
+| Backend gets 401/403 from the webhook | `Meliora webhook (Authorization)` value is `Bearer <WEBHOOK_AUTH_TOKEN>` |
+| Executions fail on "Signature invalide" | the Crypto credential secret equals `WEBHOOK_SECRET` in `backend/.env`, and workflow 01 is the current version (the signature covers `X-Meliora-Timestamp`) |
+| Executions fail on "Horodatage …" | the clocks of the backend and n8n servers (NTP): events more than 5 minutes old are refused as replays |
+| Deliveries fail with "Envoi refusé en production" | `WEBHOOK_SECRET` and `WEBHOOK_AUTH_TOKEN` are both set for notification-service |
 | HTTP nodes fail with 401 | `x-api-key` value equals `AUTOMATION_API_KEY` |
 | `$env` errors / empty links | `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`, variables present in `.env`, container restarted |
 | Owner reports not received | `MELIORA_OWNER_EMAIL` is set (owner e-mails are skipped when it is empty) |

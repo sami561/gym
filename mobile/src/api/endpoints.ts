@@ -6,6 +6,7 @@ import type {
   AuthResult,
   BookingDto,
   BookingPolicy,
+  ChangePasswordResult,
   ClassSessionDto,
   CreateBookingRequest,
   CreateMeasurementRequest,
@@ -31,14 +32,20 @@ export const authApi = {
     api<AuthResult>('/auth/register', { method: 'POST', body, auth: false }),
   me: () => api<UserDto>('/auth/me'),
   logout: () => api<OkResult>('/auth/logout', { method: 'POST' }),
+  /** Ends every other session: keep the returned tokens (AuthProvider.changePassword does). */
   changePassword: (body: { currentPassword: string; newPassword: string }) =>
-    api<OkResult>('/auth/password', { method: 'PATCH', body }),
+    api<ChangePasswordResult>('/auth/password', { method: 'PATCH', body }),
 };
 
 export const meApi = {
   get: () => api<MeResponse>('/me'),
   update: (body: UpdateMeRequest) => api<MemberDto>('/me', { method: 'PATCH', body }),
   accessKey: () => api<AccessKey>('/me/access-key'),
+  /**
+   * New QR secret (lost or shared phone): codes built with the previous key are refused at once.
+   * Store the returned key in place of the cached one (STORAGE_KEYS.accessKey, see useAccessKey).
+   */
+  rotateAccessKey: () => api<AccessKey>('/me/access-key/rotate', { method: 'POST' }),
   doors: () => api<MemberDoor[]>('/me/doors'),
   openDoor: (doorId: string, body: OpenDoorRequest) =>
     api<AccessDecision>(`/me/doors/${encodeURIComponent(doorId)}/open`, {

@@ -43,6 +43,7 @@ import {
 import { HOLDING_STATUSES, STRIKE_STATUSES, decideBooking, firstFreeSpot, waitlistPosition } from '../classes/occupancy';
 import { toBookingDto, toBookingEvent, toSessionDto } from '../mappers';
 import { Booking } from './booking.entity';
+import { assertStaffStatus, assertStatusTiming } from './status-rules';
 
 const HISTORY_LIMIT = 200;
 const CANCELLED_STATUSES = [BookingStatus.CANCELLED, BookingStatus.LATE_CANCELLED];
@@ -191,19 +192,18 @@ export class BookingsService {
   }
 
   /**
-   * Staff / coach: ATTENDED, NO_SHOW, LATE_CANCELLED, CANCELLED or BOOKED (re-checks a place).
-   * WAITLISTED is only set by the booking flow.
+   * Staff / coach: ATTENDED, NO_SHOW (once the session has started), CANCELLED or BOOKED (re-checks a
+   * place). WAITLISTED and LATE_CANCELLED are only set by the booking flow (see status-rules).
    */
-  async setStatus({ bookingId, status }: SetBookingStatusRequest): Promise<BookingDto> {
-    if (!Object.values(BookingStatus).includes(status)) throw new BadRequestException('Statut invalide.');
-    if (status === BookingStatus.WAITLISTED) {
-      throw new BadRequestException("La liste d'attente est gérée automatiquement par les réservations.");
-    }
+  async setStatus({ bookingId, status: requested }: SetBookingStatusRequest): Promise<BookingDto> {
+    const status = assertStaffStatus(requested);
     const now = new Date();
     const found = await this.findBooking(bookingId);
 
     const result = await this.dataSource.transaction(async (manager) => {
       const locked = await this.occupancy.lockSession(manager, found.sessionId);
+      // Against the locked session: it may have been rescheduled since findBooking read it.
+      assertStatusTiming(status, locked.startsAt, now);
       const row = await manager.findOneOrFail(Booking, { where: { id: found.id } });
       if (row.status === status) return { row, locked, promoted: [] as Booking[], changed: false };
 

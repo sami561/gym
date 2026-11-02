@@ -26,7 +26,7 @@ interface Tokens {
 }
 
 let tokens: Tokens | null = null;
-let refreshInFlight: Promise<AuthResult | null> | null = null;
+let refreshInFlight: Promise<boolean> | null = null;
 let onSessionExpired: () => void = () => {};
 let onRefreshed: (result: AuthResult) => void = () => {};
 
@@ -97,9 +97,12 @@ async function toApiError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, message);
 }
 
-/** Exchanges the refresh token once, even when several requests fail with 401 at the same time. */
-async function refreshSession(): Promise<AuthResult | null> {
-  if (!tokens) return null;
+/**
+ * Exchanges the refresh token once, even when several requests fail with 401 at the same time
+ * (refresh tokens are single-use). Resolves true when a usable session is stored.
+ */
+async function refreshSession(): Promise<boolean> {
+  if (!tokens) return false;
   if (!refreshInFlight) {
     const refreshToken = tokens.refreshToken;
     refreshInFlight = (async () => {
@@ -109,11 +112,21 @@ async function refreshSession(): Promise<AuthResult | null> {
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify({ refreshToken }),
         });
-        if (!res.ok) return null;
-        const result = (await res.json()) as AuthResult;
+        const result = res.ok ? ((await res.json()) as AuthResult) : null;
+        // Checked after the last await: nothing can replace the session between here and save().
+        if (tokens?.refreshToken !== refreshToken) {
+          // The session changed meanwhile (password change, sign-out): this answer is about the
+          // old one. Keep the current session, if any, and let the caller retry with it.
+          return tokens !== null;
+        }
+        if (!result) {
+          // Only a refused session signs out; a server error or a rate limit keeps it for the next try.
+          if (res.status === 401 || res.status === 403) return false;
+          throw await toApiError(res);
+        }
         await session.save(result);
         onRefreshed(result);
-        return result;
+        return true;
       } finally {
         refreshInFlight = null;
       }

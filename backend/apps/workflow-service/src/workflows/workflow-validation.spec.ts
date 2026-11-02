@@ -89,19 +89,33 @@ describe('workflow validation', () => {
     );
   });
 
-  it('requires an http(s) URL for automations', () => {
+  it('requires an http(s) URL without credentials for automations, naming the task', () => {
     const automation = (url: string) =>
       normalizeWorkflow(
         base({ tasks: [{ id: 'h', title: 'Webhook', type: TaskType.AUTOMATION, dependsOn: [], automation: { kind: 'WEBHOOK', url } }] }),
       );
-    expect(automation('https://n8n.meliora.tn/webhook/x').tasks[0].automation).toEqual({
+    expect(automation(' https://n8n.meliora.tn/webhook/x ').tasks[0].automation).toEqual({
       kind: 'WEBHOOK',
       url: 'https://n8n.meliora.tn/webhook/x',
       method: 'POST',
       body: null,
     });
-    expect(message(() => automation('ftp://x'))).toContain('URL http(s) valide');
-    expect(message(() => automation(''))).toContain('URL http(s) valide');
+    // Placeholders are kept as typed: they are filled (and the destination checked) at each call.
+    expect(automation('http://n8n:5678/webhook/{{memberId}}').tasks[0].automation?.url).toBe('http://n8n:5678/webhook/{{memberId}}');
+    expect(message(() => automation('ftp://x'))).toBe(
+      'Automatisation « Webhook » : URL invalide : seuls les protocoles http et https sont acceptés.',
+    );
+    expect(message(() => automation('file:///etc/passwd'))).toContain('seuls les protocoles http et https');
+    expect(message(() => automation(''))).toBe('Automatisation « Webhook » : URL invalide.');
+    expect(message(() => automation('pas une url'))).toBe('Automatisation « Webhook » : URL invalide.');
+    expect(message(() => automation('http://admin:secret@n8n:5678/webhook/x'))).toBe(
+      "Automatisation « Webhook » : URL invalide : retirez l'identifiant et le mot de passe de l'URL.",
+    );
+    expect(message(() => automation(`https://n8n.meliora.tn/${'a'.repeat(2048)}`))).toBe(
+      'Automatisation « Webhook » : URL trop longue (2048 caractères maximum).',
+    );
+    const missing = base({ tasks: [{ id: 'h', title: 'Webhook', type: TaskType.AUTOMATION, dependsOn: [] }] });
+    expect(message(() => normalizeWorkflow(missing))).toBe('Automatisation « Webhook » : URL invalide.');
   });
 
   it('accepts every default Meliora workflow', () => {

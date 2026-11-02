@@ -8,8 +8,11 @@ description: Customer e-mails and content automations for Meliora Gym in n8n —
 ## Two ways data reaches n8n
 1. **Events (push)** — notification-service POSTs every `WEBHOOK_EVENTS` entry
    (`backend/libs/common/src/bus/events.ts`) to `N8N_WEBHOOK_URL` with
-   `Authorization: Bearer <WEBHOOK_SECRET>`, `X-Meliora-Event`, `X-Meliora-Delivery` (dedupe id),
-   `X-Meliora-Signature: sha256=…`. Outbox + retries (6 attempts). Workflow 01 routes by `event`.
+   `Authorization: Bearer <WEBHOOK_AUTH_TOKEN>` (never the signing key — n8n stores headers in every
+   execution), `X-Meliora-Event`, `X-Meliora-Delivery` (dedupe id), `X-Meliora-Timestamp` (unix s)
+   and `X-Meliora-Signature: sha256=<HMAC-SHA256(WEBHOOK_SECRET, "<timestamp>.<raw body>")>`.
+   Workflow 01 refuses timestamps more than 300 s away and ignores ids it already processed.
+   Outbox + retries (6 attempts, new timestamp and signature each time). Workflow 01 routes by `event`.
 2. **Feeds (pull)** — scheduled workflows call `GET /api/automation/*` with `x-api-key:
    AUTOMATION_API_KEY` (recipients, birthdays, inactive, expired, expiring, schedule,
    daily-report, low-stock, maintenance-due, leads-follow-up, gym). Base URL from `$env.MELIORA_API_URL`.

@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, Repository } from 'typeorm';
-import { ListRunsRequest, WorkflowRunDto, WorkflowRunStatus } from '@app/common';
-import { FINISHED_STATUSES, assertUuid } from '../engine/task-rules';
+import { GetRunRequest, ListRunsRequest, WorkflowRunDto, WorkflowRunStatus } from '@app/common';
+import { FINISHED_STATUSES, assertUuid, runForViewer } from '../engine/task-rules';
 import { toRunDto } from '../mappers';
 import { Task } from '../tasks/task.entity';
 import { WorkflowRun } from './workflow-run.entity';
@@ -29,11 +29,14 @@ export class RunsService {
     return runs.map((run) => toRunDto(run, undefined, progress.get(run.id)));
   }
 
-  async get(id: string): Promise<WorkflowRunDto> {
+  /** A coach (`forUser`) only gets the run through one of its tasks they can see. */
+  async get({ id, forUser }: GetRunRequest): Promise<WorkflowRunDto> {
     const run = await this.runs.findOne({ where: { id: assertUuid(id, 'Exécution introuvable.') } });
     if (!run) throw new NotFoundException('Exécution introuvable.');
     const tasks = await this.tasks.find({ where: { runId: run.id }, order: { sortOrder: 'ASC', createdAt: 'ASC' } });
-    return toRunDto(run, tasks);
+    const dto = runForViewer(toRunDto(run, tasks), forUser);
+    if (!dto) throw new NotFoundException('Exécution introuvable.');
+    return dto;
   }
 
   private async progressOf(runIds: string[]): Promise<Map<string, { done: number; total: number }>> {

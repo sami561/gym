@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { authApi } from '@/api/endpoints';
+import { useAuth } from '@/auth/AuthProvider';
 import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
 import { ModalScreen } from '@/components/ModalScreen';
@@ -13,6 +13,7 @@ import { errorMessage } from '@/lib/errors';
 export default function ChangePasswordScreen() {
   const { t } = useI18n();
   const toast = useToast();
+  const { changePassword } = useAuth();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -31,7 +32,8 @@ export default function ChangePasswordScreen() {
 
     setSaving(true);
     try {
-      await authApi.changePassword({ currentPassword: current, newPassword: next });
+      // Other devices are signed out; this one stores the fresh session and stays signed in.
+      await changePassword(current, next);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       toast(t('profile.passwordChanged'));
       router.back();

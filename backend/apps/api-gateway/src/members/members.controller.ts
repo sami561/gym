@@ -1,6 +1,8 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
+  ACCESS_ROTATE_KEY_PATTERN,
+  AccessKeyRotation,
   AccessLogDto,
   AuthUser,
   CreateMemberResult,
@@ -15,6 +17,7 @@ import {
   PaymentDto,
   Role,
   Roles,
+  RotateAccessKeyRequest,
   RpcClient,
   SubscriptionDto,
   toActor,
@@ -91,5 +94,22 @@ export class MembersController {
       memberId: id,
       cardNumber: dto.cardNumber?.trim() || null,
     });
+  }
+
+  /**
+   * Lost or shared phone: the member's QR codes stop working at once. The secret is not returned;
+   * the app gets the new one from GET /api/me/access-key.
+   */
+  @HttpCode(200)
+  @Post(':id/access-key/rotate')
+  async rotateAccessKey(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ ok: true; rotatedAt: string }> {
+    const { rotatedAt } = await this.rpc.send<AccessKeyRotation, RotateAccessKeyRequest>(ACCESS_ROTATE_KEY_PATTERN, {
+      memberId: id,
+      actor: toActor(user),
+    });
+    return { ok: true, rotatedAt };
   }
 }

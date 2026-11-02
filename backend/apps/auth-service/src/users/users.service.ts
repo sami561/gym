@@ -1,7 +1,6 @@
 import { ConflictException, Injectable, Logger, NotFoundException, OnApplicationBootstrap } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import * as bcrypt from 'bcryptjs';
-import { ILike, In, Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, EntityManager, ILike, In, Repository } from 'typeorm';
 import {
   CreateUserRequest,
   EVENTS,
@@ -13,9 +12,16 @@ import {
   UserDto,
   env,
 } from '@app/common';
+import { RefreshSessionsService } from '../sessions/refresh-sessions.service';
+import { hashPassword } from './passwords';
 import { User } from './user.entity';
+import { bootstrapAdminPassword, isActiveAdmin, removesActiveAdmin } from './user-rules';
 
-const BCRYPT_ROUNDS = 10;
+/**
+ * Transaction-scoped advisory lock taken by every change that takes an active admin away (demotion,
+ * deactivation, deletion): they run one after the other, so two of them cannot both pass the last-admin check.
+ */
+const LAST_ADMIN_LOCK_KEY = 74_270_101;
 
 export function toUserDto(user: User): UserDto {
   return {
@@ -43,17 +49,22 @@ export class UsersService implements OnApplicationBootstrap {
 
   constructor(
     @InjectRepository(User) private readonly users: Repository<User>,
+    @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly sessions: RefreshSessionsService,
     private readonly events: EventBus,
   ) {}
 
-  /** Creates the first admin from ADMIN_EMAIL / ADMIN_PASSWORD when none exists. */
+  /**
+   * Creates the first admin from ADMIN_EMAIL / ADMIN_PASSWORD when none exists. In production
+   * ADMIN_PASSWORD is required: without it the service stops at boot instead of using the dev default.
+   */
   async onApplicationBootstrap(): Promise<void> {
     const admins = await this.users.count({ where: { role: Role.ADMIN } });
     if (admins > 0) return;
     const email = env('ADMIN_EMAIL', 'admin@meliora-gym.tn');
     await this.create({
       email,
-      password: env('ADMIN_PASSWORD', 'Meliora2026!'),
+      password: bootstrapAdminPassword(env('NODE_ENV', 'development'), env('ADMIN_PASSWORD', '')),
       role: Role.ADMIN,
       firstName: env('ADMIN_FIRST_NAME', 'Admin'),
       lastName: env('ADMIN_LAST_NAME', 'Meliora'),
@@ -69,7 +80,7 @@ export class UsersService implements OnApplicationBootstrap {
     const user = await this.users.save(
       this.users.create({
         email,
-        passwordHash: await bcrypt.hash(req.password, BCRYPT_ROUNDS),
+        passwordHash: await hashPassword(req.password),
         role: req.role,
         firstName: req.firstName.trim(),
         lastName: req.lastName.trim(),
@@ -108,38 +119,40 @@ export class UsersService implements OnApplicationBootstrap {
   }
 
   async update({ id, data }: UpdateUserRequest): Promise<UserDto> {
-    const user = await this.findOrFail(id);
-    if (data.email !== undefined) {
-      const email = normalizeEmail(data.email);
-      if (email !== user.email && (await this.users.exist({ where: { email } }))) {
-        throw new ConflictException('Un compte existe déjà avec cet e-mail.');
+    // bcrypt is slow: hash before the transaction takes its locks.
+    const passwordHash = data.password ? await hashPassword(data.password) : null;
+    // READ COMMITTED: the last-admin count, taken after the lock, must see the changes committed before it.
+    const saved = await this.dataSource.transaction('READ COMMITTED', async (manager) => {
+      const user = await this.lockForChange(manager, id, (current) => removesActiveAdmin(current, data));
+      if (data.email !== undefined) {
+        const email = normalizeEmail(data.email);
+        if (email !== user.email && (await manager.exists(User, { where: { email } }))) {
+          throw new ConflictException('Un compte existe déjà avec cet e-mail.');
+        }
+        user.email = email;
       }
-      user.email = email;
-    }
-    if (data.role !== undefined && data.role !== user.role && user.role === Role.ADMIN) {
-      await this.assertNotLastAdmin(user);
-    }
-    if (data.password) {
-      user.passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
-      user.tokenVersion += 1;
-    }
-    if (data.isActive === false && user.isActive) {
-      if (user.role === Role.ADMIN) await this.assertNotLastAdmin(user);
-      user.tokenVersion += 1;
-    }
-    const fields = ['role', 'firstName', 'lastName', 'phone', 'specialty', 'bio', 'avatarUrl', 'isActive'] as const;
-    for (const field of fields) {
-      if (data[field] !== undefined) (user as unknown as Record<string, unknown>)[field] = data[field];
-    }
-    const saved = await this.users.save(user);
+      // A password reset by staff or a deactivation ends every session of the user.
+      const endSessions = passwordHash !== null || (data.isActive === false && user.isActive);
+      if (passwordHash) user.passwordHash = passwordHash;
+      if (endSessions) user.tokenVersion += 1;
+      const fields = ['role', 'firstName', 'lastName', 'phone', 'specialty', 'bio', 'avatarUrl', 'isActive'] as const;
+      for (const field of fields) {
+        if (data[field] !== undefined) (user as unknown as Record<string, unknown>)[field] = data[field];
+      }
+      const updated = await manager.save(user);
+      if (endSessions) await this.sessions.revokeAll(user.id, manager);
+      return updated;
+    });
     this.events.publish(EVENTS.userUpdated, this.toEvent(saved));
     return toUserDto(saved);
   }
 
   async remove(id: string): Promise<{ ok: true }> {
-    const user = await this.findOrFail(id);
-    if (user.role === Role.ADMIN) await this.assertNotLastAdmin(user);
-    await this.users.delete(id);
+    await this.dataSource.transaction('READ COMMITTED', async (manager) => {
+      await this.lockForChange(manager, id, isActiveAdmin);
+      // Its refresh sessions go with it (ON DELETE CASCADE).
+      await manager.delete(User, id);
+    });
     this.events.publish(EVENTS.userDeleted, { userId: id });
     return { ok: true };
   }
@@ -160,7 +173,8 @@ export class UsersService implements OnApplicationBootstrap {
   }
 
   async findOrFail(id: string): Promise<User> {
-    const user = await this.users.findOne({ where: { id } });
+    // An undefined id would drop the condition and match any user.
+    const user = id ? await this.users.findOne({ where: { id } }) : null;
     if (!user) throw new NotFoundException('Utilisateur introuvable.');
     return user;
   }
@@ -169,15 +183,32 @@ export class UsersService implements OnApplicationBootstrap {
     return this.users.findOne({ where: { email: normalizeEmail(email) } });
   }
 
-  save(user: User): Promise<User> {
-    return this.users.save(user);
+  /**
+   * Only lastLoginAt: a save() of the row login read before bcrypt would write back every column
+   * changed meanwhile (isActive, role, passwordHash, tokenVersion).
+   */
+  async recordLogin(id: string, at: Date): Promise<void> {
+    await this.users.update({ id }, { lastLoginAt: at });
   }
 
-  private async assertNotLastAdmin(user: User): Promise<void> {
-    const admins = await this.users.count({ where: { role: Role.ADMIN, isActive: true } });
-    if (admins <= 1 && user.isActive) {
-      throw new ConflictException('Impossible : c’est le dernier administrateur actif.');
+  /**
+   * Loads the user for a change inside `manager`'s transaction, row-locked so that concurrent changes of
+   * one user apply one after the other. When `removesAdmin` says the change takes an active admin away,
+   * it also takes the last-admin lock, then counts the active admins on committed data.
+   */
+  private async lockForChange(
+    manager: EntityManager,
+    id: string,
+    removesAdmin: (user: User) => boolean,
+  ): Promise<User> {
+    const user = id ? await manager.findOne(User, { where: { id }, lock: { mode: 'pessimistic_write' } }) : null;
+    if (!user) throw new NotFoundException('Utilisateur introuvable.');
+    if (removesAdmin(user)) {
+      await manager.query('SELECT pg_advisory_xact_lock($1)', [LAST_ADMIN_LOCK_KEY]);
+      const admins = await manager.count(User, { where: { role: Role.ADMIN, isActive: true } });
+      if (admins <= 1) throw new ConflictException('Impossible : c’est le dernier administrateur actif.');
     }
+    return user;
   }
 
   private toEvent(user: User) {

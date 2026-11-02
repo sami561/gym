@@ -6,6 +6,7 @@ import {
   CreateDoorRequest,
   DoorDto,
   IdRequest,
+  ListDoorsRequest,
   ManualOpenRequest,
   MemberDoor,
   OkResult,
@@ -23,12 +24,13 @@ export class DoorsController {
     private readonly access: AccessService,
   ) {}
 
+  /** Payload `{ includeConfig? }`: the masked config is sent only to door editors (ADMIN). */
   @MessagePattern(PATTERNS.doors.list)
-  list(): Promise<DoorDto[]> {
-    return this.doors.list();
+  list(@Payload() request: ListDoorsRequest): Promise<DoorDto[]> {
+    return this.doors.list(request ?? {});
   }
 
-  /** Payload `{ memberId }` (unused: every active door is listed). */
+  /** Payload `{ memberId }` (unused: every active door open to the app is listed). */
   @MessagePattern(PATTERNS.doors.listForMember)
   listForMember(): Promise<MemberDoor[]> {
     return this.doors.listForMember();

@@ -15,10 +15,12 @@ import {
   EVENTS,
   EventBus,
   OkResult,
+  RetryTaskRequest,
   StartWorkflowRequest,
   TaskDto,
   TaskStatus,
   TaskType,
+  TaskViewer,
   UpdateTaskRequest,
   WorkflowRunDto,
   WorkflowRunStatus,
@@ -43,12 +45,15 @@ import {
   activate,
   assertTransition,
   assertUuid,
+  canLinkTo,
   instantiateTasks,
   isFinished,
   isOpen,
   isRunComplete,
+  isVisibleTo,
   planUnblock,
   quoteTitles,
+  titlesFor,
 } from './task-rules';
 import { isPlainObject } from './templating';
 
@@ -147,6 +152,7 @@ export class WorkflowEngine implements OnApplicationBootstrap {
   }
 
   // ---------- tasks ----------
+  // `forUser` is set by the gateway for coaches: a task they cannot see answers like a missing one.
 
   async createTask(request: CreateTaskRequest): Promise<TaskDto> {
     const title = requiredTitle(request?.title);
@@ -159,7 +165,7 @@ export class WorkflowEngine implements OnApplicationBootstrap {
       dueAt: parseDate(request.dueAt),
     };
     return this.mutate(async (manager) => {
-      const dependencies = await this.loadDependencies(manager, dependsOn);
+      const dependencies = await this.loadDependencies(manager, dependsOn, request.forUser);
       const task = manager.create(Task, {
         id: randomUUID(),
         runId: null,
@@ -186,8 +192,10 @@ export class WorkflowEngine implements OnApplicationBootstrap {
   async updateTask(request: UpdateTaskRequest): Promise<TaskDto> {
     const id = assertUuid(request?.id, 'Tâche introuvable.');
     const data = request.data ?? {};
+    const viewer = request.forUser;
     return this.mutate(async (manager, effects) => {
-      const task = await this.findTask(manager, id);
+      // Visibility first: a coach learns nothing (not even the run status) about other tasks.
+      const task = await this.findTask(manager, id, viewer);
       const run = task.runId ? await manager.findOne(WorkflowRun, { where: { id: task.runId } }) : null;
       if (run) assertRunOpen(run);
       const now = new Date();
@@ -199,9 +207,11 @@ export class WorkflowEngine implements OnApplicationBootstrap {
       if (data.assigneeName !== undefined) task.assigneeName = optionalText(data.assigneeName);
       if (data.dueAt !== undefined) task.dueAt = parseDate(data.dueAt);
       if (data.notes !== undefined) task.notes = optionalText(data.notes);
-      if (data.dependsOn !== undefined) await this.relink(manager, task, normalizeIds(data.dependsOn), effects, now);
+      if (data.dependsOn !== undefined) {
+        await this.relink(manager, task, normalizeIds(data.dependsOn), effects, now, viewer);
+      }
       if (data.status !== undefined && data.status !== task.status) {
-        await this.transition(manager, task, data.status, request.actor, effects, now);
+        await this.transition(manager, task, data.status, request.actor, effects, now, viewer);
       }
 
       await manager.save(task);
@@ -211,10 +221,10 @@ export class WorkflowEngine implements OnApplicationBootstrap {
   }
 
   /** Re-runs a FAILED automation and waits for its result. */
-  async retry(request: { id: string; actor?: Actor }): Promise<TaskDto> {
+  async retry(request: RetryTaskRequest): Promise<TaskDto> {
     const id = assertUuid(request?.id, 'Tâche introuvable.');
     await this.mutate(async (manager) => {
-      const task = await this.findTask(manager, id);
+      const task = await this.findTask(manager, id, request.forUser);
       if (task.type !== TaskType.AUTOMATION) {
         throw new BadRequestException('Seules les automatisations peuvent être relancées.');
       }
@@ -265,17 +275,18 @@ export class WorkflowEngine implements OnApplicationBootstrap {
     actor: Actor | undefined,
     effects: Effects,
     now: Date,
+    viewer?: TaskViewer,
   ): Promise<void> {
     if (task.status === TaskStatus.BLOCKED) {
       const blocking = await this.unfinishedDependencies(manager, task);
       // Safety net: a BLOCKED task whose dependencies are all finished is simply ready.
       if (blocking.length === 0) activate(task, now);
-      else assertTransition({ type: task.type, from: task.status, to: next, blockingTitles: blocking.map((t) => t.title) });
+      else assertTransition({ type: task.type, from: task.status, to: next, blockingTitles: titlesFor(blocking, viewer) });
     }
     const previous = task.status;
     if (previous === next) return;
     assertTransition({ type: task.type, from: previous, to: next, blockingTitles: [] });
-    if (isFinished(previous) && !isFinished(next)) await this.reblockDependents(manager, task);
+    if (isFinished(previous) && !isFinished(next)) await this.reblockDependents(manager, task, viewer);
 
     task.status = next;
     if (next === TaskStatus.IN_PROGRESS && !task.startedAt) task.startedAt = now;
@@ -291,11 +302,11 @@ export class WorkflowEngine implements OnApplicationBootstrap {
   }
 
   /** Reopening a finished task puts its not-yet-started dependents back to BLOCKED. */
-  private async reblockDependents(manager: EntityManager, task: Task): Promise<void> {
+  private async reblockDependents(manager: EntityManager, task: Task, viewer?: TaskViewer): Promise<void> {
     const dependents = await this.dependentsOf(manager, task.id);
     const advanced = dependents.filter((d) => d.status === TaskStatus.IN_PROGRESS || d.status === TaskStatus.DONE);
     if (advanced.length) {
-      throw new ConflictException(`Impossible de rouvrir : ${quoteTitles(advanced.map((d) => d.title))} a déjà avancé.`);
+      throw new ConflictException(`Impossible de rouvrir : ${quoteTitles(titlesFor(advanced, viewer))} a déjà avancé.`);
     }
     const toBlock = dependents.filter((d) => d.status === TaskStatus.TODO || d.status === TaskStatus.FAILED);
     for (const dependent of toBlock) {
@@ -306,9 +317,16 @@ export class WorkflowEngine implements OnApplicationBootstrap {
     if (toBlock.length) await manager.save(toBlock);
   }
 
-  private async relink(manager: EntityManager, task: Task, ids: string[], effects: Effects, now: Date): Promise<void> {
+  private async relink(
+    manager: EntityManager,
+    task: Task,
+    ids: string[],
+    effects: Effects,
+    now: Date,
+    viewer?: TaskViewer,
+  ): Promise<void> {
     if (ids.includes(task.id)) throw new BadRequestException("Une tâche ne peut pas dépendre d'elle-même.");
-    const dependencies = await this.loadDependencies(manager, ids);
+    const dependencies = await this.loadDependencies(manager, ids, viewer, task.dependsOn);
     await this.assertNoCycle(manager, task.id, dependencies);
     task.dependsOn = ids;
     if (task.status !== TaskStatus.TODO && task.status !== TaskStatus.BLOCKED) return;
@@ -437,16 +455,28 @@ export class WorkflowEngine implements OnApplicationBootstrap {
     return result;
   }
 
-  private async findTask(manager: EntityManager, id: string): Promise<Task> {
+  /** 404 also when the task exists but `viewer` may not see it. */
+  private async findTask(manager: EntityManager, id: string, viewer?: TaskViewer): Promise<Task> {
     const task = await manager.findOne(Task, { where: { id } });
-    if (!task) throw new NotFoundException('Tâche introuvable.');
+    if (!task || (viewer && !isVisibleTo(task, viewer))) throw new NotFoundException('Tâche introuvable.');
     return task;
   }
 
-  private async loadDependencies(manager: EntityManager, ids: string[]): Promise<Task[]> {
+  /**
+   * Tasks to depend on. A link `viewer` may not add (see canLinkTo) gets the same answer as
+   * a missing task; `linked` holds the links the task already has.
+   */
+  private async loadDependencies(
+    manager: EntityManager,
+    ids: string[],
+    viewer?: TaskViewer,
+    linked: string[] = [],
+  ): Promise<Task[]> {
     if (!ids.length) return [];
     const found = await manager.find(Task, { where: { id: In(ids) } });
-    if (found.length !== ids.length) throw new BadRequestException('Tâche liée introuvable.');
+    if (found.length !== ids.length || !found.every((dep) => canLinkTo(dep, viewer, linked))) {
+      throw new BadRequestException('Tâche liée introuvable.');
+    }
     return found;
   }
 

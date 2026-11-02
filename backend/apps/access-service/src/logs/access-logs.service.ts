@@ -7,6 +7,7 @@ import {
   AccessMethod,
   AccessResult,
   Actor,
+  AppOpenContext,
   EventBus,
   EVENTS,
   fullName,
@@ -28,9 +29,12 @@ export interface RecordLogInput {
   createdAt?: Date;
   /** When set, a log with the same key is ignored (punch re-sent by an agent). */
   deviceEventKey?: string;
+  /** App openings: where the request came from. */
+  context?: AppOpenContext | null;
 }
 
-export function toAccessLogDto(log: AccessLog): AccessLogDto {
+/** `includeContext` adds the position and address of app openings (ADMIN log lists only). */
+export function toAccessLogDto(log: AccessLog, includeContext = false): AccessLogDto {
   return {
     id: log.id,
     memberId: log.memberId,
@@ -44,6 +48,7 @@ export function toAccessLogDto(log: AccessLog): AccessLogDto {
     openedById: log.openedById,
     openedByName: log.openedByName,
     createdAt: new Date(log.createdAt).toISOString(),
+    ...(includeContext ? { context: log.context ?? null } : {}),
   };
 }
 
@@ -69,6 +74,7 @@ export class AccessLogsService {
       openedById: input.actor?.id ?? null,
       openedByName: input.actor?.name ?? null,
       deviceEventKey: input.deviceEventKey ?? null,
+      context: input.context ?? null,
       createdAt: input.createdAt ?? new Date(),
     });
 
@@ -86,6 +92,7 @@ export class AccessLogsService {
       await this.repo.insert(log);
     }
 
+    // Without the context: access.logged reaches the staff live feed and other services.
     const dto = toAccessLogDto(log);
     this.events.publish(EVENTS.accessLogged, dto);
     return dto;
@@ -109,6 +116,6 @@ export class AccessLogsService {
       if (!Number.isNaN(before.getTime())) query.andWhere('log.createdAt < :before', { before });
     }
     const logs = await query.getMany();
-    return logs.map(toAccessLogDto);
+    return logs.map((log) => toAccessLogDto(log, request.includeContext === true));
   }
 }

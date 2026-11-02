@@ -16,7 +16,10 @@ export class Door {
   @Column({ type: 'enum', enum: DoorDriver, default: DoorDriver.SIMULATOR })
   driver: DoorDriver;
 
-  /** ZKTECO: { ip, port?, timeoutMs? } · HTTP_RELAY: { url, method?, headers?, body? } · SIMULATOR: {} */
+  /**
+   * ZKTECO: { ip, port?, timeoutMs? } · HTTP_RELAY: { url, method?, headers?, basicAuth?, body?, timeoutMs? } ·
+   * SIMULATOR: {}. Holds secrets: only agents get it as is (doors/door-secrets.ts masks it for the back-office).
+   */
   @Column({ type: 'jsonb', default: () => "'{}'" })
   config: Record<string, unknown>;
 
@@ -25,6 +28,10 @@ export class Door {
 
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
+
+  /** Members may open it with the app button (false for back doors, staff rooms...). */
+  @Column({ type: 'boolean', default: true })
+  allowAppOpen: boolean;
 
   @Column({ type: 'uuid', nullable: true })
   agentId: string | null;

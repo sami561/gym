@@ -7,6 +7,7 @@ import {
   CreateAgentResult,
   CurrentUser,
   DoorDto,
+  ListDoorsRequest,
   PATTERNS,
   Role,
   Roles,
@@ -22,10 +23,11 @@ import { CreateAgentDto, CreateDoorDto, ManualOpenDto, UpdateDoorDto } from './a
 export class DoorsController {
   constructor(private readonly rpc: RpcClient) {}
 
+  /** Staff get the doors without their config; ADMIN gets it with every secret masked. */
   @Roles(Role.ADMIN, Role.STAFF)
   @Get('doors')
-  list() {
-    return this.rpc.send<DoorDto[]>(PATTERNS.doors.list, {});
+  list(@CurrentUser() user: AuthUser) {
+    return this.rpc.send<DoorDto[], ListDoorsRequest>(PATTERNS.doors.list, { includeConfig: user.role === Role.ADMIN });
   }
 
   @Post('doors')

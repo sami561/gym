@@ -1,12 +1,12 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
-  Actor,
   CreateTaskRequest,
   IdRequest,
   ListTasksRequest,
   OkResult,
   PATTERNS,
+  RetryTaskRequest,
   TaskDto,
   UpdateTaskRequest,
 } from '@app/common';
@@ -36,7 +36,7 @@ export class TasksController {
   }
 
   @MessagePattern(PATTERNS.tasks.retry)
-  retry(@Payload() request: IdRequest & { actor?: Actor }): Promise<TaskDto> {
+  retry(@Payload() request: RetryTaskRequest): Promise<TaskDto> {
     return this.engine.retry(request);
   }
 

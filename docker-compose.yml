@@ -1,8 +1,16 @@
 # Meliora Gym — whole platform in Docker.
-#   cp .env.example .env   # then set the secrets
+#   cp .env.example .env   # then fill in every empty secret (openssl rand -hex 32)
 #   docker compose up -d --build
-# Website + admin: http://localhost:8080 · API: http://localhost:4000/api · Swagger: http://localhost:4000/docs
-# n8n: http://localhost:5678 · Door agent (on the gym LAN): docker compose --profile agent up -d door-agent
+# Website + admin + API: http://localhost:8080 (nginx forwards /api, /docs, /socket.io and /agent-socket
+# to the gateway) · gateway: 127.0.0.1:4000 only (GATEWAY_BIND) · n8n editor: 127.0.0.1:5678 (N8N_BIND)
+# Door agent (on the gym LAN): docker compose --profile agent up -d door-agent
+#
+# Networks:
+# - internal (no route out): Postgres, Redis / NATS and every backend service. Only the backend
+#   reaches the bus, and the bus carries trusted commands (users.create, doors.open…).
+# - edge: what talks to the outside — gateway, web, n8n, door agent, and the services that call out
+#   (notification → n8n + Expo push, workflow → automation URLs, access → door relays).
+# n8n runs workflows that anyone with editor access can change: it is never on "internal".
 
 name: meliora
 
@@ -11,13 +19,17 @@ x-backend: &backend
     context: ./backend
   image: meliora/backend:latest
   restart: unless-stopped
+  networks: [internal]
   environment: &backend-env
+    # Production mode: the services refuse to start with example or weak secrets.
     NODE_ENV: production
     TZ: Africa/Tunis
     BUS_TRANSPORT: ${BUS_TRANSPORT:-redis}
     REDIS_HOST: redis
     REDIS_PORT: "6379"
+    REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
     NATS_URL: nats://nats:4222
+    NATS_TOKEN: ${NATS_TOKEN:-}
     DB_HOST: postgres
     DB_PORT: "5432"
     DB_USER: ${POSTGRES_USER:-meliora}
@@ -26,14 +38,19 @@ x-backend: &backend
     DB_SYNCHRONIZE: ${DB_SYNCHRONIZE:-true}
     JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
     JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env}
+    REFRESH_REUSE_LEEWAY_SECONDS: ${REFRESH_REUSE_LEEWAY_SECONDS:-30}
     AUTOMATION_API_KEY: ${AUTOMATION_API_KEY:?set AUTOMATION_API_KEY in .env}
+    AUTOMATION_ALLOWED_HOSTS: ${AUTOMATION_ALLOWED_HOSTS:-}
     WEBHOOK_SECRET: ${WEBHOOK_SECRET:?set WEBHOOK_SECRET in .env}
+    WEBHOOK_AUTH_TOKEN: ${WEBHOOK_AUTH_TOKEN:?set WEBHOOK_AUTH_TOKEN in .env}
     N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://n8n:5678/webhook/meliora-events}
     ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@meliora-gym.tn}
     ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
     CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
     ACCESS_WS_HOST: access-service
     ACCESS_WS_PORT: "4004"
+    RELAY_ALLOWED_NETWORKS: ${RELAY_ALLOWED_NETWORKS:-10.0.0.0/8,192.168.0.0/16}
+    APP_OPEN_ALLOWED_NETWORKS: ${APP_OPEN_ALLOWED_NETWORKS:-}
     GEOFENCE_METERS: ${GEOFENCE_METERS:-150}
     EXPIRY_REMINDER_DAYS: ${EXPIRY_REMINDER_DAYS:-3}
     GYM_PHONE: ${GYM_PHONE:-+216 00 000 000}
@@ -51,6 +68,7 @@ services:
   postgres:
     image: postgres:16.6-alpine
     restart: unless-stopped
+    networks: [internal]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-meliora}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -69,28 +87,52 @@ services:
   redis:
     image: redis:7.4-alpine
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "no"]
+    networks: [internal]
+    # Only clients that know REDIS_PASSWORD (the backend services) may use the bus.
+    command: ["redis-server", "--appendonly", "no", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}"]
+    environment:
+      # Read by redis-cli, so the health check authenticates.
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 20
 
-  # Production bus with load balancing across replicas: set BUS_TRANSPORT=nats and
-  # start with `--profile nats`.
+  # Production bus with load balancing across replicas: set BUS_TRANSPORT=nats and NATS_TOKEN, and
+  # start with `--profile nats`. Token auth (--auth): the backend services send NATS_TOKEN. The check
+  # is in the container rather than ${NATS_TOKEN:?…}, which compose would enforce without the profile.
   nats:
     image: nats:2.10-alpine
     restart: unless-stopped
     profiles: ["nats"]
+    networks: [internal]
+    environment:
+      NATS_TOKEN: ${NATS_TOKEN:-}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        if [ -z "$$NATS_TOKEN" ]; then
+          echo "Set NATS_TOKEN in .env to use the nats profile (openssl rand -hex 32)" >&2
+          exit 1
+        fi
+        exec nats-server --auth "$$NATS_TOKEN"
 
   api-gateway:
     <<: *backend
     command: ["node", "dist/apps/api-gateway/main.js"]
+    networks: [internal, edge]
     environment:
       <<: *backend-env
       GATEWAY_PORT: "4000"
+      # Proxies whose X-Forwarded-For is believed (client IP for rate limits): the web container and
+      # a TLS proxy on the host reach the gateway from private addresses.
+      TRUST_PROXY: ${TRUST_PROXY:-loopback, linklocal, uniquelocal}
     ports:
-      - "4000:4000"
+      # Loopback by default: clients go through the web container (:8080/api) and cannot skip nginx
+      # to forge X-Forwarded-For. GATEWAY_BIND=0.0.0.0 only behind a firewall or a TLS proxy.
+      - "${GATEWAY_BIND:-127.0.0.1}:4000:4000"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/api/public/gym >/dev/null || exit 1"]
       interval: 10s
@@ -109,13 +151,17 @@ services:
     <<: *backend
     command: ["node", "dist/apps/class-service/main.js"]
 
+  # Edge too: HTTP relays of doors without an agent (RELAY_ALLOWED_NETWORKS).
   access-service:
     <<: *backend
     command: ["node", "dist/apps/access-service/main.js"]
+    networks: [internal, edge]
 
+  # Edge too: events to n8n (N8N_WEBHOOK_URL) and Expo push notifications.
   notification-service:
     <<: *backend
     command: ["node", "dist/apps/notification-service/main.js"]
+    networks: [internal, edge]
 
   staff-service:
     <<: *backend
@@ -133,9 +179,11 @@ services:
     <<: *backend
     command: ["node", "dist/apps/training-service/main.js"]
 
+  # Edge too: AUTOMATION tasks call n8n or other URLs (AUTOMATION_ALLOWED_HOSTS).
   workflow-service:
     <<: *backend
     command: ["node", "dist/apps/workflow-service/main.js"]
+    networks: [internal, edge]
 
   # Landing page + back-office (static build behind nginx, which proxies /api,
   # /socket.io, /agent-socket and /docs to the gateway).
@@ -144,6 +192,7 @@ services:
       context: ./web
     image: meliora/web:latest
     restart: unless-stopped
+    networks: [edge]
     ports:
       - "8080:80"
     depends_on:
@@ -152,8 +201,13 @@ services:
   n8n:
     image: n8nio/n8n:2.45.7
     restart: unless-stopped
+    # Edge only: n8n calls the API through the gateway like any client and cannot reach the bus
+    # or the databases.
+    networks: [edge]
     ports:
-      - "5678:5678"
+      # Editor on the server itself by default (ssh -L 5678:127.0.0.1:5678 …); the backend posts
+      # events over the edge network (http://n8n:5678).
+      - "${N8N_BIND:-127.0.0.1}:5678:5678"
     environment:
       TZ: Africa/Tunis
       GENERIC_TIMEZONE: Africa/Tunis
@@ -178,6 +232,7 @@ services:
     image: meliora/door-agent:latest
     restart: unless-stopped
     profiles: ["agent"]
+    networks: [edge]
     environment:
       SERVER_URL: ${DOOR_AGENT_SERVER_URL:-http://api-gateway:4000}
       AGENT_KEY: ${DOOR_AGENT_KEY:-}
@@ -185,6 +240,13 @@ services:
       LOCAL_SCAN_PORT: "8787"
     volumes:
       - door_agent_data:/data
+
+networks:
+  # No route to the internet or the host; published ports are impossible here.
+  internal:
+    internal: true
+  edge:
+    driver: bridge
 
 volumes:
   pgdata:

@@ -1,7 +1,9 @@
 # Meliora Gym — API contract
 
 Single public entry point: the **API gateway** (`backend/apps/api-gateway`), default `http://localhost:4000`.
-Interactive docs (Swagger): `http://localhost:4000/docs`.
+Interactive docs (Swagger): `http://localhost:4000/docs`. With Docker, clients use the web container instead
+(`http://<host>:8080`, behind TLS in production): its nginx forwards `/api`, `/docs`, `/socket.io` and
+`/agent-socket` to the gateway, whose port 4000 only listens on the server itself (`GATEWAY_BIND`).
 
 The TypeScript types referenced below live in `backend/libs/common/src/contracts/*.ts` — they are the
 source of truth for every payload. Web and mobile clients should mirror them in their own `types.ts`.
@@ -12,6 +14,18 @@ source of truth for every payload. Web and mobile clients should mirror them in 
 - Money is a `number` in TND (3 decimals), e.g. `120.5` → "120,500 DT".
 - Auth: `Authorization: Bearer <accessToken>`. Access tokens live 15 min; call `POST /api/auth/refresh`
   with the refresh token (30 days) when a request returns **401**.
+- Refresh tokens are **single-use** (rotation): every refresh answers a new `refreshToken`; store it and
+  forget the one you sent. The token just replaced is still accepted for 30 s
+  (`REFRESH_REUSE_LEEWAY_SECONDS`: two tabs, a retried request) and the answer then carries the current
+  token. Sending an older token, or the replaced one after those 30 s, counts as reuse: that whole sign-in
+  is revoked, its newest token included, and the call answers 401 `Session expirée, reconnectez-vous.`.
+  Each refresh extends the sign-in to 30 days from now (`JWT_REFRESH_TTL_DAYS`). Refresh tokens issued
+  before rotation existed get that 401 once (sign in again).
+- Rate limits: authentication runs first, so a protected route called without a valid token answers 401,
+  never 429. Signed-in callers are counted per account and per route (300/min unless the route says
+  otherwise); `@Public` routes and the automation API per client IP. Behind nginx the IP comes from
+  `X-Forwarded-For`, believed only when the request comes from a trusted proxy (`TRUST_PROXY`). Over the
+  limit: 429 `{ "statusCode": 429, "message": "ThrottlerException: Too Many Requests" }`.
 - Errors: `{ "statusCode": 404, "message": "Membre introuvable." }` — `message` may be a string or an
   array of validation messages (French, ready to display).
 - Roles: `ADMIN`, `STAFF` (reception), `COACH`, `MEMBER`. "staff" below = ADMIN or STAFF.
@@ -30,12 +44,19 @@ source of truth for every payload. Web and mobile clients should mirror them in 
 
 | Method | Path | Body | Result |
 |---|---|---|---|
-| POST | `/api/auth/register` | `{ firstName, lastName, email, password (≥8), phone?, birthDate?, gender? }` | `AuthResult` (creates a MEMBER) |
-| POST | `/api/auth/login` | `{ email, password }` | `AuthResult` = `{ accessToken, refreshToken, expiresIn, user: UserDto }` |
-| POST | `/api/auth/refresh` | `{ refreshToken }` | `AuthResult` |
-| POST | `/api/auth/logout` | – (auth) | `{ ok: true }` — revokes all refresh tokens of the user |
+| POST | `/api/auth/register` | `{ firstName, lastName, email, password (≥8), phone?, birthDate?, gender? }` | `AuthResult` (creates a MEMBER) — 5/min per IP |
+| POST | `/api/auth/login` | `{ email, password }` | `AuthResult` = `{ accessToken, refreshToken, expiresIn, user: UserDto }` — 10/min per IP; 401 `E-mail ou mot de passe incorrect.` (same answer and timing whether the e-mail exists or not), 403 for a deactivated account |
+| POST | `/api/auth/refresh` | `{ refreshToken }` | `AuthResult` with a **new** `refreshToken` (the one sent is used up, see Conventions) |
+| POST | `/api/auth/logout` | – (auth) | `{ ok: true }` — ends every sign-in of the user (all devices) |
 | GET | `/api/auth/me` | – (auth) | `UserDto` |
-| PATCH | `/api/auth/password` | `{ currentPassword, newPassword }` | `{ ok: true }` |
+| PATCH | `/api/auth/password` | `{ currentPassword, newPassword (≥8) }` | `ChangePasswordResult` = `AuthResult & { ok: true }` (below) |
+
+`PATCH /api/auth/password` ends every session of the user (other devices, and this device's old refresh
+token) and returns a fresh session: store its `accessToken` / `refreshToken` like a login. Errors: 401
+`Mot de passe actuel incorrect.` (a client that refreshes and retries on every 401 gets it twice), 403
+`Ce compte est désactivé. Contactez l’accueil.`; 10/min per account.
+Access tokens already issued stay valid until they expire (≤ 15 min, `JWT_ACCESS_TTL_SECONDS`) after a
+logout, a password change, a deactivation or a demotion.
 
 ## Member self-service (role MEMBER)
 
@@ -44,14 +65,27 @@ source of truth for every payload. Web and mobile clients should mirror them in 
 | GET | `/api/me` | – | `MeResponse` = `{ user: UserDto, profile: MemberProfile, access: MemberAccessInfo }` |
 | PATCH | `/api/me` | `{ firstName?, lastName?, phone?, birthDate?, emergencyContact? }` | `MemberDto` |
 | GET | `/api/me/access-key` | – | `AccessKey` = `{ memberCode, secret, period: 30, format }` (see QR code below) |
-| GET | `/api/me/doors` | – | `MemberDoor[]` |
-| POST | `/api/me/doors/:doorId/open` | `{ latitude, longitude, accuracy? }` | `AccessDecision` = `{ granted, reason?, door?, member?, at }` |
+| POST | `/api/me/access-key/rotate` | – (5/min) | `AccessKey` (same shape) — new secret: the codes shown until now stop working at once; save the returned key |
+| GET | `/api/me/doors` | – | `MemberDoor[]` (active doors with `allowAppOpen`) |
+| POST | `/api/me/doors/:doorId/open` | `{ latitude, longitude, accuracy? }` (20/min) | `AccessDecision` = `{ granted, reason?, door?, member?, at }` (see "Opening from the app") |
 | GET | `/api/me/visits?limit=30` | – | `AccessLogDto[]` |
 | GET | `/api/me/classes?from&to` | – | `ClassSessionDto[]` with `bookingId` set when booked |
 | GET | `/api/me/bookings?includePast=false` | – | `BookingDto[]` (with `session`) |
 | POST | `/api/me/bookings` | `{ sessionId }` | `BookingDto` (requires an active membership) |
 | DELETE | `/api/me/bookings/:id` | – | `BookingDto` (status CANCELLED) |
 | PUT | `/api/me/push-token` | `{ token }` (Expo push token) | `{ ok: true }` |
+
+**Opening from the app** — checks in this order: member, door active, `allowAppOpen`, network, geofence.
+A refusal is `granted: false` with a French `reason`, logged like any denial:
+- `Cette porte ne peut pas être ouverte depuis l’application.` — door with `allowAppOpen: false`;
+- `Connectez-vous au Wi-Fi de la salle pour ouvrir la porte.` — `APP_OPEN_ALLOWED_NETWORKS` is set and the
+  caller's address (`req.ip` as the gateway sees it, see `TRUST_PROXY`) is missing or outside it. Empty
+  = no network check; a malformed list refuses every app opening;
+- then the geofence reasons (invalid position, too far).
+
+Every attempt, granted or denied, is logged with `context` = `{ latitude, longitude, accuracy,
+distanceMeters, clientIp }`, shown to ADMIN only (`GET /api/access/logs`). The phone position alone can be
+faked: `APP_OPEN_ALLOWED_NETWORKS` is the effective gate.
 
 ## Staff back-office
 
@@ -66,6 +100,7 @@ source of truth for every payload. Web and mobile clients should mirror them in 
 | POST | `/api/members/:id/subscriptions` | `{ planId, startDate?, price?, payment?: { method, amount?, reference? } }` | `SubscriptionDto` |
 | POST | `/api/members/:id/payments` | `{ amount, method, reference?, subscriptionId?, paidAt? }` | `PaymentDto` |
 | PUT | `/api/members/:id/card` | `{ cardNumber: string | null }` (RFID badge) | `MemberAccessInfo` |
+| POST | `/api/members/:id/access-key/rotate` | – (lost or shared phone) | `{ ok: true, rotatedAt }` — the member's QR codes stop working at once; the app gets the new key from `GET /api/me/access-key`. 404 `Membre introuvable.` |
 | PATCH | `/api/subscriptions/:id` | `{ status?: ACTIVE|FROZEN|CANCELLED, endDate? }` | `SubscriptionDto` |
 | GET | `/api/payments` | `?from&to&method&memberId&page&pageSize` | `PaymentsPage` (`items, total, page, pageSize, sum`) |
 
@@ -85,25 +120,53 @@ source of truth for every payload. Web and mobile clients should mirror them in 
 | PATCH | `/api/classes/:id` | staff, COACH | `UpdateClassRequest['data']` | `ClassSessionDto` |
 | DELETE | `/api/classes/:id` | staff | – | `{ ok: true }` |
 | GET | `/api/classes/:id/bookings` | staff, COACH | – | `BookingDto[]` |
-| PATCH | `/api/bookings/:id` | staff, COACH | `{ status: BOOKED|CANCELLED|ATTENDED }` | `BookingDto` |
+| PATCH | `/api/bookings/:id` | staff, COACH | `{ status: BOOKED|CANCELLED|ATTENDED|NO_SHOW }` | `BookingDto` — NO_SHOW only once the class has started (400 `Impossible de marquer absent avant le début du cours.`); WAITLISTED and LATE_CANCELLED come from the booking flow only (400 `Statut invalide (BOOKED, CANCELLED, ATTENDED ou NO_SHOW).`) |
 
 ### Users (staff accounts & coaches) — ADMIN
 `GET /api/users?role&search` → `UserDto[]` · `POST /api/users` (`CreateUserRequest`, role ADMIN|STAFF|COACH) → `UserDto` ·
-`PATCH /api/users/:id` → `UserDto` · `DELETE /api/users/:id` → `{ ok: true }`
+`PATCH /api/users/:id` → `UserDto` · `DELETE /api/users/:id` → `{ ok: true }`.
+A new `password` or `isActive: false` ends every session of that user. Demoting, deactivating or deleting the
+last active ADMIN → 409 `Impossible : c’est le dernier administrateur actif.` (checked atomically).
 
 ### Access control (staff)
 | Method | Path | Body / query | Result |
 |---|---|---|---|
-| GET | `/api/access/logs` | `?limit=50&doorId&memberId&result&before` | `AccessLogDto[]` (newest first) |
-| POST | `/api/access/scan` | `{ code, doorId }` — QR scanned at reception / kiosk | `AccessDecision` (opens the door when granted) |
-| GET | `/api/doors` | – | `DoorDto[]` (with `online`) |
-| POST | `/api/doors` | `CreateDoorRequest` (ADMIN) | `DoorDto` |
-| PATCH | `/api/doors/:id` | `Partial<CreateDoorRequest>` (ADMIN) | `DoorDto` |
+| GET | `/api/access/logs` | `?limit=50&doorId&memberId&result&before` | `AccessLogDto[]` (newest first). For ADMIN each log also has `context` (position and address of app openings, `null` for other methods); STAFF, `/api/me/visits`, the member detail and the live feed never get it |
+| POST | `/api/access/scan` | `{ code, doorId }` — QR scanned at reception / kiosk (60/min) | `AccessDecision` (opens the door when granted) |
+| GET | `/api/doors` | – | `DoorDto[]` (with `online`, `allowAppOpen`); `config` is `{}` for STAFF and masked for ADMIN (below) |
+| POST | `/api/doors` | `CreateDoorRequest` (ADMIN; `allowAppOpen?`, default true) | `DoorDto` (config masked) |
+| PATCH | `/api/doors/:id` | `Partial<CreateDoorRequest>` (ADMIN) | `DoorDto` (config masked) |
 | DELETE | `/api/doors/:id` | – (ADMIN) | `{ ok: true }` |
 | POST | `/api/doors/:id/open` | `{ reason? }` | `AccessDecision` (manual opening, logged with the staff name) |
 | GET | `/api/agents` | – (ADMIN) | `AgentDto[]` |
 | POST | `/api/agents` | `{ name }` (ADMIN) | `CreateAgentResult` = `{ agent, apiKey }` — key shown once |
 | DELETE | `/api/agents/:id` | – (ADMIN) | `{ ok: true }` |
+
+**Door config secrets** — ADMIN gets `config` with every secret replaced by `"********"` (`DOOR_SECRET_MASK`):
+all `headers` values, `basicAuth.password` (the username stays visible), any key containing pass, pwd,
+secret, token, key, auth, pin or code at any depth (ZKTeco `commKey` included), such query parameters of
+the relay `url` (`?password=********`) and a `user:password@` in it. Send the mask back unchanged (also
+`%2A` × 8 inside a URL) to keep the stored value at that place; a mask with nothing stored there → 400
+`Secret masqué « ******** » sans valeur enregistrée (config.<path>) : saisissez la valeur.` Door agents
+still receive the real config.
+
+**HTTP_RELAY config** — checked on create, and on update when `config` or `driver` is sent (an older door
+can still be renamed or turned off), with French 400 messages:
+- `url`: required, http or https, no `user:password@` (use `basicAuth`), at most 2048 characters once
+  `{seconds}` / `{ms}` / `{doorId}` are filled;
+- `method`: GET, POST or PUT (default GET); `headers`: at most 20, valid names, one-line text values;
+- `basicAuth`: `{ username, password? }`, no `:` in the username; `body`: text or JSON, at most 10 000
+  characters; `timeoutMs`: 500–30 000.
+
+A relay called by the server (door without an agent) is checked again before each call: its address must
+be public, or private and inside `RELAY_ALLOWED_NETWORKS` (default `10.0.0.0/8,192.168.0.0/16`); loopback,
+link-local (cloud metadata `169.254.169.254`), unspecified, multicast and reserved addresses are always
+refused. Redirects are not followed (a 3xx is a failure), the answer body is never read and the timeout
+is at most 5 s.
+
+**Opening failures** (every opening route) are French summaries, never the controller's text or the
+relay's answer: `Le contrôleur n’a pas pu ouvrir la porte.`, `Le relais a répondu <status>.`,
+`Relais de porte injoignable.`, `Adresse du relais non autorisée.`, `Configuration du relais invalide.`
 
 ### Dashboard (staff)
 | Method | Path | Result |
@@ -116,20 +179,38 @@ source of truth for every payload. Web and mobile clients should mirror them in 
 
 ## Realtime (Socket.IO)
 
-**Staff live feed** — `io('http://localhost:4000/live', { auth: { token: accessToken } })` (ADMIN/STAFF).
-Server emits `access` with an `AccessLogDto` for every door event (granted or denied).
+**Staff live feed** — `io('http://localhost:4000/live', { auth: { token: accessToken } })` (with Docker, the
+website origin: nginx forwards `/socket.io`). ADMIN/STAFF access tokens only; any other token gets `error`
+`{ message: 'Authentification requise.' }`, then a disconnect.
+Server emits `access` with an `AccessLogDto` (without `context`) for every door event (granted or denied).
+The server closes the socket when the access token expires (client reason `io server disconnect`): refresh
+the token, then reconnect with the new one — only after a successful refresh, with a back-off otherwise.
+A deactivated account or a revoked session cannot refresh, so it loses the feed when its current access
+token expires (≤ 15 min).
 
-**Door agents** — `io('http://<gateway>:4000/agents', { path: '/agent-socket', auth: { key: '<agent api key>' } })`
-(the gateway proxies `/agent-socket` to access-service). Events:
+**Door agents** — `io('<SERVER_URL>/agents', { path: '/agent-socket', auth: { key: '<agent api key>' } })`, where
+`SERVER_URL` is the website (`https://meliora-gym.tn`, or `http://<server>:8080` on the LAN: nginx forwards
+`/agent-socket`) or the gateway itself (`http://localhost:4000` in local development, `http://api-gateway:4000`
+for the compose `door-agent` service). The gateway proxies `/agent-socket` to access-service. Events:
 
 | Direction | Event | Payload | Ack |
 |---|---|---|---|
-| server → agent | `doors` | `AgentDoorConfig[]` = `[{ id, name, driver, config, unlockSeconds, isActive }]` — on connect and on every change | – |
-| server → agent | `door.open` | `{ requestId, doorId, seconds }` | `{ ok: boolean, error?: string }` (8 s timeout) |
+| server → agent | `doors` | `AgentDoorConfig[]` = `[{ id, name, driver, config, unlockSeconds, isActive }]` — on connect and on every change (real config, secrets included) | – |
+| server → agent | `door.open` | `{ requestId, doorId, seconds }` | `{ ok: boolean, error?: string }` (8 s timeout; `error` stays in the access-service log, callers get a French summary) |
 | agent → server | `qr.scanned` | `{ doorId, code }` — QR read by a scanner wired to the agent | `AccessDecision` (server sends `door.open` itself when granted) |
-| agent → server | `device.events` | `{ doorId, events: [{ deviceUserId: string, method: 'CARD'|'FINGERPRINT', at: ISO }] }` — punches recorded by the ZKTeco terminal | `{ accepted: number }` |
-| agent → server | `members.sync` | `{}` | `[{ deviceUid: number, name: string, cardNumber: string|null, active: boolean }]` — users to enrol/disable on the terminal |
+| agent → server | `device.events` | `{ doorId, events: [{ deviceUserId: string, method: 'CARD'|'FINGERPRINT', at: ISO }] }` — punches recorded by the ZKTeco terminal | `{ accepted, duplicates, rejected }` (below) |
+| agent → server | `members.sync` | `{}` | `[{ deviceUid: number, name: string, cardNumber: string|null, active: boolean }]` — users to enrol/disable on the terminal (below) |
 | agent → server | `heartbeat` | `{ version, doors: [{ id, status: 'ok'|'error', error? }] }` | – |
+
+- `device.events` never fails the batch, and the agent only reads `accepted`. **accepted**: punches logged
+  now — a terminal user unknown to the server is logged without a member (reason `Ouvert par le terminal :
+  Utilisateur N inconnu du système.`), and a punch dated more than 5 min ahead of the server (terminal clock
+  fast) is logged at the time it arrives. **duplicates**: already logged (same door, terminal user and
+  terminal time). **rejected**: older than 7 days, malformed, a door of another agent, or beyond the first
+  500 of the batch (counted in the access-service log).
+- `members.sync` answers `[]` unless the agent drives an active ZKTECO door whose `config.syncUsers` is not
+  `false`. `cardNumber` is only set for members who may enter today. Members deleted in the back-office
+  stay listed as inactive `Membre supprimé` without a badge, so the terminals disable them.
 
 ## Rotating QR access code
 
@@ -142,6 +223,9 @@ sig  = hex(HMAC_SHA256(key = secret (utf8), message = memberCode + "." + step)).
 
 `memberCode` and `secret` come from `GET /api/me/access-key` (cache them; the code works offline).
 The server accepts `step` within ±1 period and rejects reuse of an already used step (anti-replay).
+Rotating the key (`POST /api/me/access-key/rotate`, or staff `POST /api/members/:id/access-key/rotate`)
+replaces `secret`: codes built with the old one are refused at once, even a scan already in progress, so
+the app must fetch `GET /api/me/access-key` again.
 
 ## n8n integration
 
@@ -149,12 +233,23 @@ The server accepts `step` within ±1 period and rejects reuse of an already used
 
 ```
 POST <N8N_WEBHOOK_URL>
-Authorization: Bearer <WEBHOOK_SECRET>            (n8n Webhook node → "Header Auth" credential)
+Authorization: Bearer <WEBHOOK_AUTH_TOKEN>        (n8n Webhook node → "Header Auth" credential; never the signing key)
 X-Meliora-Event: payment.received
 X-Meliora-Delivery: <uuid>                        (same as body.id, for de-duplication)
-X-Meliora-Signature: sha256=<hex HMAC-SHA256(raw body, WEBHOOK_SECRET)>
+X-Meliora-Timestamp: <unix seconds>               (time of this attempt)
+X-Meliora-Signature: sha256=<hex HMAC-SHA256(key = WEBHOOK_SECRET, message = "<X-Meliora-Timestamp>.<raw body>")>
 { "id": "<uuid>", "event": "payment.received", "occurredAt": "<ISO>", "data": { ... } }
 ```
+
+- The receiver checks the signature over the exact raw body and refuses a timestamp more than 300 s away
+  from its clock; n8n workflow 01 does both, then ignores an `id` it has already processed, so a replay
+  inside the window does nothing. Each retry gets a new timestamp and a new signature.
+- `WEBHOOK_AUTH_TOKEN` and `WEBHOOK_SECRET` are two different values: n8n saves the request headers with
+  every execution, so they only reveal the bearer token, which cannot sign events.
+- With `NODE_ENV=production` nothing is sent without both keys: the delivery fails at once (`FAILED`,
+  `lastError` `Envoi refusé en production : WEBHOOK_SECRET non configuré.`, or `WEBHOOK_AUTH_TOKEN`, or
+  both). Outside production an empty `WEBHOOK_AUTH_TOKEN` sends `WEBHOOK_SECRET` as the bearer token and an
+  empty `WEBHOOK_SECRET` sends unsigned requests (a warning is logged once).
 
 Events and `data` (types in `libs/common/src/bus/events.ts`): `member.created` (MemberCreatedEvent),
 `subscription.created` (SubscriptionCreatedEvent), `payment.received` (PaymentReceivedEvent),
@@ -185,7 +280,7 @@ and the "Freeze, promo codes, CRM leads" part of `membership.contracts.ts`. Same
 ## Public additions
 | Method | Path | Body | Result |
 |---|---|---|---|
-| POST | `/api/public/trial` | `PublicTrialRequest` = `{ firstName, lastName, phone, email?, trialDate?, interestPlanId?, message? }` — "Séance d'essai gratuite" form (rate limited) | `{ ok: true }` |
+| POST | `/api/public/trial` | `PublicTrialRequest` = `{ firstName, lastName, phone, email?, trialDate?, interestPlanId?, message? }` — "Séance d'essai gratuite" form (5/min per IP) | `{ ok: true }` |
 | GET | `/api/public/rooms` | – | `RoomDto[]` (active rooms: name, type, capacity, description) |
 
 ## Membership extras (staff)
@@ -270,16 +365,43 @@ Runs start manually, from a domain event (`TRIGGERABLE_EVENTS`, e.g. `member.cre
 | DELETE | `/api/workflows/:id` | ADMIN | – | `{ ok: true }` |
 | POST | `/api/workflows/:id/start` | staff | `{ context?, title? }` | `WorkflowRunDto` (with tasks) |
 | GET | `/api/workflow-runs` | staff | `?workflowId&status&limit` | `WorkflowRunDto[]` |
-| GET | `/api/workflow-runs/:id` | staff, COACH | – | `WorkflowRunDto` with `tasks` |
+| GET | `/api/workflow-runs/:id` | staff, COACH | – | `WorkflowRunDto` with `tasks` (COACH: only the tasks they can see, `context: null`; 404 when none) |
 | POST | `/api/workflow-runs/:id/cancel` | staff | – | `WorkflowRunDto` |
 | GET | `/api/tasks` | staff, COACH | `?status=OPEN|TODO|…&runId&assigneeRole&assigneeEmployeeId&overdueOnly&mine=true` | `TaskDto[]` (`mine`: assigned to my role, to me, or unassigned) |
 | POST | `/api/tasks` | staff, COACH | `CreateTaskRequest` (ad-hoc task, may `dependsOn` other task ids) | `TaskDto` |
-| PATCH | `/api/tasks/:id` | staff, COACH | `UpdateTaskRequest['data']` (status changes unblock dependents) | `TaskDto` |
+| PATCH | `/api/tasks/:id` | staff, COACH | `UpdateTaskRequest['data']` (status changes unblock dependents) | `TaskDto` (COACH: 404 for a task they cannot see) |
 | POST | `/api/tasks/:id/retry` | staff | – | `TaskDto` (re-run a FAILED automation) |
 | DELETE | `/api/tasks/:id` | ADMIN | – | `{ ok: true }` |
 | GET | `/api/workflows/meta` | staff | – | `{ events: string[], roles: Role[] }` (editor dropdowns) |
 
 `GET /api/dashboard/operations` also returns `workflows: WorkflowStats`.
+
+**Coach scope** — a COACH only reaches the tasks assigned to role COACH and the unassigned ones (no
+`assigneeRole`, no `assigneeEmployeeId`); ADMIN and STAFF are not scoped.
+- `PATCH /api/tasks/:id` on another task → 404 `Tâche introuvable.`, checked first (a closed run's 409 is not
+  revealed either).
+- `POST /api/tasks` and `PATCH /api/tasks/:id`: each `dependsOn` id a coach adds must be a task they can see,
+  otherwise 400 `Tâche liée introuvable.` (the same answer as for an id that does not exist). Links the task
+  already has may be sent back unchanged or removed.
+- `GET /api/workflow-runs/:id` → 404 `Exécution introuvable.` unless one of the run's tasks is theirs; the run
+  then holds only those tasks and `context: null` (`progress` still counts every task of the run).
+- 409 messages name the tasks they cannot see « tâche d'une autre équipe », e.g.
+  `Tâche bloquée par : « tâche d'une autre équipe ».`
+
+**Automation URLs** — `POST` / `PATCH /api/workflows` check each `AUTOMATION` task URL: http or https, no
+`user:password@`, at most 2048 characters (`{{placeholders}}` are kept as typed). Otherwise 400
+`Automatisation « <title> » : URL invalide.` (or `… : URL trop longue (2048 caractères maximum).`,
+`… : URL invalide : seuls les protocoles http et https sont acceptés.`,
+`… : URL invalide : retirez l'identifiant et le mot de passe de l'URL.`).
+Before each call the URL, placeholders filled, is checked again: only the n8n host and port of
+`N8N_WEBHOOK_URL`, the hosts in `AUTOMATION_ALLOWED_HOSTS` (`host` or `host:port`) and public addresses
+may be called — never loopback, private networks or cloud metadata. Redirects are not followed; the call
+times out after 10 s. The task's `output`:
+- refused destination → `FAILED` with `Destination interdite : <host>`, `Destination introuvable : <host>`
+  or a URL message such as `URL invalide.`;
+- 3xx → `FAILED` with `Redirection refusée (HTTP <status>)`;
+- otherwise `HTTP <status> — <body>` (at most 1000 characters, `…` when cut) for `text/*` and JSON
+  bodies only; any other or missing content type gives just `HTTP <status>`.
 
 ---
 
@@ -297,7 +419,8 @@ Types: `contracts/class.contracts.ts` (BookingStatus, BookingPolicy, ClassSessio
 - `DELETE /api/me/bookings/:id` → cancels; after `cancelDeadline` the booking becomes `LATE_CANCELLED`
   (a strike). Any freed place promotes the first `WAITLISTED` member (event `booking.promoted`).
 - Attendance — a GRANTED door access of the member from `CHECKIN_WINDOW_MINUTES` before the start until the
-  end marks the booking `ATTENDED` automatically; staff can also `PATCH /api/bookings/:id { status }`.
+  end marks the booking `ATTENDED` automatically; staff can also `PATCH /api/bookings/:id { status }`
+  (BOOKED, CANCELLED, ATTENDED, or NO_SHOW once the class has started).
   Bookings still `BOOKED` 15 minutes after the end become `NO_SHOW` (a strike).
 - Strikes — `NO_SHOW_LIMIT` strikes (no-show or late cancel) in 30 days block new bookings for
   `NO_SHOW_BLOCK_DAYS`. `GET /api/me/booking-standing` → `MemberBookingStanding`;

@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { DeliveryStatus, WebhookDelivery } from './webhook-delivery.entity';
+import { WebhookKeysConfig, webhookKeys } from './webhook-keys';
 import { MAX_ATTEMPTS, WEBHOOK_TIMEOUT_MS, backoffMs, buildWebhookRequest, describeError } from './webhook-request';
 
 /** A claimed row is not picked up by another worker for this long. */
@@ -17,7 +18,8 @@ const NO_URL = 'N8N_WEBHOOK_URL non configurée';
 @Injectable()
 export class WebhooksService {
   private readonly logger = new Logger(WebhooksService.name);
-  private warnedNoSecret = false;
+  /** WEBHOOK_SECRET / WEBHOOK_AUTH_TOKEN, read on the first attempt (warnings logged once). */
+  private keysConfig: WebhookKeysConfig | null = null;
 
   constructor(@InjectRepository(WebhookDelivery) private readonly deliveries: Repository<WebhookDelivery>) {}
 
@@ -75,11 +77,24 @@ export class WebhooksService {
     return Array.isArray(rows) ? (rows as { id: string }[]).map((row) => row.id) : [];
   }
 
+  private keys(): WebhookKeysConfig {
+    if (!this.keysConfig) {
+      this.keysConfig = webhookKeys(process.env);
+      this.keysConfig.warnings.forEach((warning) => this.logger.warn(warning));
+    }
+    return this.keysConfig;
+  }
+
   private async attempt(delivery: WebhookDelivery, url: string): Promise<void> {
-    const secret = process.env.WEBHOOK_SECRET ?? '';
-    if (!secret && !this.warnedNoSecret) {
-      this.warnedNoSecret = true;
-      this.logger.warn('WEBHOOK_SECRET is empty: webhooks are sent unsigned');
+    const { keys, refusal } = this.keys();
+    if (refusal) {
+      // Production without its keys: fail at once rather than send an unsigned webhook.
+      delivery.status = DeliveryStatus.FAILED;
+      delivery.nextAttemptAt = null;
+      delivery.lastError = refusal;
+      this.logger.error(`${delivery.event} ${delivery.id} not sent: ${refusal}`);
+      await this.deliveries.save(delivery);
+      return;
     }
     const { body, headers } = buildWebhookRequest(
       {
@@ -88,7 +103,7 @@ export class WebhooksService {
         occurredAt: (delivery.createdAt ?? new Date()).toISOString(),
         data: delivery.payload,
       },
-      secret,
+      keys,
     );
     delivery.attempts += 1;
     try {

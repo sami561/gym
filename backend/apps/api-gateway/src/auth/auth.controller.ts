@@ -4,6 +4,7 @@ import { Throttle } from '@nestjs/throttler';
 import {
   AuthResult,
   AuthUser,
+  ChangePasswordResult,
   CreateMemberResult,
   CurrentUser,
   PATTERNS,
@@ -35,6 +36,7 @@ export class AuthController {
     return this.rpc.send<AuthResult>(PATTERNS.auth.login, dto);
   }
 
+  /** Refresh tokens are single-use: replace the stored one with the token in the response. */
   @Public()
   @HttpCode(200)
   @Post('refresh')
@@ -55,9 +57,14 @@ export class AuthController {
     return this.rpc.send<UserDto>(PATTERNS.users.get, { id: user.id });
   }
 
+  /**
+   * Ends every other session of the user; the response is a fresh session for the caller (store it like a login).
+   * Checks the current password like a login does, so it gets the login limit (per account: authenticated route).
+   */
   @ApiBearerAuth()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Patch('password')
-  changePassword(@CurrentUser() user: AuthUser, @Body() dto: ChangePasswordDto) {
-    return this.rpc.send<{ ok: true }>(PATTERNS.auth.changePassword, { userId: user.id, ...dto });
+  changePassword(@CurrentUser() user: AuthUser, @Body() dto: ChangePasswordDto): Promise<ChangePasswordResult> {
+    return this.rpc.send<ChangePasswordResult>(PATTERNS.auth.changePassword, { userId: user.id, ...dto });
   }
 }

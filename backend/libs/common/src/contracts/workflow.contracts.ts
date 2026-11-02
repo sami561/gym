@@ -137,7 +137,8 @@ export interface WorkflowRunDto {
   workflowName: string;
   title: string;
   status: WorkflowRunStatus;
-  context: Record<string, unknown>;
+  /** Trigger payload (member data...). null for a coach, who only gets the tasks they can see. */
+  context: Record<string, unknown> | null;
   startedByName: string | null;
   startedAt: string;
   completedAt: string | null;
@@ -145,10 +146,25 @@ export interface WorkflowRunDto {
   tasks?: TaskDto[];
 }
 
+/**
+ * Caller a request is scoped to: it only reaches the tasks assigned to its role, to it
+ * (employeeId) or to nobody. The gateway sets it for coaches; ADMIN and STAFF are not scoped.
+ */
+export interface TaskViewer {
+  role: Role;
+  employeeId?: string | null;
+}
+
 export interface ListRunsRequest {
   workflowId?: string;
   status?: WorkflowRunStatus;
   limit?: number;
+}
+
+export interface GetRunRequest {
+  id: string;
+  /** Scoped caller: 404 unless one of the run's tasks is visible to it; only those tasks are returned, context is null. */
+  forUser?: TaskViewer;
 }
 
 export interface ListTasksRequest {
@@ -158,7 +174,7 @@ export interface ListTasksRequest {
   assigneeEmployeeId?: string;
   overdueOnly?: boolean;
   /** Tasks visible to this caller: assigned to their role, to them, or unassigned. */
-  forUser?: { role: Role; employeeId?: string | null };
+  forUser?: TaskViewer;
 }
 
 export interface CreateTaskRequest {
@@ -170,6 +186,8 @@ export interface CreateTaskRequest {
   dueAt?: string | null;
   dependsOn?: string[];
   actor?: Actor;
+  /** Scoped caller: every dependsOn id must be a task visible to it ("Tâche liée introuvable." otherwise). */
+  forUser?: TaskViewer;
 }
 
 export interface UpdateTaskRequest {
@@ -186,6 +204,15 @@ export interface UpdateTaskRequest {
     notes?: string | null;
   };
   actor?: Actor;
+  /** Scoped caller: 404 unless the task is visible to it; links it adds must be visible too. */
+  forUser?: TaskViewer;
+}
+
+export interface RetryTaskRequest {
+  id: string;
+  actor?: Actor;
+  /** Scoped caller: 404 unless the task is visible to it. */
+  forUser?: TaskViewer;
 }
 
 export interface WorkflowStats {

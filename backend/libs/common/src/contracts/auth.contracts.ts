@@ -37,6 +37,10 @@ export interface JwtPayload {
   type: 'access' | 'refresh';
   /** Refresh tokens only: must match the user's tokenVersion. */
   ver?: number;
+  /** Refresh tokens only: login family (refresh_sessions.id) the token belongs to. */
+  fam?: string;
+  /** Refresh tokens only: single-use token id, replaced on every refresh. */
+  jti?: string;
 }
 
 /** The authenticated caller as seen by the gateway (req.user). */
@@ -65,6 +69,9 @@ export interface ChangePasswordRequest {
   currentPassword: string;
   newPassword: string;
 }
+
+/** Every other session of the user is ended; the caller gets a fresh one (store it like a login). */
+export type ChangePasswordResult = AuthResult & { ok: true };
 
 export interface CreateUserRequest {
   email: string;

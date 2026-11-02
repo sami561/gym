@@ -114,8 +114,20 @@ export interface CancelBookingRequest {
   memberId?: string;
 }
 
+/**
+ * Statuses staff / coaches set by hand (PATCH /api/bookings/:id, bookings.setStatus). WAITLISTED comes
+ * from the booking flow and LATE_CANCELLED from a member cancelling after the deadline, never by hand.
+ */
+export const STAFF_BOOKING_STATUSES = [
+  BookingStatus.BOOKED,
+  BookingStatus.CANCELLED,
+  BookingStatus.ATTENDED,
+  BookingStatus.NO_SHOW,
+] as const;
+
 export interface SetBookingStatusRequest {
   bookingId: string;
+  /** One of STAFF_BOOKING_STATUSES; NO_SHOW only once the session has started (400 otherwise). */
   status: BookingStatus;
 }
 

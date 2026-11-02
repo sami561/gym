@@ -4,7 +4,7 @@
  */
 import { createHash } from 'node:crypto';
 import { composeTemplate } from './templates.mjs';
-import { bodyOf, events, motivation, runtime, scheduled } from './n8n-code.mjs';
+import { bodyOf, events, motivation, runtime, scheduled, webhook as webhookCheck } from './n8n-code.mjs';
 
 /** Credentials referenced by the workflows (create them in n8n with exactly these names). */
 export const CREDENTIALS = {
@@ -189,23 +189,32 @@ export const CUSTOMER_EVENTS = [
 
 function customerEvents() {
   const wf = new WorkflowBuilder('01-customer-events', 'Meliora · 01 · E-mails clients (événements)');
+  // Header Auth checks "Authorization: Bearer <WEBHOOK_AUTH_TOKEN>"; the HMAC proves the event comes
+  // from the backend and the timestamp check refuses replays (the backend re-signs each retry).
   const webhook = wf.add(
     'Événements Meliora',
     'webhook',
     2,
-    [0, 300],
+    [0, 200],
     { httpMethod: 'POST', path: 'meliora-events', authentication: 'headerAuth', responseMode: 'onReceived', options: { rawBody: true } },
     { credentials: CREDENTIALS.webhookAuth, webhookId: uuid('webhook:meliora-events') },
+  );
+  const prepare = wf.code(
+    'Préparer la vérification',
+    [240, 200],
+    webhookCheck.prepareCheck,
+    [],
+    'chaîne signée « horodatage.corps brut » et contrôle de l’horodatage (5 min)',
   );
   const signature = wf.add(
     'Calculer la signature',
     'crypto',
     2,
-    [240, 300],
-    { action: 'hmac', type: 'SHA256', binaryData: true, binaryPropertyName: 'data', dataPropertyName: 'signature', encoding: 'hex' },
+    [480, 200],
+    { action: 'hmac', type: 'SHA256', binaryData: false, value: '={{ $json.signedPayload }}', dataPropertyName: 'signature', encoding: 'hex' },
     { credentials: CREDENTIALS.signature },
   );
-  const valid = wf.add('Signature valide ?', 'if', 2.2, [480, 300], {
+  const valid = wf.add('Signature valide ?', 'if', 2.2, [720, 200], {
     conditions: condition(
       'signature-check',
       "={{ $json.headers['x-meliora-signature'] }}",
@@ -214,15 +223,23 @@ function customerEvents() {
     ),
     options: {},
   });
-  const invalid = wf.add('Signature invalide', 'stopAndError', 1, [720, 480], {
+  const invalid = wf.add('Signature invalide', 'stopAndError', 1, [960, 400], {
     errorMessage: 'Signature HMAC invalide : événement ignoré (vérifiez WEBHOOK_SECRET des deux côtés).',
   });
-  const dedupe = wf.add('Ignorer les doublons', 'removeDuplicates', 2, [720, 200], {
+  const fresh = wf.add('Horodatage récent ?', 'if', 2.2, [960, 200], {
+    conditions: condition('timestamp-check', '={{ $json.timestampValid }}', { type: 'boolean', operation: 'true', singleValue: true }, ''),
+    options: {},
+  });
+  const stale = wf.add('Horodatage refusé', 'stopAndError', 1, [1200, 400], {
+    errorMessage:
+      'Horodatage X-Meliora-Timestamp absent ou à plus de 5 minutes : événement ignoré (rejeu, ou horloge du serveur Meliora ou de n8n à régler).',
+  });
+  const dedupe = wf.add('Ignorer les doublons', 'removeDuplicates', 2, [1200, 200], {
     operation: 'removeItemsSeenInPreviousExecutions',
     dedupeValue: '={{ $json.body.id }}',
     options: { historySize: 10000 },
   });
-  const router = wf.add('Type d’événement', 'switch', 3.2, [960, 200], {
+  const router = wf.add('Type d’événement', 'switch', 3.2, [1440, 200], {
     rules: {
       values: CUSTOMER_EVENTS.map(({ event, label }) => ({
         conditions: condition(`route:${event}`, '={{ $json.body.event }}', { type: 'string', operation: 'equals' }, event),
@@ -232,14 +249,16 @@ function customerEvents() {
     },
     options: {},
   });
-  const send = wf.sendEmail('Envoyer l’e-mail', [1520, 200]);
+  const send = wf.sendEmail('Envoyer l’e-mail', [2000, 200]);
 
-  wf.chain(webhook, signature, valid);
-  wf.connect(valid, dedupe, 0);
+  wf.chain(webhook, prepare, signature, valid);
+  wf.connect(valid, fresh, 0);
   wf.connect(valid, invalid, 1);
+  wf.connect(fresh, dedupe, 0);
+  wf.connect(fresh, stale, 1);
   wf.connect(dedupe, router);
   CUSTOMER_EVENTS.forEach(({ label, fn, templates, event }, index) => {
-    const node = wf.code(`Préparer · ${label}`, [1240, -520 + index * 160], fn, templates, `e-mail « ${label} » (${event})`);
+    const node = wf.code(`Préparer · ${label}`, [1720, -520 + index * 160], fn, templates, `e-mail « ${label} » (${event})`);
     wf.connect(router, node, index);
     wf.connect(node, send);
   });

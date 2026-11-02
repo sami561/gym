@@ -4,6 +4,7 @@
  *   N8N_NODES_BASE_DIR=/path/to/node_modules/n8n-nodes-base node scripts/validate.mjs   (also checks against a real n8n-nodes-base)
  * Rendered e-mails are written to preview/ (open preview/index.html).
  */
+import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -138,7 +139,7 @@ for (const file of files) {
     }
     if (node.type === 'n8n-nodes-base.code') {
       try {
-        new AsyncFunction('$input', '$env', '$', '$getWorkflowStaticData', node.parameters.jsCode);
+        new AsyncFunction('$input', '$env', '$', '$getWorkflowStaticData', 'helpers', node.parameters.jsCode);
         checks++;
       } catch (error) {
         fail(where(`Code node "${node.name}" does not compile: ${error.message}`));
@@ -248,14 +249,23 @@ function strictCode(jsCode) {
 
 async function run(slug, name, { input = [], refs = {}, env = {}, staticData } = {}) {
   const node = codeNode(slug, name);
-  const $input = accessor(toItems(input));
+  const items = toItems(input);
+  const $input = accessor(items);
   const $ = (ref) => {
     if (!(ref in refs)) throw new Error(`$('${ref}') is not provided by the test`);
     return accessor(toItems(refs[ref]));
   };
   const store = staticData ?? {};
-  const fn = new AsyncFunction('$input', '$env', '$', '$getWorkflowStaticData', strictCode(node.parameters.jsCode));
-  const result = await fn($input, { ...F.ENV, ...env }, $, () => store);
+  // Global `helpers` of the n8n task runner; binary data kept in the item (base64), n8n's default.
+  const helpers = {
+    async getBinaryDataBuffer(index, property) {
+      const binary = items[index]?.binary?.[property];
+      if (!binary) throw new Error(`item ${index} has no binary property "${property}"`);
+      return Buffer.from(binary.data, 'base64');
+    },
+  };
+  const fn = new AsyncFunction('$input', '$env', '$', '$getWorkflowStaticData', 'helpers', strictCode(node.parameters.jsCode));
+  const result = await fn($input, { ...F.ENV, ...env }, $, () => store, helpers);
   if (!Array.isArray(result)) throw new Error(`${name} did not return an array`);
   result.forEach((item, index) => {
     if (!item || typeof item.json !== 'object') throw new Error(`${name} returned an invalid item #${index}`);
@@ -322,6 +332,77 @@ scenario('01 webhook routing covers every customer event', async () => {
   const webhook = wf.nodes.find((node) => node.type === 'n8n-nodes-base.webhook');
   check(webhook.parameters.path === 'meliora-events' && webhook.parameters.httpMethod === 'POST', '01 webhook path/method');
   check(webhook.parameters.authentication === 'headerAuth' && webhook.parameters.options.rawBody === true, '01 webhook auth/raw body');
+});
+scenario('01 webhook check: HMAC of "<timestamp>.<raw body>" and 5-minute window', async () => {
+  const slug = '01-customer-events';
+  const wf = workflows[slug];
+  const secret = randomBytes(32).toString('hex');
+  const now = Math.floor(Date.now() / 1000);
+  const body = structuredClone(F.WEBHOOK_EVENTS['payment.received'].body);
+  body.data.firstName = 'Héla'; // the HMAC covers the UTF-8 bytes
+  const prepare = async (delivery) => (await run(slug, 'Préparer la vérification', { input: [delivery] }))[0];
+  // What "Calculer la signature" (Crypto node, credential secret) then "Signature valide ?" decide.
+  const signatureOk = (item, key = secret) =>
+    item.json.headers['x-meliora-signature'] === `sha256=${F.hmacHex(key, item.json.signedPayload)}`;
+
+  const delivery = F.signedDelivery(body, { secret, timestamp: now });
+  const ok = await prepare(delivery);
+  check(ok.json.signedPayload === `${now}.${JSON.stringify(body)}`, '01 the signed string is "<timestamp>.<raw body>"');
+  check(signatureOk(ok), '01 a correctly signed event passes the HMAC check');
+  check(!signatureOk(ok, 'another-secret'), '01 an event signed with another secret fails');
+  check(ok.json.timestampValid === true, '01 a fresh timestamp is accepted');
+  check(!('authorization' in ok.json.headers) && Boolean(ok.json.headers['x-meliora-signature']), '01 bearer token dropped, signature kept');
+  check(ok.json.body.id === body.id && ok.json.body.data.firstName === 'Héla' && !ok.binary, '01 parsed body kept, raw body binary dropped');
+
+  const tampered = structuredClone(delivery);
+  tampered.binary.data.data = Buffer.from(JSON.stringify({ ...body, data: { ...body.data, amount: 1 } })).toString('base64');
+  check(!signatureOk(await prepare(tampered)), '01 a modified body fails the HMAC check');
+  // A captured request replayed later with a new timestamp no longer matches its signature.
+  const restamped = structuredClone(delivery);
+  restamped.json.headers['x-meliora-timestamp'] = String(now + 60);
+  check(!signatureOk(await prepare(restamped)), '01 a changed timestamp fails the HMAC check');
+
+  for (const [offset, accepted] of [[-299, true], [299, true], [-301, false], [301, false], [-86_400, false]]) {
+    const item = await prepare(F.signedDelivery(body, { secret, timestamp: now + offset }));
+    check(signatureOk(item) && item.json.timestampValid === accepted, `01 timestamp ${offset} s should be ${accepted ? 'accepted' : 'refused'}`);
+  }
+  for (const value of [undefined, '', 'abc', '1.5', '-1']) {
+    const item = structuredClone(delivery);
+    if (value === undefined) delete item.json.headers['x-meliora-timestamp'];
+    else item.json.headers['x-meliora-timestamp'] = value;
+    check((await prepare(item)).json.timestampValid === false, `01 timestamp ${JSON.stringify(value)} should be refused`);
+  }
+
+  // Wiring: Webhook → prepare → Crypto($json.signedPayload) → signature? → timestamp? → dedupe.
+  const byName = Object.fromEntries(wf.nodes.map((node) => [node.name, node]));
+  const crypto = byName['Calculer la signature'].parameters;
+  check(
+    crypto.action === 'hmac' && crypto.type === 'SHA256' && crypto.binaryData === false && crypto.encoding === 'hex' &&
+      crypto.value === '={{ $json.signedPayload }}' && crypto.dataPropertyName === 'signature',
+    '01 Crypto node: hex HMAC-SHA256 of $json.signedPayload into $json.signature',
+  );
+  const [signatureRule] = byName['Signature valide ?'].parameters.conditions.conditions;
+  check(
+    signatureRule.leftValue === "={{ $json.headers['x-meliora-signature'] }}" && signatureRule.rightValue === '=sha256={{ $json.signature }}',
+    '01 "Signature valide ?" compares X-Meliora-Signature with sha256=<computed HMAC>',
+  );
+  check(byName['Horodatage récent ?'].parameters.conditions.conditions[0].leftValue === '={{ $json.timestampValid }}', '01 timestamp check');
+  const next = (name, output) => (wf.connections[name]?.main?.[output] ?? []).map((target) => target.node).join();
+  for (const [from, output, to] of [
+    ['Événements Meliora', 0, 'Préparer la vérification'],
+    ['Préparer la vérification', 0, 'Calculer la signature'],
+    ['Calculer la signature', 0, 'Signature valide ?'],
+    ['Signature valide ?', 0, 'Horodatage récent ?'],
+    ['Signature valide ?', 1, 'Signature invalide'],
+    ['Horodatage récent ?', 0, 'Ignorer les doublons'],
+    ['Horodatage récent ?', 1, 'Horodatage refusé'],
+  ]) {
+    check(next(from, output) === to, `01 "${from}" output ${output} should lead to "${to}"`);
+  }
+  check(
+    ['Signature invalide', 'Horodatage refusé'].every((name) => byName[name].type === 'n8n-nodes-base.stopAndError'),
+    '01 a failed check stops the execution',
+  );
 });
 
 // 02 · birthdays

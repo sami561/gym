@@ -9,7 +9,8 @@ const bigintToNumber = {
 /**
  * Read-model of a member, fed by membership-service events (member.*, member.entitlement-changed)
  * and a periodic reconciliation, so doors keep opening even when membership-service is down.
- * Also owns the door credentials: QR access secret, RFID badge and ZKTeco user id.
+ * Also owns the door credentials: QR access secret, RFID badge and ZKTeco user id. Deleted members
+ * are kept as tombstones (removedAt) for the terminals.
  */
 @Entity('access_members')
 export class AccessMember {
@@ -52,6 +53,13 @@ export class AccessMember {
   /** Last QR step accepted, to reject replays of a code already used. */
   @Column({ type: 'bigint', nullable: true, transformer: bigintToNumber })
   lastQrStep: number | null;
+
+  /**
+   * Set when the member was deleted from membership-service: the row stays, anonymous and
+   * without badge, so the door agents keep disabling the member on the terminals.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  removedAt: Date | null;
 
   /** Last time this row was written from an event or a reconciliation. */
   @Column({ type: 'timestamptz', default: () => 'now()' })

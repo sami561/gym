@@ -1,5 +1,5 @@
 import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
-import { AccessMethod, AccessResult } from '@app/common';
+import { AccessMethod, AccessResult, AppOpenContext } from '@app/common';
 
 /**
  * Immutable history of every door attempt. Member and door names are copied at write
@@ -40,6 +40,10 @@ export class AccessLog {
 
   @Column({ type: 'varchar', length: 200, nullable: true })
   openedByName: string | null;
+
+  /** App openings only: position, distance to the gym and client address, to investigate abuse. */
+  @Column({ type: 'jsonb', nullable: true })
+  context: AppOpenContext | null;
 
   /** "<doorId>:<deviceUserId>:<ISO time>" — de-duplicates punches re-sent by a ZKTeco agent. */
   @Index({ unique: true })
