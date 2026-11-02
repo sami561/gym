@@ -21,7 +21,7 @@ Languages: French (default), English and Arabic (right-to-left). Currency: TND. 
 7. [Configuration](#configuration)
 8. [Project structure](#project-structure)
 9. [Quality and tests](#quality-and-tests)
-10. [Git workflow](#git-workflow)
+10. [Git workflow and CI/CD](#git-workflow-and-cicd)
 11. [Working with Claude Code](#working-with-claude-code)
 12. [Before production](#before-production)
 
@@ -259,8 +259,10 @@ gym/
 ├── n8n/                workflows, e-mail templates, validator
 ├── docs/API.md         API contract
 ├── docker/             Postgres init script
+├── deploy/             server setup, remote deploy script, release/deploy guide
 ├── assets/images/      gym photos and logo
-├── docker-compose.yml  whole platform
+├── docker-compose.yml  whole platform (docker-compose.deploy.yml: server override, registry images)
+├── .github/workflows/  CI, branch flow, quality checks, deploy (GitHub Actions)
 └── .claude/            Claude Code skills, settings and workflows
 ```
 
@@ -275,13 +277,26 @@ gym/
   reservations, automation API, door-agent round-trip).
 - Web: `npm run build`; mobile: `npx tsc --noEmit`, `npx expo lint`, `npx expo-doctor`; door agent:
   `npm test`; n8n: `npm run check`.
+- GitHub Actions runs all of these on every push (`CI`), plus compose validation, actionlint, commit
+  message / branch name rules, a secret scan and a dependency audit (`Quality`). Rules and the
+  definition of done: `CONTRIBUTING.md`.
 
 ---
 
-## Git workflow
-- `main` is stable. Each change gets a branch from `main` (`feat/…`, `fix/…`, `docs/…`, `chore/…`).
-- Commit each finished, verified piece with a scoped conventional message
-  (`feat(class-service): …`), push the branch right away, merge through a pull request.
+## Git workflow and CI/CD
+```
+work branch (feat/…, fix/…, docs/…) ──▶ sandbox ──▶ prod ──▶ main
+                                        deploys       deploys    records what
+                                        sandbox       production is released
+```
+- Each change gets a branch from `main`, with scoped conventional commits (`feat(class-service): …`)
+  pushed right away. It is merged into `sandbox` (deployed to the sandbox server), then promoted
+  `sandbox → prod` (deployed to production, after approval) and `prod → main`.
+- `Branch flow` refuses PRs that skip a stage and pushes to `prod`/`main` with commits that did not go
+  through the previous stage. `Deploy` runs CI first, builds the images to `ghcr.io`, deploys over SSH,
+  checks `/api/health` and rolls back automatically.
+- Server setup, GitHub secrets (never in the repo or a chat) and promotion commands:
+  [`deploy/README.md`](deploy/README.md).
 - Never commit secrets: `.env` files are ignored; `.env.example` files document the variables.
 
 ---

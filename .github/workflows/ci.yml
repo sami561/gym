@@ -1,0 +1,147 @@
+# Build and test every part of the platform on each push to a work branch or main. Pushes to sandbox
+# and prod run the same jobs inside the Deploy workflow (workflow_call), so nothing deploys unless
+# they pass. The same commands are in CONTRIBUTING.md — run them locally before pushing.
+name: CI
+
+on:
+  push:
+    branches-ignore: [sandbox, prod]
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  TZ: Africa/Tunis
+
+jobs:
+  backend:
+    name: backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test -- --ci
+      - name: Build the 11 apps
+        run: npm run build
+
+  web:
+    name: web
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - name: Unit tests
+        run: npm run test --if-present
+      - name: Typecheck and build
+        run: npm run build
+
+  mobile:
+    name: mobile
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run lint
+      - name: Unit tests
+        run: npm run test --if-present
+
+  door-agent:
+    name: door-agent
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: door-agent
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: door-agent/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  n8n:
+    name: n8n workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: n8n
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      # No dependencies: the validator knows the n8n 2.45 node types and renders every template.
+      - run: npm run check
+
+  compose:
+    name: docker compose files
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate docker-compose.yml and the server override
+        run: |
+          # Example values, plus a dummy for every empty or missing ${VAR:?} the files require.
+          sed -E 's/^([A-Z0-9_]+)=$/\1=ci-dummy/' .env.example > .env
+          grep -ohE '\$\{[A-Z0-9_]+:\?' docker-compose.yml docker-compose.deploy.yml \
+            | sed -E 's/^\$\{([A-Z0-9_]+):\?$/\1/' | sort -u \
+            | while read -r name; do grep -q "^$name=" .env || echo "$name=ci-dummy" >> .env; done
+          docker compose config --quiet
+          MELIORA_REGISTRY=ghcr.io/ci MELIORA_IMAGE_TAG=ci \
+            docker compose -f docker-compose.yml -f docker-compose.deploy.yml config --quiet
+          docker compose --profile nats --profile agent config --services
+
+  workflows:
+    name: GitHub workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: actionlint
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color
+      - name: Shell scripts
+        run: for f in deploy/*.sh; do bash -n "$f"; done

@@ -13,6 +13,7 @@ Arabic (RTL). Currency TND (3 decimals), timezone `Africa/Tunis`.
 | `door-agent/` | Runs on the gym LAN, drives ZKTeco terminals / relays | Node 20 + TypeScript, socket.io-client, zkteco-js |
 | `n8n/` | Customer e-mails, reports and content automations | n8n 2.45 workflows + HTML templates |
 | `docs/API.md` | **The contract** for REST, sockets, QR code, webhooks, automation API | — |
+| `.github/workflows/` | CI, branch flow, quality, deploy (`deploy/README.md`) | GitHub Actions, ghcr.io, SSH + compose |
 | `assets/images/` | Real gym photos and logo (use them, don't invent visuals) | — |
 
 ## How the backend fits together
@@ -43,8 +44,11 @@ docker compose up -d --build                                      # everything (
 
 ## Rules that matter here
 - Git: new branch from `main` for every task, scoped conventional commits after each verified piece,
-  push right after (meliora-git-workflow skill). Only the orchestrator runs git when agents work in
-  parallel; stage explicit paths.
+  push right after; then merge into `sandbox` (deploys the sandbox server) → `prod` (production) →
+  `main`, never skipping a stage (meliora-git-workflow skill, `deploy/README.md`). Only the
+  orchestrator runs git when agents work in parallel; stage explicit paths.
+- CI must stay green: whatever you add needs its check in `.github/workflows/ci.yml` (typecheck,
+  lint, unit tests, build). Rules and definition of done: `CONTRIBUTING.md`.
 - Verify with the real stack, not only unit tests: build, start, call through the gateway.
 - Keep `backend/libs/common/src/utils/access-code.ts` and `mobile/src/lib/accessCode.ts` identical in
   behaviour (rotating QR `MLR1.<code>.<step>.<sig>`).
