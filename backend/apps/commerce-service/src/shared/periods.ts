@@ -52,6 +52,16 @@ export function monthKeysBack(months: number, now: Date = new Date()): string[] 
   return Array.from({ length: months }, (_, index) => monthKey(addMonths(first, index)));
 }
 
+/** Month keys (YYYY-MM) from the month of `from` to the month of `to` (date-only, inclusive). */
+export function monthKeysBetween(from: string, to: string): string[] {
+  const keys: string[] = [];
+  const last = startOfMonth(parseDateOnly(to));
+  for (let month = startOfMonth(parseDateOnly(from)); month <= last; month = addMonths(month, 1)) {
+    keys.push(monthKey(month));
+  }
+  return keys;
+}
+
 export function clampInt(value: unknown, fallback: number, min: number, max: number): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;

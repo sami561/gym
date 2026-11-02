@@ -239,6 +239,8 @@ export interface CommerceKpis {
   net: number;
   /** Cost of goods sold (unit cost captured at sale time) of non-refunded sales. */
   cogs: number;
+  /** Sold items without a known unit cost (counted as 0 in cogs): cogs is incomplete when > 0. */
+  itemsWithoutCost: number;
   /** net − cogs */
   grossMargin: number;
   expenses: number;

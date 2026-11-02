@@ -2,6 +2,7 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   DailyReportRequest,
+  KpiPeriodRequest,
   ExpiredRequest,
   ExpiringRequest,
   PATTERNS,
@@ -23,6 +24,11 @@ export class StatsController {
   @MessagePattern(PATTERNS.membershipStats.analytics)
   analytics() {
     return this.stats.analytics();
+  }
+
+  @MessagePattern(PATTERNS.membershipStats.kpis)
+  kpis(@Payload() req: KpiPeriodRequest) {
+    return this.stats.kpis(req ?? {});
   }
 
   @MessagePattern(PATTERNS.membershipStats.revenue)

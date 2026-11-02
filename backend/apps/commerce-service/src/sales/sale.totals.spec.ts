@@ -3,8 +3,8 @@ import { computeSaleTotals, formatSaleNumber, mergeSaleItems } from './sale.tota
 
 describe('sale totals', () => {
   const lines = [
-    { productId: 'a', name: 'Whey 1 kg', quantity: 2, unitPrice: 89.9 },
-    { productId: 'b', name: 'Eau 1,5 L', quantity: 3, unitPrice: 1.2 },
+    { productId: 'a', name: 'Whey 1 kg', quantity: 2, unitPrice: 89.9, unitCost: 60 },
+    { productId: 'b', name: 'Eau 1,5 L', quantity: 3, unitPrice: 1.2, unitCost: null },
   ];
 
   it('computes line totals, subtotal and total to the millime', () => {
@@ -15,9 +15,13 @@ describe('sale totals', () => {
   });
 
   it('avoids floating point drift on 3-decimal prices', () => {
-    const totals = computeSaleTotals([{ productId: 'c', name: 'Barre', quantity: 3, unitPrice: 0.1 }], 0.05);
+    const totals = computeSaleTotals([{ productId: 'c', name: 'Barre', quantity: 3, unitPrice: 0.1, unitCost: 0.05 }], 0.05);
     expect(totals.subtotal).toBe(0.3);
     expect(totals.total).toBe(0.25);
+  });
+
+  it('keeps the unit cost captured at sale time on each line', () => {
+    expect(computeSaleTotals(lines, 0).items.map((item) => item.unitCost)).toEqual([60, null]);
   });
 
   it('applies a discount up to the subtotal', () => {

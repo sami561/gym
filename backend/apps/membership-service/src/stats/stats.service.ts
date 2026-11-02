@@ -9,7 +9,9 @@ import {
   ExpiredRequest,
   ExpiringItem,
   ExpiringRequest,
+  KpiPeriodRequest,
   MembersAnalytics,
+  MembershipKpis,
   MembershipSummary,
   PlanMixItem,
   Recipient,
@@ -144,6 +146,69 @@ export class StatsService {
       }),
       churnedLast30d: num(counts.churned),
       renewalRate90d: ended90 ? Math.round((num(counts.renewed90) / ended90) * 1000) / 1000 : 0,
+    };
+  }
+
+  /** Membership half of GMV / NMV: subscriptions sold in [from, to] (inclusive dates). */
+  async kpis({ from, to }: KpiPeriodRequest): Promise<MembershipKpis> {
+    const end = to ?? toDateOnly();
+    const start = from ?? `${end.slice(0, 7)}-01`;
+    const tz = process.env.TZ ?? 'Africa/Tunis';
+    const range = { start: parseDateOnly(start), end: parseDateOnly(addDays(end, 1)), today: toDateOnly(), tz };
+    const sold = await this.query(
+      `SELECT to_char(date_trunc('month', s."createdAt" AT TIME ZONE :tz), 'YYYY-MM') AS month,
+              COALESCE(SUM(s.price + s.discount), 0) AS gross,
+              COALESCE(SUM(s.discount), 0) AS discounts,
+              COALESCE(SUM(CASE WHEN s.status = 'CANCELLED' THEN s.price ELSE 0 END), 0) AS cancelled
+         FROM subscriptions s WHERE s."createdAt" >= :start AND s."createdAt" < :end GROUP BY 1`,
+      range,
+    );
+    const cash = await this.query(
+      `SELECT to_char(date_trunc('month', "paidAt" AT TIME ZONE :tz), 'YYYY-MM') AS month, SUM(amount) AS cash
+         FROM payments WHERE "paidAt" >= :start AND "paidAt" < :end GROUP BY 1`,
+      range,
+    );
+    const [recurring] = await this.query(
+      `SELECT COALESCE(SUM(s.price / GREATEST(p."durationDays", 1) * 30), 0) AS mrr,
+              COUNT(DISTINCT s."memberId") AS "activeMembers"
+         FROM subscriptions s
+         JOIN plans p ON p.id = s."planId"
+         JOIN members m ON m.id = s."memberId"
+        WHERE s.status = 'ACTIVE' AND m.status = 'ACTIVE' AND s."startDate" <= :today AND s."endDate" >= :today`,
+      range,
+    );
+
+    const months: string[] = [];
+    for (let m = startOfMonth(parseDateOnly(start)); m < range.end; m = addMonths(m, 1)) months.push(monthKey(m));
+    const r3 = (n: number) => Math.round(n * 1000) / 1000;
+    const monthly = months.map((month) => {
+      const row = sold.find((x) => x.month === month);
+      const gross = num(row?.gross);
+      const discounts = num(row?.discounts);
+      const cancelled = num(row?.cancelled);
+      return {
+        month,
+        gross: r3(gross),
+        discounts: r3(discounts),
+        cancelled: r3(cancelled),
+        net: r3(gross - discounts - cancelled),
+        cash: r3(num(cash.find((x) => x.month === month)?.cash)),
+      };
+    });
+    const sum = (key: 'gross' | 'discounts' | 'cancelled' | 'net' | 'cash') =>
+      r3(monthly.reduce((acc, m) => acc + m[key], 0));
+    const activeMembers = num(recurring.activeMembers);
+    const net = sum('net');
+    return {
+      gross: sum('gross'),
+      discounts: sum('discounts'),
+      cancelled: sum('cancelled'),
+      net,
+      cashCollected: sum('cash'),
+      mrr: r3(num(recurring.mrr)),
+      activeMembers,
+      arpu: activeMembers ? r3(net / activeMembers) : 0,
+      monthly,
     };
   }
 

@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
-import { SaleItemDto } from '@app/common';
 import { fromMillimes, toMillimes } from '../shared/money';
+import { StoredSaleItem } from './sale.entity';
 
 export interface RequestedItem {
   productId: string;
@@ -10,10 +10,12 @@ export interface RequestedItem {
 export interface PricedLine extends RequestedItem {
   name: string;
   unitPrice: number;
+  /** Product cost at sale time, null when unknown. */
+  unitCost: number | null;
 }
 
 export interface SaleTotals {
-  items: SaleItemDto[];
+  items: StoredSaleItem[];
   subtotal: number;
   discount: number;
   total: number;
@@ -52,6 +54,7 @@ export function computeSaleTotals(lines: PricedLine[], discount = 0): SaleTotals
       quantity: line.quantity,
       unitPrice: fromMillimes(unit),
       total: fromMillimes(lineTotal),
+      unitCost: line.unitCost === null ? null : fromMillimes(toMillimes(line.unitCost)),
     };
   });
   const discountMillimes = toMillimes(discount);

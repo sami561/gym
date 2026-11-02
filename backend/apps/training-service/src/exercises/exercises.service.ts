@@ -12,6 +12,7 @@ import {
   CreateExerciseRequest,
   ExerciseDto,
   IdRequest,
+  ListExercisesRequest,
   MuscleGroup,
   OkResult,
   UpdateExerciseRequest,
@@ -20,11 +21,6 @@ import { Exercise } from './exercise.entity';
 import { EXERCISE_LIBRARY } from './exercises.seed';
 import { toExerciseDto } from '../mappers';
 import { likePattern, optionalText, requireText } from '../shared/validation';
-
-export interface ListExercisesRequest {
-  search?: string;
-  muscleGroup?: MuscleGroup;
-}
 
 @Injectable()
 export class ExercisesService implements OnApplicationBootstrap {

@@ -1,7 +1,15 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import { CreateExerciseRequest, ExerciseDto, IdRequest, OkResult, PATTERNS, UpdateExerciseRequest } from '@app/common';
-import { ExercisesService, ListExercisesRequest } from './exercises.service';
+import {
+  CreateExerciseRequest,
+  ExerciseDto,
+  IdRequest,
+  ListExercisesRequest,
+  OkResult,
+  PATTERNS,
+  UpdateExerciseRequest,
+} from '@app/common';
+import { ExercisesService } from './exercises.service';
 
 @Controller()
 export class ExercisesController {

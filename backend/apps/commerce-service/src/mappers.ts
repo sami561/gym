@@ -42,7 +42,7 @@ export function toSaleDto(sale: Sale): SaleDto {
     number: sale.number,
     memberId: sale.memberId,
     memberName: sale.memberName,
-    items: sale.items,
+    items: sale.items.map(({ productId, name, quantity, unitPrice, total }) => ({ productId, name, quantity, unitPrice, total })),
     subtotal: sale.subtotal,
     discount: sale.discount,
     total: sale.total,

@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
+  CommerceKpisRequest,
   CommerceStats,
   ExpenseCategory,
   FinanceSummary,
@@ -20,7 +21,18 @@ import { Sale } from '../sales/sale.entity';
 import { Expense } from '../expenses/expense.entity';
 import { Product } from '../products/product.entity';
 import { buildFinanceMonths, emptyFinanceMonth } from './finance.utils';
-import { clampInt, gymTimezone, monthKeysBack } from '../shared/periods';
+import { CommerceKpisResult, KpiSale, computeCommerceKpis } from './kpis';
+import {
+  assertDateOnly,
+  clampInt,
+  gymTimezone,
+  monthKeysBack,
+  monthKeysBetween,
+  parseFrom,
+  parseToExclusive,
+} from '../shared/periods';
+
+const MAX_KPI_MONTHS = 60;
 
 @Injectable()
 export class FinanceService {
@@ -73,6 +85,50 @@ export class FinanceService {
         .filter((row) => row.total > 0),
       thisMonth: monthsData[monthsData.length - 1] ?? emptyFinanceMonth(keys[keys.length - 1]),
     };
+  }
+
+  /**
+   * Shop side of GMV / NMV / margin for a date range (YYYY-MM-DD, both inclusive, gym timezone).
+   * Defaults to the current month up to today.
+   */
+  async kpis(request: CommerceKpisRequest): Promise<CommerceKpisResult> {
+    const from = request.from ? assertDateOnly(request.from.slice(0, 10), 'La date de début') : toDateOnly(startOfMonth());
+    const to = request.to ? assertDateOnly(request.to.slice(0, 10), 'La date de fin') : toDateOnly();
+    if (from > to) throw new BadRequestException('La date de début doit précéder la date de fin.');
+    const months = monthKeysBetween(from, to);
+    if (months.length > MAX_KPI_MONTHS) {
+      throw new BadRequestException(`Période trop longue (${MAX_KPI_MONTHS} mois maximum).`);
+    }
+
+    const [saleRows, expenseRows] = await Promise.all([
+      this.sales.query(
+        `SELECT to_char("createdAt" AT TIME ZONE $1, 'YYYY-MM') AS month,
+                "status", "subtotal", "discount", "total", "items"
+           FROM "sales"
+          WHERE "createdAt" >= $2 AND "createdAt" < $3`,
+        [gymTimezone(), parseFrom(from), parseToExclusive(to)],
+      ) as Promise<{ month: string; status: KpiSale['status']; subtotal: string; discount: string; total: string; items: KpiSale['items'] }[]>,
+      this.expenses.query(
+        `SELECT to_char("date", 'YYYY-MM') AS month, "category", SUM("amount") AS amount
+           FROM "expenses"
+          WHERE "date" >= $1 AND "date" <= $2
+          GROUP BY 1, 2`,
+        [from, to],
+      ) as Promise<{ month: string; category: ExpenseCategory; amount: string }[]>,
+    ]);
+
+    return computeCommerceKpis(
+      months,
+      saleRows.map((row) => ({
+        month: row.month,
+        status: row.status,
+        subtotal: Number(row.subtotal),
+        discount: Number(row.discount),
+        total: Number(row.total),
+        items: row.items ?? [],
+      })),
+      expenseRows.map((row) => ({ month: row.month, category: row.category, amount: Number(row.amount) })),
+    );
   }
 
   async stats(): Promise<CommerceStats> {

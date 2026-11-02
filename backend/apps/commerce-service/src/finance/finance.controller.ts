@@ -1,7 +1,8 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import { CommerceStats, FinanceSummary, FinanceSummaryRequest, PATTERNS } from '@app/common';
+import { CommerceKpisRequest, CommerceStats, FinanceSummary, FinanceSummaryRequest, PATTERNS } from '@app/common';
 import { FinanceService } from './finance.service';
+import { CommerceKpisResult } from './kpis';
 
 @Controller()
 export class FinanceController {
@@ -10,6 +11,11 @@ export class FinanceController {
   @MessagePattern(PATTERNS.finance.summary)
   summary(@Payload() request: FinanceSummaryRequest): Promise<FinanceSummary> {
     return this.finance.summary(request ?? {});
+  }
+
+  @MessagePattern(PATTERNS.finance.kpis)
+  kpis(@Payload() request: CommerceKpisRequest): Promise<CommerceKpisResult> {
+    return this.finance.kpis(request ?? {});
   }
 
   @MessagePattern(PATTERNS.finance.stats)

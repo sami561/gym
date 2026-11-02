@@ -7,6 +7,7 @@ import {
   EventBus,
   ListSalesRequest,
   PaymentMethod,
+  ProductCategory,
   RefundSaleRequest,
   SaleDto,
   SaleStatus,
@@ -50,7 +51,9 @@ export class SalesService {
         const product = byId.get(item.productId);
         if (!product) throw new NotFoundException('Produit introuvable.');
         if (!product.isActive) throw new BadRequestException(`Produit indisponible : ${product.name}.`);
-        return { ...item, name: product.name, unitPrice: product.price };
+        // Services have no goods cost unless one is set; products without cost stay null (flagged in KPIs).
+        const unitCost = product.cost ?? (product.category === ProductCategory.SERVICE ? 0 : null);
+        return { ...item, name: product.name, unitPrice: product.price, unitCost };
       });
       const totals = computeSaleTotals(lines, Number(request.discount ?? 0));
 
