@@ -35,6 +35,9 @@ export interface AuthResult {
   user: UserDto;
 }
 
+/** PATCH /auth/password: every other session is ended; this device keeps the fresh one returned. */
+export type ChangePasswordResult = AuthResult & OkResult;
+
 export interface LoginRequest {
   email: string;
   password: string;

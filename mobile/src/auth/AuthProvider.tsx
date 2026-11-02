@@ -13,6 +13,8 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (data: RegisterRequest) => Promise<void>;
   signOut: () => Promise<void>;
+  /** The server ends every other session; this phone keeps the fresh one it returns. */
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   updateUser: (patch: Partial<UserDto>) => void;
 }
 
@@ -131,6 +133,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('signedOut');
   }, []);
 
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    const result = await authApi.changePassword({ currentPassword, newPassword });
+    // The tokens this phone held were just revoked with every other session: keep the fresh
+    // pair the way sign-in and refresh do. (A server without rotation answers { ok: true } only.)
+    if (!result?.accessToken || !result.refreshToken) return;
+    await session.save(result);
+    await storage.setJSON(STORAGE_KEYS.user, result.user);
+    setUser(result.user);
+  }, []);
+
   const updateUser = useCallback((patch: Partial<UserDto>) => {
     setUser((current) => {
       if (!current) return current;
@@ -141,8 +153,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ status, user, signIn, signUp, signOut, updateUser }),
-    [status, user, signIn, signUp, signOut, updateUser],
+    () => ({ status, user, signIn, signUp, signOut, changePassword, updateUser }),
+    [status, user, signIn, signUp, signOut, changePassword, updateUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
