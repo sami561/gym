@@ -1,7 +1,8 @@
 import { describe, expect, it } from '@jest/globals';
 import type { BookingStatus, ClassSessionDto } from '@/api/types';
 import { classSession, ms } from '@/test/fixtures';
-import { bookingTone, classAction, isBlocked, isCancellable } from './classState';
+import { appSources } from '@/test/source';
+import { bookingTone, classAction, isBlocked, isCancellable, isLateCancellation } from './classState';
 
 // Thursday 5 Nov 2026: booking for the fixture class (Tue 10 Nov, 18:00-19:00 in Tunis) is open.
 const NOW = ms('2026-11-05T10:00:00.000Z');
@@ -153,6 +154,33 @@ describe('isCancellable', () => {
     [undefined, false],
   ])('%s → %s', (status, expected) => {
     expect(isCancellable(status)).toBe(expected);
+  });
+});
+
+describe('isLateCancellation', () => {
+  // class-service (BookingsService.cancel) marks a booked place LATE_CANCELLED from cancelDeadline itself.
+  it('is late from cancelDeadline itself, like the backend, and free until the millisecond before', () => {
+    const { cancelDeadline } = classSession();
+    expect(isLateCancellation(cancelDeadline, ms(cancelDeadline) - 1)).toBe(false);
+    expect(isLateCancellation(cancelDeadline, ms(cancelDeadline))).toBe(true);
+    expect(isLateCancellation(cancelDeadline, ms(cancelDeadline) + 1)).toBe(true);
+  });
+
+  it('is free days before the class and late once it has started', () => {
+    const session = classSession();
+    expect(isLateCancellation(session.cancelDeadline, NOW)).toBe(false);
+    expect(isLateCancellation(session.cancelDeadline, ms(session.startsAt))).toBe(true);
+  });
+
+  it('decides the warning on the class screen and in the cancel confirmation, with no other comparison', () => {
+    const sources = appSources();
+    const users = sources.filter(({ text }) => /\bisLateCancellation\(/.test(text)).map(({ path }) => path);
+    expect(users).toEqual(expect.arrayContaining(['app/class/[id].tsx', 'hooks/useBookingActions.ts']));
+    // Both once compared with `now > deadline` themselves, a millisecond off the backend.
+    const inline = sources
+      .filter(({ path, text }) => path !== 'lib/classState.ts' && /\bDate(?:\.parse)?\(\s*[\w.?]*cancelDeadline\b/.test(text))
+      .map(({ path }) => path);
+    expect(inline).toEqual([]);
   });
 });
 

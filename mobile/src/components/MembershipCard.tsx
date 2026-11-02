@@ -20,6 +20,15 @@ function frozenSubscription(subscriptions: SubscriptionDto[]): SubscriptionDto |
   return subscriptions.find((s) => s.status === 'FROZEN') ?? null;
 }
 
+/**
+ * The subscription that ended last, read like the back-office member list (membership-service MembersService.list):
+ * the latest end date among those not cancelled. A cancelled one stopped early, its end date may still be ahead.
+ */
+function lastSubscription(subscriptions: SubscriptionDto[]): SubscriptionDto | null {
+  const notCancelled = subscriptions.filter((s) => s.status !== 'CANCELLED');
+  return notCancelled.sort((a, b) => b.endDate.localeCompare(a.endDate))[0] ?? null;
+}
+
 export function membershipKind(profile: MemberProfile): MembershipKind {
   if (profile.member.status === 'SUSPENDED') return 'suspended';
   if (profile.membership.active) return 'active';
@@ -29,7 +38,18 @@ export function membershipKind(profile: MemberProfile): MembershipKind {
   return profile.subscriptions.length ? 'expired' : 'none';
 }
 
-const toneByKind: Record<MembershipKind, Tone> = {
+/**
+ * The subscription the status is about (its plan, and «Expiré le» its end date once expired): running, else
+ * paused, else starting later, else the one that ended last.
+ */
+export function statusSubscription({ membership, subscriptions }: MemberProfile): SubscriptionDto | null {
+  return (
+    membership.current ?? frozenSubscription(subscriptions) ?? membership.upcoming ?? lastSubscription(subscriptions)
+  );
+}
+
+/** The status pill's colour, on the card and on the pass screen. */
+export const membershipTone: Record<MembershipKind, Tone> = {
   active: 'success',
   frozen: 'info',
   scheduled: 'info',
@@ -47,11 +67,9 @@ function daysTone(days: number | null): string {
 
 export function MembershipCard({ profile }: { profile: MemberProfile }) {
   const { t, locale } = useI18n();
-  const { member, membership, subscriptions } = profile;
+  const { member, membership } = profile;
   const kind = membershipKind(profile);
-  // The subscription the status is about: running, else paused, else starting later, else the newest one.
-  const latest =
-    membership.current ?? frozenSubscription(subscriptions) ?? membership.upcoming ?? subscriptions[0] ?? null;
+  const latest = statusSubscription(profile);
   const planName = latest?.plan.name ?? t('membership.none');
   const statusLabel = t(`membership.${kind === 'none' ? 'none' : kind}` as const);
 
@@ -69,7 +87,7 @@ export function MembershipCard({ profile }: { profile: MemberProfile }) {
           <AppText variant="overline" color={colors.steel}>
             {t('membership.title')}
           </AppText>
-          <StatusPill label={statusLabel} tone={toneByKind[kind]} />
+          <StatusPill label={statusLabel} tone={membershipTone[kind]} />
         </View>
 
         <AppText variant="display" numberOfLines={1}>
