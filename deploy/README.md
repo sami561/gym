@@ -76,6 +76,59 @@ Each environment is its own compose project (`meliora-sandbox`, `meliora-prod`) 
 volumes, databases and n8n. The gateway (`GATEWAY_BIND`) and n8n (`N8N_BIND`) listen on
 127.0.0.1 only; open the n8n editor through a tunnel: `ssh -L 5678:127.0.0.1:5678 deploy@<host>`.
 
+### A server shared with other applications
+- Take ports nobody uses (`ss -ltn`): the sandbox set above also works when another application
+  holds 4000 or 8080. Only the web port needs to be open in the cloud firewall.
+- A reverse proxy that runs in Docker cannot reach a port published by another compose project:
+  Docker isolates the networks. Put the `web` service on the proxy's network instead, or open the
+  web port in the firewall.
+- A deploy removes only the older images of its own environment (`<env>-*` tags), never the images
+  of other applications.
+- The `deploy` user is in the `docker` group: it can control every container of the host, the
+  other applications' included. Keep its key for the pipeline only.
+
+### Deploy by hand (before the pipeline is set up)
+Builds the images on the server and runs them with the same compose files as the pipeline, which
+later takes over the same project and volumes. From your clone:
+```bash
+git archive sandbox | ssh <user>@<host> 'mkdir -p /opt/meliora/sandbox && tar -x -C /opt/meliora/sandbox'
+```
+On the server, in `/opt/meliora/sandbox`: `.env` from `.env.example`, every secret from
+`openssl rand -hex 32`, `CORS_ORIGINS` = the site's address, plus
+```
+COMPOSE_PROJECT_NAME=meliora-sandbox
+COMPOSE_FILE=docker-compose.yml:docker-compose.deploy.yml
+MELIORA_REGISTRY=meliora.local      # a registry host that does not exist: never pulled from anywhere
+MELIORA_IMAGE_TAG=sandbox-<first 12 characters of the commit>
+WEB_PORT=8081
+GATEWAY_HOST_PORT=4001
+N8N_PORT=5679
+```
+then
+```bash
+for app in backend web door-agent; do docker build -t "meliora.local/meliora-$app:$(grep -m1 '^MELIORA_IMAGE_TAG=' .env | cut -d= -f2)" "$app"; done
+docker compose up -d --no-build
+bash deploy/n8n-setup.sh     # once n8n answers: curl -s 127.0.0.1:5679/healthz
+```
+When the pipeline takes over: `sudo chown -R deploy:deploy /opt/meliora/sandbox`, and leave the
+`ENV_FILE` secret empty so the server keeps this `.env` (the database volume was created with its
+`POSTGRES_PASSWORD`, and n8n encrypts its credentials with `N8N_ENCRYPTION_KEY`).
+
+### Demo data (sandbox only)
+The images do not contain `backend/scripts`; run the seed from a one-off container (the folder is
+on the server after a `git archive` upload, copy it there otherwise):
+```bash
+docker compose run --rm --no-deps -T -v "$PWD/backend/scripts:/app/scripts:ro" \
+  -e SEED_API_URL=http://api-gateway:4000 api-gateway node scripts/seed.js
+```
+It prints the demo logins and the key of the demo door agent ("PC accueil"): put that key in
+`DOOR_AGENT_KEY` and start the agent with `docker compose --profile agent up -d door-agent`.
+
+### n8n on a server
+`bash deploy/n8n-setup.sh` imports the workflows n8n does not have yet (switched off) and creates
+the three credentials whose values are in `.env`. Then, in the editor through the tunnel: create
+the owner account and the `Meliora SMTP` credential, and activate the workflows (`n8n/README.md`).
+
 ## What a deploy does on the server
 `deploy/remote-deploy.sh`, from `/opt/meliora/<env>`:
 `docker compose -f docker-compose.yml -f docker-compose.deploy.yml pull` → `up -d` → waits up to

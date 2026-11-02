@@ -154,7 +154,8 @@ jobs:
       - name: Upload the compose bundle
         run: |
           # shellcheck disable=SC2029
-          tar czf -docker-compose.yml docker-compose.deploy.yml docker n8n/workflows n8n/templates deploy/remote-deploy.sh \
+          tar czf - docker-compose.yml docker-compose.deploy.yml docker n8n/workflows n8n/templates \
+              deploy/remote-deploy.sh deploy/n8n-setup.sh \
             | ssh server "mkdir -p '$DEPLOY_DIR' && tar xzf - -C '$DEPLOY_DIR'"
 
       - name: Server environment file
