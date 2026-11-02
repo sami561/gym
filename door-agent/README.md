@@ -8,8 +8,8 @@ network has to be exposed to the internet.
  Member app ──(QR / "Ouvrir la porte")──┐
  Reception kiosk (QR scan) ─────────────┤
                                         ▼
-                           API gateway :4000 ──► access-service
-                                        ▲          (decides: membership valid? geofence?)
+                     website ──► API gateway ──► access-service
+                                        ▲          (decides: membership valid? Wi-Fi? geofence?)
            wss  /agent-socket  /agents  │
  ┌──────────────────────── gym LAN ─────┼───────────────────────────────────────┐
  │                                      │                                       │
@@ -32,8 +32,9 @@ What it does:
   each command with `{ ok, error? }`;
 - **ZKTeco**: keeps a persistent connection (automatic reconnect, keep-alive, one command at a time),
   unlocks with `CMD_UNLOCK`, mirrors the member list on the terminal every 5 min (active members
-  enrolled with their badge number, expired members **disabled** so their fingerprints are kept), and
-  forwards badge/fingerprint punches to the server (`device.events`), buffered on disk while offline;
+  enrolled with their badge number, expired and deleted members **disabled** so their fingerprints are
+  kept; the server only sends the list to an agent with an active ZKTeco door whose `syncUsers` is on),
+  and forwards badge/fingerprint punches to the server (`device.events`), buffered on disk while offline;
 - **HTTP relay**: calls any relay with an HTTP API (Shelly, ESP32, Tasmota…);
 - **local QR readers**: a USB scanner typing into the agent's terminal, or network readers posting to
   `POST /scan` — the code is checked by the server (`qr.scanned`), which then opens the door;
@@ -69,7 +70,7 @@ curl -X POST localhost:8787/scan -d 'MLR1.MEL-00001.1.0123456789abcdef0123456789
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `SERVER_URL` | — (required) | Gateway URL, e.g. `https://api.meliora-gym.tn` |
+| `SERVER_URL` | — (required) | Website URL (its nginx forwards `/agent-socket` to the gateway), e.g. `https://meliora-gym.tn` or, on the LAN, `http://192.168.1.10:8080`. With docker-compose the gateway port 4000 only listens on the server itself (the compose `door-agent` service uses `http://api-gateway:4000`); `http://<host>:4000` works against a backend started with `npm start` |
 | `AGENT_KEY` | — (required) | Agent API key from the admin |
 | `DEFAULT_DOOR_ID` | – | Door for QR codes read locally without a door id (optional with a single door) |
 | `LOCAL_SCAN_PORT` / `LOCAL_SCAN_HOST` | `0` (off) / `0.0.0.0` | Local `POST /scan` + `GET /health` endpoint |
@@ -114,6 +115,10 @@ inBio panels.
   "headers": { "X-Token": "…" }, "body": { "seconds": "{seconds}" }, "timeoutMs": 3000 }
 ```
 
+The admin checks a relay config when it is saved (http or https URL without `user:password@`, use
+`basicAuth`; method GET, POST or PUT; at most 20 headers; `timeoutMs` 500–30000) and shows its secrets
+(header values, passwords, tokens) as `********`; the agent still receives the real values.
+
 **SIMULATOR** — `{}`: logs the opening. For demos and doors not wired yet.
 
 ## How a member gets in
@@ -122,7 +127,7 @@ inBio panels.
 |---|---|---|
 | Badge / fingerprint on the ZKTeco terminal | the terminal (members enrolled by the sync; expired ones disabled) | no — punches are sent later |
 | QR code from the app, read by a local scanner | access-service (`qr.scanned`) | yes |
-| "Ouvrir la porte" in the app (geofenced) | access-service → `door.open` | yes |
+| "Ouvrir la porte" in the app (doors that allow it; gym Wi-Fi if configured, geofence) | access-service → `door.open` | yes |
 | Reception: scan in the admin, or manual "Ouvrir" | access-service → `door.open` | yes |
 
 When the server is unreachable, QR codes are refused with a message asking to use the badge or
