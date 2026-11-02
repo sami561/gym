@@ -2,7 +2,7 @@
 # One image for every NestJS microservice; the compose file picks the app with
 # `command: node dist/apps/<app>/main.js`.
 
-FROM node:20.19-alpine AS deps
+FROM node:20.20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -13,12 +13,12 @@ COPY libs ./libs
 COPY apps ./apps
 RUN npm run build
 
-FROM node:20.19-alpine AS prod-deps
+FROM node:20.20-alpine AS prod-deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 
-FROM node:20.19-alpine AS runtime
+FROM node:20.20-alpine AS runtime
 RUN apk add --no-cache tzdata
 ENV NODE_ENV=production \
     TZ=Africa/Tunis
