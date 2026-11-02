@@ -1,6 +1,6 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import { Actor, IdRequest, ListRunsRequest, PATTERNS, WorkflowRunDto } from '@app/common';
+import { Actor, GetRunRequest, IdRequest, ListRunsRequest, PATTERNS, WorkflowRunDto } from '@app/common';
 import { WorkflowEngine } from '../engine/workflow-engine.service';
 import { RunsService } from './runs.service';
 
@@ -17,8 +17,8 @@ export class RunsController {
   }
 
   @MessagePattern(PATTERNS.workflowRuns.get)
-  get(@Payload() request: IdRequest): Promise<WorkflowRunDto> {
-    return this.runs.get(request?.id);
+  get(@Payload() request: GetRunRequest): Promise<WorkflowRunDto> {
+    return this.runs.get({ id: request?.id, forUser: request?.forUser });
   }
 
   @MessagePattern(PATTERNS.workflowRuns.cancel)

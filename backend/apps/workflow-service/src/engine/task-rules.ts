@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
-import { Role, TaskStatus, TaskType, WorkflowTaskDef } from '@app/common';
+import { Role, TaskStatus, TaskType, TaskViewer, WorkflowRunDto, WorkflowTaskDef } from '@app/common';
 import { fillTemplate } from './templating';
 
 export const FINISHED_STATUSES: TaskStatus[] = [TaskStatus.DONE, TaskStatus.SKIPPED];
@@ -149,13 +149,44 @@ export function assertTransition({ type, from, to, blockingTitles }: TransitionC
   }
 }
 
+interface Assignment {
+  assigneeRole: Role | null;
+  assigneeEmployeeId: string | null;
+}
+
 /** Visibility rule of the task board: ADMIN sees everything, others their role, themselves or unassigned. */
-export function isVisibleTo(
-  task: { assigneeRole: Role | null; assigneeEmployeeId: string | null },
-  user: { role: Role; employeeId?: string | null },
-): boolean {
+export function isVisibleTo(task: Assignment, user: TaskViewer): boolean {
   if (user.role === Role.ADMIN) return true;
   if (task.assigneeRole === null && task.assigneeEmployeeId === null) return true;
   if (task.assigneeRole === user.role) return true;
   return Boolean(user.employeeId) && task.assigneeEmployeeId === user.employeeId;
+}
+
+/**
+ * Whether a task may depend on `dependency`. A scoped viewer (coach) only links tasks they
+ * can see, but keeps the links the task already has (a template may link it to another
+ * team's task). Without a viewer (ADMIN, STAFF) anything goes.
+ */
+export function canLinkTo(dependency: Assignment & { id: string }, viewer?: TaskViewer, linked: string[] = []): boolean {
+  return !viewer || linked.includes(dependency.id) || isVisibleTo(dependency, viewer);
+}
+
+/** Stands for the tasks a scoped viewer cannot see in error messages. */
+export const HIDDEN_TASK_TITLE = "tâche d'une autre équipe";
+
+/** Titles to name in an error message: a scoped viewer never learns those of tasks they cannot see. */
+export function titlesFor(tasks: (Assignment & { title: string })[], viewer?: TaskViewer): string[] {
+  if (!viewer) return tasks.map((task) => task.title);
+  return [...new Set(tasks.map((task) => (isVisibleTo(task, viewer) ? task.title : HIDDEN_TASK_TITLE)))];
+}
+
+/**
+ * What a scoped viewer may read of a run: the tasks they can see and no context (the trigger
+ * payload holds member data). Null when none of the run's tasks is theirs. `progress` still
+ * counts the whole run. Without a viewer, or for an ADMIN, the run is returned as is.
+ */
+export function runForViewer(run: WorkflowRunDto, viewer?: TaskViewer): WorkflowRunDto | null {
+  if (!viewer || viewer.role === Role.ADMIN) return run;
+  const tasks = (run.tasks ?? []).filter((task) => isVisibleTo(task, viewer));
+  return tasks.length ? { ...run, context: null, tasks } : null;
 }

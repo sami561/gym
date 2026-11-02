@@ -1,14 +1,18 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { Role, TaskStatus, TaskType, WorkflowTaskDef } from '@app/common';
+import { Role, TaskDto, TaskStatus, TaskType, WorkflowRunDto, WorkflowRunStatus, WorkflowTaskDef } from '@app/common';
 import {
+  HIDDEN_TASK_TITLE,
   InstantiatedTask,
   activate,
   assertTransition,
+  canLinkTo,
   instantiateTasks,
   isOverdue,
   isRunComplete,
   isVisibleTo,
   planUnblock,
+  runForViewer,
+  titlesFor,
 } from './task-rules';
 
 const NOW = new Date('2026-11-02T08:00:00.000Z');
@@ -140,5 +144,80 @@ describe('task rules', () => {
     expect(isVisibleTo(personal, { role: Role.STAFF, employeeId: 'emp-8' })).toBe(false);
     expect(isVisibleTo(personal, { role: Role.STAFF })).toBe(false);
     expect(isVisibleTo(unassigned, { role: Role.COACH })).toBe(true);
+  });
+
+  describe('scoped viewer (coach)', () => {
+    const coach = { role: Role.COACH };
+    const staffTask = { id: 'staff-1', title: 'Appel de bienvenue à Amira', assigneeRole: Role.STAFF, assigneeEmployeeId: null };
+    const otherStaffTask = { ...staffTask, id: 'staff-2', title: 'Encaisser le paiement' };
+    const coachTask = { id: 'coach-1', title: 'Programme initial', assigneeRole: Role.COACH, assigneeEmployeeId: null };
+    const unassigned = { id: 'hook-1', title: 'Prévenir n8n', assigneeRole: null, assigneeEmployeeId: null };
+
+    it('links only the tasks a coach can see, but keeps the links the task already had', () => {
+      expect(canLinkTo(coachTask, coach)).toBe(true);
+      expect(canLinkTo(unassigned, coach)).toBe(true);
+      expect(canLinkTo(staffTask, coach)).toBe(false);
+      expect(canLinkTo(staffTask, coach, ['staff-1'])).toBe(true);
+      expect(canLinkTo(staffTask, coach, ['staff-2'])).toBe(false);
+      // ADMIN and STAFF are not scoped: no viewer, anything goes.
+      expect(canLinkTo(staffTask)).toBe(true);
+    });
+
+    it('never names a task the coach cannot see in an error message', () => {
+      expect(titlesFor([staffTask, coachTask])).toEqual(['Appel de bienvenue à Amira', 'Programme initial']);
+      expect(titlesFor([staffTask, coachTask, otherStaffTask], coach)).toEqual([HIDDEN_TASK_TITLE, 'Programme initial']);
+      expect(() =>
+        assertTransition({ type: TaskType.MANUAL, from: TaskStatus.BLOCKED, to: TaskStatus.DONE, blockingTitles: titlesFor([staffTask], coach) }),
+      ).toThrow(new ConflictException("Tâche bloquée par : « tâche d'une autre équipe »."));
+    });
+
+    const taskDto = (id: string, assigneeRole: Role | null): TaskDto => ({
+      id,
+      runId: 'run-1',
+      runTitle: 'Onboarding — Amira',
+      workflowId: 'wf-1',
+      defId: id,
+      title: id,
+      description: null,
+      type: TaskType.MANUAL,
+      status: TaskStatus.TODO,
+      assigneeRole,
+      assigneeEmployeeId: null,
+      assigneeName: null,
+      dependsOn: [],
+      dueAt: null,
+      isOverdue: false,
+      startedAt: null,
+      completedAt: null,
+      completedByName: null,
+      notes: null,
+      output: null,
+      createdAt: NOW.toISOString(),
+    });
+    const runOf = (tasks: TaskDto[]): WorkflowRunDto => ({
+      id: 'run-1',
+      workflowId: 'wf-1',
+      workflowName: 'Onboarding',
+      title: 'Onboarding — Amira',
+      status: WorkflowRunStatus.RUNNING,
+      context: { firstName: 'Amira', phone: '+216 20 000 000' },
+      startedByName: null,
+      startedAt: NOW.toISOString(),
+      completedAt: null,
+      progress: { done: 1, total: tasks.length },
+      tasks,
+    });
+
+    it('shows a coach only their tasks of a run, without the context, and nothing when none is theirs', () => {
+      const run = runOf([taskDto('call', Role.STAFF), taskDto('program', Role.COACH), taskDto('hook', null), taskDto('pay', Role.ADMIN)]);
+      expect(runForViewer(run)).toBe(run);
+      expect(runForViewer(run, { role: Role.ADMIN })).toBe(run);
+      const scoped = runForViewer(run, coach);
+      expect(scoped?.tasks?.map((task) => task.id)).toEqual(['program', 'hook']);
+      expect(scoped).toMatchObject({ id: 'run-1', title: 'Onboarding — Amira', context: null, progress: { done: 1, total: 4 } });
+      expect(run.context).toEqual({ firstName: 'Amira', phone: '+216 20 000 000' });
+      expect(runForViewer(runOf([taskDto('call', Role.STAFF), taskDto('pay', Role.ADMIN)]), coach)).toBeNull();
+      expect(runForViewer(runOf([]), coach)).toBeNull();
+    });
   });
 });

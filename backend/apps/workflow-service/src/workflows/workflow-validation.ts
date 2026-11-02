@@ -9,6 +9,7 @@ import {
   WorkflowTaskDef,
   WorkflowTrigger,
   WorkflowTriggerType,
+  parseOutboundUrl,
 } from '@app/common';
 import { autoLayout, findCycle } from '../engine/graph';
 import { quoteTitles } from '../engine/task-rules';
@@ -62,14 +63,12 @@ export function normalizeTrigger(trigger: WorkflowTrigger | undefined): Workflow
 }
 
 function normalizeAutomation(title: string, automation: TaskAutomation | null | undefined): TaskAutomation {
-  let url: URL | null = null;
+  // http(s) only, no user:password, 2048 characters at most. Where the URL leads is checked
+  // before each call (AutomationRunner), once its {{placeholders}} are filled.
   try {
-    url = automation?.url ? new URL(automation.url.trim()) : null;
-  } catch {
-    url = null;
-  }
-  if (!url || !['http:', 'https:'].includes(url.protocol)) {
-    throw new BadRequestException(`L'automatisation « ${title} » doit avoir une URL http(s) valide.`);
+    parseOutboundUrl(automation?.url);
+  } catch (err) {
+    throw new BadRequestException(`Automatisation « ${title} » : ${(err as Error).message}`);
   }
   if (automation?.body !== undefined && automation.body !== null && !isPlainObject(automation.body)) {
     throw new BadRequestException(`Le corps de l'automatisation « ${title} » doit être un objet JSON.`);
