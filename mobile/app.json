@@ -1,0 +1,61 @@
+{
+  "expo": {
+    "name": "Meliora Gym",
+    "slug": "meliora-gym",
+    "scheme": "meliora",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0B0B0C",
+    "primaryColor": "#D7141A",
+    "description": "Application membre de Meliora Gym (Sousse) : abonnement, pass QR, ouverture de porte, réservation des cours.",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "tn.meliora.gym"
+    },
+    "android": {
+      "package": "tn.meliora.gym",
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/android-icon-foreground.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF"
+        }
+      ],
+      "expo-image",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Meliora Gym utilise votre position uniquement pour vérifier que vous êtes devant la salle avant d'ouvrir la porte."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#D7141A",
+          "defaultChannel": "default"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
