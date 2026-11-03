@@ -138,3 +138,64 @@ describe('api() and refresh tokens (single-use, rotated on every refresh)', () =
     expect(session.hasTokens()).toBe(false);
   });
 });
+
+describe('api() with a multipart body (photo upload)', () => {
+  it('sends the FormData as is, leaving its Content-Type (boundary) to fetch', async () => {
+    let init: RequestInit | undefined;
+    globalThis.fetch = (async (_url: string | URL, options?: RequestInit) => {
+      init = options;
+      return response(200, { id: 'member-1' });
+    }) as typeof fetch;
+    await session.save(authResult('current'));
+    const form = new FormData();
+
+    await expect(api('/me/photo', { method: 'PUT', form })).resolves.toEqual({ id: 'member-1' });
+    expect(init?.method).toBe('PUT');
+    expect(init?.body).toBe(form);
+    expect(init?.headers).toEqual({ Accept: 'application/json', Authorization: 'Bearer access-current' });
+  });
+
+  it('sends it again with the refreshed token after a 401', async () => {
+    session.setHandlers({ onSessionExpired: jest.fn(), onRefreshed: jest.fn() });
+    refreshReply = () => response(200, authResult('rotated'));
+    const bodies: unknown[] = [];
+    const recordedFetch = globalThis.fetch;
+    globalThis.fetch = ((url: string | URL, init?: RequestInit) => {
+      if (!String(url).endsWith('/auth/refresh')) bodies.push(init?.body);
+      return recordedFetch(url, init);
+    }) as typeof fetch;
+    const form = new FormData();
+
+    await api('/me/photo', { method: 'PUT', form });
+    expect(sent).toEqual(['/me/photo Bearer access-old', '/auth/refresh refresh-old', '/me/photo Bearer access-rotated']);
+    expect(bodies).toHaveLength(2);
+    expect(bodies.every((body) => body === form)).toBe(true);
+  });
+});
+
+describe('session.accessToken and session.subscribe (photo requests made outside api())', () => {
+  it('tell subscribers about every token change until they unsubscribe', async () => {
+    const seen: (string | null)[] = [];
+    const unsubscribe = session.subscribe(() => seen.push(session.accessToken()));
+
+    await session.save(authResult('signed-in'));
+    await session.clear();
+    unsubscribe();
+    await session.save(authResult('later'));
+
+    expect(seen).toEqual(['access-signed-in', null]);
+    expect(session.accessToken()).toBe('access-later');
+  });
+
+  it('give the refreshed token once api() has rotated it', async () => {
+    session.setHandlers({ onSessionExpired: jest.fn(), onRefreshed: jest.fn() });
+    refreshReply = () => response(200, authResult('rotated'));
+    const seen: (string | null)[] = [];
+    const unsubscribe = session.subscribe(() => seen.push(session.accessToken()));
+
+    await api('/me');
+    unsubscribe();
+
+    expect(seen).toEqual(['access-rotated']);
+  });
+});

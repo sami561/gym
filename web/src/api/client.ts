@@ -103,6 +103,7 @@ export type Query = Record<string, string | number | boolean | null | undefined>
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+  /** Sent as JSON, or as is for a FormData (multipart: the browser writes the content type and boundary). */
   body?: unknown;
   query?: Query;
   /** Send the bearer token (default true). */
@@ -139,19 +140,24 @@ async function toApiError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, messages);
 }
 
-export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
+/**
+ * Sends the request with the access token; on a 401 refreshes the session once (single-flight) and
+ * replays it. Resolves the successful response, rejects with an ApiError.
+ */
+async function request(path: string, options: RequestOptions): Promise<Response> {
   const { method = 'GET', body, query, auth = true, signal } = options;
   const url = buildUrl(path, query);
+  const form = body instanceof FormData ? body : null;
 
   const send = () =>
     fetch(url, {
       method,
       signal,
       headers: {
-        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...(body !== undefined && !form ? { 'Content-Type': 'application/json' } : {}),
         ...(auth && accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: form ?? (body !== undefined ? JSON.stringify(body) : undefined),
     });
 
   let res: Response;
@@ -167,9 +173,20 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   }
 
   if (!res.ok) throw await toApiError(res);
+  return res;
+}
+
+export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const res = await request(path, options);
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
+}
+
+/** Binary answer (member photos), with the same token, refresh and errors as api(). */
+export async function apiBlob(path: string, options: Omit<RequestOptions, 'body'> = {}): Promise<Blob> {
+  const res = await request(path, options);
+  return res.blob();
 }
 
 export function errorMessage(error: unknown): string {

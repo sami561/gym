@@ -123,6 +123,8 @@ export interface MemberDto {
   notes: string | null;
   status: MemberStatus;
   joinedAt: string;
+  /** ISO instant of the last photo upload, null without photo; load `…/photo?v=<Date.parse(it)>` (docs/API.md, Member photos). */
+  photoUpdatedAt: string | null;
 }
 
 export interface PlanDto {

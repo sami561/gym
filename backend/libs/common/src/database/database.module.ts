@@ -1,6 +1,8 @@
 import { DynamicModule } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { LoggerOptions } from 'typeorm';
 import { env, envBool, envInt } from '../config/env';
+import { RedactingQueryLogger } from './query-logger';
 
 /**
  * Database-per-service: each service connects to its own Postgres database
@@ -12,6 +14,7 @@ export function databaseModule(prefix: string): DynamicModule {
   return TypeOrmModule.forRootAsync({
     useFactory: () => {
       const url = process.env[`${key}_DATABASE_URL`];
+      const logging: LoggerOptions = envBool('DB_LOGGING', false) ? ['query', 'error', 'warn'] : ['error'];
       return {
         type: 'postgres' as const,
         ...(url
@@ -25,7 +28,9 @@ export function databaseModule(prefix: string): DynamicModule {
             }),
         autoLoadEntities: true,
         synchronize: envBool('DB_SYNCHRONIZE', true),
-        logging: envBool('DB_LOGGING', false) ? ['query', 'error', 'warn'] : ['error'],
+        logging,
+        // Query parameters are logged on errors (and with DB_LOGGING): never the bytes of a photo.
+        logger: new RedactingQueryLogger(logging),
         retryAttempts: 20,
         retryDelay: 2000,
       };

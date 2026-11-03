@@ -70,6 +70,7 @@ export function memberProfile(
       notes: null,
       status: 'ACTIVE',
       joinedAt: '2026-01-15T10:00:00.000Z',
+      photoUpdatedAt: null,
       ...overrides.member,
     },
     membership: {

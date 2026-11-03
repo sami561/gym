@@ -18,6 +18,13 @@ lazy-loaded with its own dictionary). Background and structure: `README.md`.
   dates through `src/lib/format.ts`.
 - Charts (`src/admin/charts/`): dataviz rules — validated palette slots, table view on every chart,
   no dual axis.
+- Member photos (`src/admin/photos/`, `src/lib/photo.ts`, `src/lib/camera.ts`): never an `<img src>`
+  to the API. `MemberAvatar` fetches the JPEG with the token (`apiBlob`) into the react-query cache
+  (`memberPhotoKey`) and shows it through an object URL it revokes, else initials. `photoUpdatedAt`
+  null = no request, an ISO = `?v=` (immutable), undefined = latest (access logs, scanner; 404 =
+  none). Uploads go through `preparePhoto` / `captureFrame` (upright, centre square, 600×600 JPEG
+  ≤ 512 KB) as the multipart field `photo` (`api()` sends a `FormData` as is). The webcam needs
+  https or localhost.
 - The three.js ceiling (`src/landing/three/`) stays lazy, paused off-screen, with the static fallback.
 - Use the gym's real photos in `public/images/` (copies of `assets/images/`); don't invent visuals.
 - Tests: Vitest, `*.test.ts(x)` next to the code. DOM tests opt into jsdom with a docblock and

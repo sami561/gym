@@ -6,7 +6,8 @@ progression, coaching), historique et profil. Trois langues : français (par dé
 (mise en page de droite à gauche).
 
 Stack : Expo SDK 58 · React Native 0.88 · Expo Router (routes dans `src/app/`) · TanStack Query ·
-Reanimated 4 · expo-secure-store / location / notifications / brightness / haptics / localization.
+Reanimated 4 · expo-secure-store / location / notifications / brightness / haptics / localization /
+image-picker / image-manipulator.
 
 ## Prérequis
 
@@ -56,7 +57,14 @@ back-office. Les comptes staff (ADMIN / STAFF / COACH) sont refusés : l'app est
 
 - **Pass QR** — code `MLR1.<memberCode>.<step>.<sig>` recalculé toutes les 30 s *hors ligne* à partir de la
   clé `GET /api/me/access-key` (gardée dans le trousseau sécurisé), comme décrit dans `docs/API.md`
-  (`src/lib/accessCode.ts`). La luminosité de l'écran passe au maximum tant que le pass est affiché.
+  (`src/lib/accessCode.ts`). La luminosité de l'écran passe au maximum tant que le pass est affiché. Le pass
+  montre aussi la photo du membre (ses initiales sans photo) pour le contrôle d'identité à l'accueil.
+- **Photo du membre** — Profil → « Ajouter / Changer ma photo » : appareil photo (autorisation demandée ; refusée →
+  message et bouton « Ouvrir les réglages ») ou galerie (sélecteur du système, sans autorisation), recadrage carré,
+  puis 600×600 en JPEG qualité 0,85, abaissée si le fichier dépasse 512 Ko (le réencodage retire l'EXIF et la
+  position GPS), et `PUT /api/me/photo`. Affichage via `GET /api/me/photo?v=…` avec le jeton, gardée en cache par
+  version, cache vidé à la déconnexion. Textes des autorisations (français) : plugin `expo-image-picker` dans
+  `app.json` (micro bloqué) ; ils ne s'appliquent que dans un *development build* ou un build EAS, pas dans Expo Go.
 - **Ouvrir la porte** — demande la position (premier plan uniquement) puis `POST /api/me/doors/:id/open` ;
   le serveur vérifie la distance à la salle (géorepérage) et l'abonnement. Réponse : porte ouverte ou motif du refus.
 - **Cours** — places restantes, liste d'attente (avec ma position), fenêtre de réservation (« Réservations ouvertes le … »,
@@ -131,6 +139,7 @@ src/
     sign-in.tsx, register.tsx
     (tabs)/            Accueil · Cours · Pass · Training · Profil
     door.tsx           modale « Ouvrir la porte »
+    change-photo.tsx   modale « Ma photo » (appareil photo, galerie, suppression)
     class/[id].tsx     détail d'un cours (places, liste d'attente, annulation)
     program/[id].tsx   programme d'entraînement
     history.tsx, edit-profile.tsx, change-password.tsx, add-measurement.tsx
@@ -139,7 +148,7 @@ src/
   components/          kit UI (Button, Card, ClassCard, SpotPicker, LineChart, CountdownRing…)
   hooks/               requêtes TanStack Query, clé d'accès, push, actions de réservation
   i18n/                fr.ts (référence), en.ts, ar.ts
-  lib/                 code QR, formats (TND, dates), stockage sécurisé, état d'un cours
+  lib/                 code QR, formats (TND, dates), stockage sécurisé, état d'un cours, photo du membre
   theme/               couleurs Meliora (noir, acier, rouge #D7141A), typo, espacements
 assets/images/         photos et logo de la salle
 ```

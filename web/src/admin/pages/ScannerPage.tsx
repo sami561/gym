@@ -10,6 +10,7 @@ import { Card, EmptyState, PageHeader } from '../../components/ui/Card';
 import { Input, Select } from '../../components/ui/Field';
 import { formatDate } from '../../lib/format';
 import { useI18n } from '../../i18n';
+import { MemberAvatar } from '../photos/MemberAvatar';
 
 const DOOR_KEY = 'meliora.scanner.door';
 const READER_ID = 'meliora-qr-reader';
@@ -149,12 +150,24 @@ export function ScannerPage() {
                   initial={{ opacity: 0, scale: 0.96 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0 }}
-                  className={`absolute inset-0 flex flex-col items-center justify-center gap-4 p-8 text-center text-white ${granted ? 'bg-[#0a7a0a]' : 'bg-[#b3261e]'}`}
+                  className={`absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center text-white sm:gap-4 sm:p-8 ${granted ? 'bg-[#0a7a0a]' : 'bg-[#b3261e]'}`}
                   role="status"
                   aria-live="assertive"
                 >
-                  {granted ? <CircleCheck className="size-24" aria-hidden /> : <CircleX className="size-24" aria-hidden />}
-                  <p className="type-display text-5xl">{granted ? t('Bienvenue') : t('Accès refusé')}</p>
+                  {decision?.member ? (
+                    // The member's photo, large: the desk compares it with the face of the person scanning.
+                    <span className="relative mb-1 sm:mb-2">
+                      <MemberAvatar memberId={decision.member.id} name={decision.member.fullName} photoUpdatedAt={undefined} size="xl" tone="verdict" decorative />
+                      <span className={`absolute -end-3 -bottom-3 rounded-full bg-white p-0.5 ${granted ? 'text-[#0a7a0a]' : 'text-[#b3261e]'}`} aria-hidden>
+                        {granted ? <CircleCheck className="size-9 sm:size-11" /> : <CircleX className="size-9 sm:size-11" />}
+                      </span>
+                    </span>
+                  ) : granted ? (
+                    <CircleCheck className="size-24" aria-hidden />
+                  ) : (
+                    <CircleX className="size-24" aria-hidden />
+                  )}
+                  <p className={`type-display ${decision?.member ? 'text-4xl sm:text-5xl' : 'text-5xl'}`}>{granted ? t('Bienvenue') : t('Accès refusé')}</p>
                   {decision?.member && <p className="text-2xl font-semibold">{decision.member.fullName}</p>}
                   {granted && decision?.member?.validUntil && <p className="text-white/85">{t('Abonnement valable jusqu’au {date}', { date: formatDate(decision.member.validUntil) })}</p>}
                   {!granted && <p className="max-w-md text-lg text-white/90">{decision?.reason ?? (result && 'error' in result ? result.error : '')}</p>}

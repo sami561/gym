@@ -39,6 +39,36 @@ export interface MemberDto {
   notes: string | null;
   status: MemberStatus;
   joinedAt: string;
+  /** ISO instant of the last photo upload, null without photo; clients load `…/photo?v=<Date.parse(it)>`. */
+  photoUpdatedAt: string | null;
+}
+
+/** JPEG only, at most MEMBER_PHOTO_MAX_BYTES; the server strips the metadata segments (docs/API.md, Member photos). */
+export const MEMBER_PHOTO_MAX_BYTES = 512 * 1024;
+
+/** The refusals of docs/API.md (Member photos): the same text from the gateway and from membership-service. */
+export const MEMBER_PHOTO_ERRORS = {
+  /** 400: no file in the field `photo`, or a multipart body that cannot be read. */
+  missing: 'Ajoutez une photo (champ « photo »).',
+  /** 400: the bytes are not a well-formed JPEG, whatever the declared type. */
+  notJpeg: 'La photo doit être une image JPEG.',
+  /** 413: more than MEMBER_PHOTO_MAX_BYTES. */
+  tooLarge: 'La photo dépasse 512 Ko.',
+  /** 404 on GET: the member exists but has no photo. */
+  none: 'Aucune photo.',
+} as const;
+
+/** members.photo.set — `data` is the uploaded file, base64. */
+export interface SetMemberPhotoRequest {
+  id: string;
+  data: string;
+}
+
+/** members.photo.get — the stored (cleaned) JPEG, base64. */
+export interface MemberPhoto {
+  data: string;
+  contentType: 'image/jpeg';
+  updatedAt: string;
 }
 
 export interface PlanDto {

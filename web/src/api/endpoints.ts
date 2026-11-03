@@ -1,4 +1,4 @@
-import { api, session } from './client';
+import { api, apiBlob, session } from './client';
 import type {
   AccessDecision,
   AccessLogDto,
@@ -101,6 +101,16 @@ export const membersApi = {
     api<MemberAccessInfo>(`/api/members/${id}/card`, { method: 'PUT', body: { cardNumber } }),
   rotateAccessKey: (id: string) =>
     api<{ ok: true; rotatedAt: string }>(`/api/members/${id}/access-key/rotate`, { method: 'POST' }),
+  /** JPEG blob; `version` = Date.parse(photoUpdatedAt) makes the answer immutable. 404 = no photo. */
+  photo: (id: string, version?: number, signal?: AbortSignal) =>
+    apiBlob(`/api/members/${id}/photo`, { query: { v: version }, signal }),
+  /** A JPEG ≤ 512 KB prepared by src/lib/photo.ts, sent as the multipart field `photo`. */
+  setPhoto: (id: string, photo: Blob) => {
+    const form = new FormData();
+    form.append('photo', photo, 'photo.jpg');
+    return api<MemberDto>(`/api/members/${id}/photo`, { method: 'PUT', body: form });
+  },
+  removePhoto: (id: string) => api<MemberDto>(`/api/members/${id}/photo`, { method: 'DELETE' }),
 };
 
 export const subscriptionsApi = {

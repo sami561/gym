@@ -15,6 +15,7 @@ import { Pagination } from '../../../components/ui/Pagination';
 import { Tabs } from '../../../components/ui/Tabs';
 import { useToast } from '../../../components/ui/Toast';
 import { formatDate, formatTND, fullName, PAYMENT_METHOD_LABELS } from '../../../lib/format';
+import { MemberAvatar } from '../../photos/MemberAvatar';
 import { PromoField, usePromoQuote } from './PromoField';
 import { useI18n, type TKey } from '../../../i18n';
 
@@ -270,9 +271,12 @@ export function MembersPage() {
       key: 'name',
       header: 'Membre',
       cell: (m) => (
-        <div className="min-w-0">
-          <p className="font-medium text-fg">{fullName(m)}</p>
-          <p className="text-xs text-muted">{m.memberCode}</p>
+        <div className="flex min-w-0 items-center gap-3">
+          <MemberAvatar memberId={m.id} name={fullName(m)} photoUpdatedAt={m.photoUpdatedAt} size="md" decorative />
+          <div className="min-w-0">
+            <p className="font-medium text-fg">{fullName(m)}</p>
+            <p className="text-xs text-muted">{m.memberCode}</p>
+          </div>
         </div>
       ),
     },
