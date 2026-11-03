@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { X } from 'lucide-react';
@@ -18,32 +18,50 @@ interface ModalProps {
 
 const widths = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' };
 
+/**
+ * Open dialogs, oldest first. A dialog can open over another one (the camera over the new member
+ * form, a confirmation over an edit form): Escape closes only the one on top.
+ */
+const openDialogs: symbol[] = [];
+/** Page scroll before the first dialog opened, given back when the last one closes. */
+let pageOverflow = '';
+
 export function Modal({ open, onClose, title, description, children, footer, size = 'md' }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const { t } = useI18n();
+  // The latest onClose, so a parent passing a new function on every render does not move the focus.
+  const onCloseRef = useRef(onClose);
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     if (!open) return;
+    const dialog = Symbol('dialog');
     const previous = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && openDialogs[openDialogs.length - 1] === dialog) onCloseRef.current();
     };
     document.addEventListener('keydown', onKey);
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    // Focus the first field, else the panel itself.
+    if (openDialogs.length === 0) {
+      pageOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+    }
+    openDialogs.push(dialog);
+    // Focus the first field, else the panel itself (hidden inputs, such as a file picker, are skipped).
     requestAnimationFrame(() => {
       const target = panelRef.current?.querySelector<HTMLElement>(
-        'input:not([type=hidden]):not([disabled]), select, textarea, [data-autofocus]',
+        'input:not([type=hidden]):not([hidden]):not([disabled]), select, textarea, [data-autofocus]',
       );
       (target ?? panelRef.current)?.focus();
     });
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = overflow;
+      openDialogs.splice(openDialogs.indexOf(dialog), 1);
+      if (openDialogs.length === 0) document.body.style.overflow = pageOverflow;
       previous?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   return createPortal(
     <AnimatePresence>

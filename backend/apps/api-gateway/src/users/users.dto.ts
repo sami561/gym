@@ -1,7 +1,38 @@
-import { IsBoolean, IsEmail, IsIn, IsOptional, IsString, IsUrl, Length, MaxLength, MinLength } from 'class-validator';
-import { Role } from '@app/common';
+import {
+  IsBoolean,
+  IsEmail,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUrl,
+  Length,
+  MaxLength,
+  MinLength,
+  ValidateBy,
+  ValidationOptions,
+  buildMessage,
+  isURL,
+} from 'class-validator';
+import { Role, coachPhotoOwner } from '@app/common';
 
 const STAFF_ACCOUNT_ROLES = [Role.ADMIN, Role.STAFF, Role.COACH];
+
+/**
+ * A URL (as @IsUrl), or the coach photo URL the photo routes write (`/api/public/coaches/<id>/photo?v=…`): the
+ * back-office may send back the avatarUrl it loaded. auth-service keeps the stored value in that case.
+ */
+function IsAvatarUrl(options?: ValidationOptions): PropertyDecorator {
+  return ValidateBy(
+    {
+      name: 'isAvatarUrl',
+      validator: {
+        validate: (value: unknown) => typeof value === 'string' && (isURL(value) || coachPhotoOwner(value) !== null),
+        defaultMessage: buildMessage((each) => `${each}$property must be a URL address`, options),
+      },
+    },
+    options,
+  );
+}
 
 export class CreateUserDto {
   @IsEmail()
@@ -82,8 +113,9 @@ export class UpdateUserDto {
   @MaxLength(2000)
   bio?: string;
 
+  /** A URL typed by hand replaces the uploaded photo (deleted); null clears it. PUT/DELETE /users/:id/photo for files. */
   @IsOptional()
-  @IsUrl()
+  @IsAvatarUrl()
   avatarUrl?: string;
 
   @IsOptional()

@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useLayoutEffect, useRef, type RefObject } from 'react';
 import {
   KeyboardSensor,
   MouseSensor,
@@ -48,6 +48,25 @@ export function useCalendarSensors(steps: KeyboardSteps) {
 
 /** The drop target under the finger or the mouse; for the keyboard, the one nearest to the moved item. */
 export const pointerOrClosest: CollisionDetection = (args) => (args.pointerCoordinates ? pointerWithin(args) : closestCenter(args));
+
+/** True when the drag was started from the keyboard (Space), whose user needs the focus kept. */
+export function fromKeyboard(event: { activatorEvent: Event | null }): boolean {
+  return typeof KeyboardEvent !== 'undefined' && event.activatorEvent instanceof KeyboardEvent;
+}
+
+/**
+ * After a keyboard drop to another cell or row, the item's button is created again under its new parent
+ * (and once more if the move is refused and rolled back), so the focus would fall to <body>. While
+ * `refocus` is on, each new button takes the focus; once the move is settled (`pending` off), `done`
+ * clears the request.
+ */
+export function useRefocusAfterDrop(node: RefObject<HTMLElement | null>, refocus: boolean, pending: boolean, done: () => void) {
+  useLayoutEffect(() => {
+    if (!refocus) return;
+    node.current?.focus();
+    if (!pending) done();
+  }, [node, refocus, pending, done]);
+}
 
 /** Draggable items: no text selection or iOS callout on a long press, scrolling still allowed. */
 export const DRAGGABLE_CLASS = 'touch-manipulation select-none [-webkit-touch-callout:none]';

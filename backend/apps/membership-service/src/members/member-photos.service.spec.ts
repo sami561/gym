@@ -1,10 +1,10 @@
 import { BadRequestException, NotFoundException, PayloadTooLargeException } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
-import { MEMBER_PHOTO_MAX_BYTES, MemberStatus } from '@app/common';
+import { MemberStatus, PHOTO_MAX_BYTES } from '@app/common';
+import { GPS_LATITUDE, PNG, cameraJpeg, cleanJpeg, jpegOfSize } from '@app/common/utils/jpeg-samples';
 import { Member } from './member.entity';
 import { MemberPhotoEntity } from './member-photo.entity';
-import { MemberPhotosService, decodeUpload, nextPhotoVersion } from './member-photos.service';
-import { GPS_LATITUDE, PNG, cameraJpeg, cleanJpeg, segment } from './jpeg-samples';
+import { MemberPhotosService } from './member-photos.service';
 
 const NOW = new Date('2026-11-03T09:00:00.000Z');
 const ID = '0b9a2c6e-6f1d-4c39-9a51-3d2f8e7c1a01';
@@ -64,16 +64,6 @@ function setup(initial: { member?: Member | null; photo?: MemberPhotoEntity | nu
 
 const base64 = (bytes: Buffer) => bytes.toString('base64');
 
-/** A valid JPEG of exactly `size` bytes: cameraJpeg() padded with comment segments (removed on upload). */
-function jpegOfSize(size: number): Buffer {
-  const jpeg = cameraJpeg();
-  const room = size - jpeg.length;
-  const count = Math.ceil(room / 0xfff0);
-  const sizes = Array.from({ length: count }, (_, i) => Math.floor(room / count) + (i < room % count ? 1 : 0));
-  const padding = sizes.map((bytes) => segment(0xfe, Buffer.alloc(bytes - 4, 0x20)));
-  return Buffer.concat([jpeg.subarray(0, 2), ...padding, jpeg.subarray(2)]);
-}
-
 describe('MemberPhotosService', () => {
   beforeEach(() => jest.useFakeTimers({ now: NOW }));
   afterEach(() => jest.useRealTimers());
@@ -109,13 +99,13 @@ describe('MemberPhotosService', () => {
 
     it('accepts 512 KB exactly and refuses one byte more, before touching the database', async () => {
       const { service, db, dataSource } = setup();
-      const limit = jpegOfSize(MEMBER_PHOTO_MAX_BYTES);
-      expect(limit.length).toBe(MEMBER_PHOTO_MAX_BYTES);
+      const limit = jpegOfSize(PHOTO_MAX_BYTES);
+      expect(limit.length).toBe(PHOTO_MAX_BYTES);
       await service.set({ id: ID, data: base64(limit) });
       expect(db.photo?.data).toEqual(cleanJpeg());
 
       dataSource.transaction.mockClear();
-      await expect(service.set({ id: ID, data: base64(jpegOfSize(MEMBER_PHOTO_MAX_BYTES + 1)) })).rejects.toThrow(TOO_LARGE);
+      await expect(service.set({ id: ID, data: base64(jpegOfSize(PHOTO_MAX_BYTES + 1)) })).rejects.toThrow(TOO_LARGE);
       expect(dataSource.transaction).not.toHaveBeenCalled();
     });
 
@@ -173,26 +163,5 @@ describe('MemberPhotosService', () => {
       await expect(setup().service.remove(ID)).resolves.toMatchObject({ id: ID, photoUpdatedAt: null });
       await expect(setup({ member: null }).service.remove(ID)).rejects.toThrow(new NotFoundException('Membre introuvable.'));
     });
-  });
-
-  describe('decodeUpload', () => {
-    it('refuses base64 text longer than 512 KB of data without decoding it', () => {
-      const tooLong = 'A'.repeat(Math.ceil(MEMBER_PHOTO_MAX_BYTES / 3) * 4 + 4);
-      const from = jest.spyOn(Buffer, 'from');
-      expect(() => decodeUpload(tooLong)).toThrow(TOO_LARGE);
-      expect(from).not.toHaveBeenCalled();
-      from.mockRestore();
-    });
-
-    it('refuses what is not text', () => {
-      for (const data of [undefined, null, 42, { photo: 'x' }, '']) expect(() => decodeUpload(data)).toThrow(MISSING);
-    });
-  });
-
-  it('nextPhotoVersion moves past the previous version', () => {
-    expect(nextPhotoVersion(null, NOW)).toBe(NOW);
-    expect(nextPhotoVersion(new Date('2026-11-03T08:00:00.000Z'), NOW)).toBe(NOW);
-    expect(nextPhotoVersion(NOW, NOW).toISOString()).toBe('2026-11-03T09:00:00.001Z');
-    expect(nextPhotoVersion(new Date('2026-11-03T09:00:10.000Z'), NOW).toISOString()).toBe('2026-11-03T09:00:10.001Z');
   });
 });

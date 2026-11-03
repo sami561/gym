@@ -1,7 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { addGymDays, gymClock, gymDay, gymMidnight, gymNoon } from './gymTime';
 
-// Every assertion uses explicit UTC instants: the results hold on a device in any timezone.
+// Every assertion uses explicit UTC instants: the results hold on a device in any timezone. Tests run in
+// Tunis, where device time and gym time agree, so the device is moved to Toronto to check that.
+beforeEach(() => {
+  vi.stubEnv('TZ', 'America/Toronto');
+});
+
 describe('the gym clock (Africa/Tunis)', () => {
   it('reads days and hours in Tunis, not on the device', () => {
     expect(gymDay('2026-11-03T22:59:00.000Z')).toBe('2026-11-03');

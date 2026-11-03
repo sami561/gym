@@ -1,7 +1,43 @@
-import { Role } from '@app/common';
-import { DEV_ADMIN_PASSWORD, bootstrapAdminPassword, isActiveAdmin, removesActiveAdmin } from './user-rules';
+import { Role, coachPhotoUrl } from '@app/common';
+import {
+  DEV_ADMIN_PASSWORD,
+  bootstrapAdminPassword,
+  changesAvatarUrl,
+  isActiveAdmin,
+  removesActiveAdmin,
+} from './user-rules';
 
 describe('user rules', () => {
+  describe('avatarUrl of an update', () => {
+    const id = '3c5e8a52-4f0e-4c1e-9b7a-0a1b2c3d4e05';
+    const other = '3c5e8a52-4f0e-4c1e-9b7a-0a1b2c3d4e06';
+    const uploaded = coachPhotoUrl(id, new Date('2026-11-03T09:00:00.000Z'));
+    const coach = (avatarUrl: string | null) => ({ id, avatarUrl });
+
+    it('a URL typed by hand, or null, changes it when it differs', () => {
+      expect(changesAvatarUrl(coach(null), 'https://cdn.example.com/leila.jpg')).toBe(true);
+      expect(changesAvatarUrl(coach(uploaded), 'https://cdn.example.com/leila.jpg')).toBe(true);
+      expect(changesAvatarUrl(coach(uploaded), null)).toBe(true);
+      expect(changesAvatarUrl(coach('https://cdn.example.com/old.jpg'), null)).toBe(true);
+      // another coach's photo URL is just a URL
+      expect(changesAvatarUrl(coach(uploaded), coachPhotoUrl(other, new Date()))).toBe(true);
+    });
+
+    it('absent or unchanged values do not', () => {
+      expect(changesAvatarUrl(coach(uploaded), undefined)).toBe(false);
+      expect(changesAvatarUrl(coach(null), null)).toBe(false);
+      expect(changesAvatarUrl(coach('https://cdn.example.com/a.jpg'), 'https://cdn.example.com/a.jpg')).toBe(false);
+    });
+
+    it('the own photo URL, whatever its version, never does (only the photo routes write it)', () => {
+      expect(changesAvatarUrl(coach(uploaded), coachPhotoUrl(id, new Date('2026-11-01T09:00:00.000Z')))).toBe(false);
+      expect(changesAvatarUrl(coach(uploaded), `/api/public/coaches/${id}/photo`)).toBe(false);
+      // a stale form after the photo was deleted, or replaced by a typed URL
+      expect(changesAvatarUrl(coach(null), uploaded)).toBe(false);
+      expect(changesAvatarUrl(coach('https://cdn.example.com/a.jpg'), uploaded)).toBe(false);
+    });
+  });
+
   describe('last admin', () => {
     const admin = { role: Role.ADMIN, isActive: true };
 

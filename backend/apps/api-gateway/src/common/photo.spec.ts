@@ -5,24 +5,28 @@ import { Test } from '@nestjs/testing';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { IncomingHttpHeaders, request } from 'http';
 import { AddressInfo } from 'net';
-import { AuthGuard, MEMBER_PHOTO_MAX_BYTES, MemberPhoto, PATTERNS, Role, RpcClient, RpcError } from '@app/common';
-import { HttpThrottlerGuard } from '../common/http-throttler.guard';
-import { RpcToHttpFilter } from '../common/rpc-to-http.filter';
-import { createValidationPipe } from '../common/validation';
+import { AuthGuard, PATTERNS, PHOTO_MAX_BYTES, Role, RpcClient, RpcError, StoredPhoto } from '@app/common';
+import { HttpThrottlerGuard } from './http-throttler.guard';
+import { RpcToHttpFilter } from './rpc-to-http.filter';
+import { createValidationPipe } from './validation';
 import { MeController } from '../me/me.controller';
-import { MembersController } from './members.controller';
-import { etagMatches, photoEtag } from './member-photo';
+import { MembersController } from '../members/members.controller';
+import { PublicController } from '../public/public.controller';
+import { UsersController } from '../users/users.controller';
+import { etagMatches, photoEtag } from './photo';
 
 jest.mock('dotenv', () => ({ config: jest.fn() }));
 
 const ACCESS_SECRET = 'spec-access-secret-0123456789abcdef0123456789';
 const MEMBER_ID = '0b9a2c6e-6f1d-4c39-9a51-3d2f8e7c1a01';
 const STAFF_ID = '5d1c7c1e-2f43-4f0e-9a51-3d2f8e7c1a02';
+const COACH_ID = '3c5e8a52-4f0e-4c1e-9b7a-0a1b2c3d4e05';
+const COACH_PHOTO_URL = `/api/public/coaches/${COACH_ID}/photo?v=1793782800000`;
 const MISSING = 'Ajoutez une photo (champ « photo »).';
 const TOO_LARGE = 'La photo dépasse 512 Ko.';
 /** Any bytes: the gateway forwards them, membership-service checks the JPEG. */
 const PHOTO = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(2000, 0x42), Buffer.from([0xff, 0xd9])]);
-const STORED: MemberPhoto = { data: PHOTO.toString('base64'), contentType: 'image/jpeg', updatedAt: '2026-11-03T09:00:00.000Z' };
+const STORED: StoredPhoto = { data: PHOTO.toString('base64'), contentType: 'image/jpeg', updatedAt: '2026-11-03T09:00:00.000Z' };
 
 interface Reply {
   status: number;
@@ -31,7 +35,7 @@ interface Reply {
   json: { statusCode?: number; message?: unknown; id?: string };
 }
 
-describe('member photo routes (gateway over HTTP: guards, multer, filters)', () => {
+describe('photo routes (gateway over HTTP: guards, multer, filters)', () => {
   const rpc = { send: jest.fn() };
   const jwt = new JwtService();
   let app: NestExpressApplication;
@@ -42,6 +46,7 @@ describe('member photo routes (gateway over HTTP: guards, multer, filters)', () 
   const staff = token(STAFF_ID, Role.STAFF);
   const admin = token('9e1c7c1e-2f43-4f0e-9a51-3d2f8e7c1a03', Role.ADMIN);
   const memberToken = token(MEMBER_ID, Role.MEMBER);
+  const coachToken = token(COACH_ID, Role.COACH);
 
   function call(method: string, path: string, options: { auth?: string; headers?: Record<string, string>; body?: Buffer } = {}) {
     return new Promise<Reply>((resolve, reject) => {
@@ -83,12 +88,13 @@ describe('member photo routes (gateway over HTTP: guards, multer, filters)', () 
   const upload = (path: string, auth: string, data?: Buffer) => call('PUT', path, { auth, ...photoForm(data) });
 
   const memberDto = (id: string, photoUpdatedAt: string | null) => ({ id, memberCode: 'MEL-00042', photoUpdatedAt });
+  const userDto = (id: string, avatarUrl: string | null) => ({ id, role: Role.COACH, firstName: 'Leila', avatarUrl });
 
   beforeAll(async () => {
     process.env.JWT_ACCESS_SECRET = ACCESS_SECRET;
     const moduleRef = await Test.createTestingModule({
       imports: [JwtModule.register({}), ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }])],
-      controllers: [MembersController, MeController],
+      controllers: [MembersController, MeController, UsersController, PublicController],
       providers: [
         { provide: RpcClient, useValue: rpc },
         { provide: APP_GUARD, useClass: AuthGuard },
@@ -114,6 +120,10 @@ describe('member photo routes (gateway over HTTP: guards, multer, filters)', () 
       if (pattern === PATTERNS.members.photoGet) return STORED;
       if (pattern === PATTERNS.members.photoSet) return memberDto(payload.id, '2026-11-03T09:00:00.000Z');
       if (pattern === PATTERNS.members.photoRemove) return memberDto(payload.id, null);
+      if (pattern === PATTERNS.users.photoGet) return STORED;
+      if (pattern === PATTERNS.users.photoSet) return userDto(payload.id, COACH_PHOTO_URL);
+      if (pattern === PATTERNS.users.photoRemove) return userDto(payload.id, null);
+      if (pattern === PATTERNS.users.update) return userDto(payload.id, null);
       throw new Error(`unexpected ${pattern}`);
     });
   });
@@ -162,12 +172,12 @@ describe('member photo routes (gateway over HTTP: guards, multer, filters)', () 
     });
 
     it('413 La photo dépasse 512 Ko above the limit without calling the service; 512 KB exactly is forwarded', async () => {
-      const over = await upload(`/members/${MEMBER_ID}/photo`, staff, Buffer.alloc(MEMBER_PHOTO_MAX_BYTES + 1, 0xff));
+      const over = await upload(`/members/${MEMBER_ID}/photo`, staff, Buffer.alloc(PHOTO_MAX_BYTES + 1, 0xff));
       expect(over.status).toBe(413);
       expect(over.json).toMatchObject({ statusCode: 413, message: TOO_LARGE });
       expect(rpc.send).not.toHaveBeenCalled();
 
-      const limit = Buffer.alloc(MEMBER_PHOTO_MAX_BYTES, 0xff);
+      const limit = Buffer.alloc(PHOTO_MAX_BYTES, 0xff);
       expect((await upload(`/members/${MEMBER_ID}/photo`, staff, limit)).status).toBe(200);
       expect(rpc.send).toHaveBeenCalledWith(PATTERNS.members.photoSet, { id: MEMBER_ID, data: limit.toString('base64') });
     });
@@ -257,7 +267,7 @@ describe('member photo routes (gateway over HTTP: guards, multer, filters)', () 
     });
 
     it('same refusals as the staff route', async () => {
-      const over = await upload('/me/photo', memberToken, Buffer.alloc(MEMBER_PHOTO_MAX_BYTES + 1));
+      const over = await upload('/me/photo', memberToken, Buffer.alloc(PHOTO_MAX_BYTES + 1));
       expect({ status: over.status, message: over.json.message }).toEqual({ status: 413, message: TOO_LARGE });
       const none = await call('PUT', '/me/photo', { auth: memberToken, ...form({ name: 'avatar', data: PHOTO, filename: 'a.jpg' }) });
       expect({ status: none.status, message: none.json.message }).toEqual({ status: 400, message: MISSING });
@@ -272,6 +282,123 @@ describe('member photo routes (gateway over HTTP: guards, multer, filters)', () 
       expect(rpc.send).not.toHaveBeenCalled();
       // other members are counted apart
       expect((await upload('/me/photo', memberToken)).status).toBe(200);
+    });
+  });
+
+  describe('PUT /api/users/:id/photo (coach photo, ADMIN)', () => {
+    it('forwards the file in base64 to auth-service and answers its UserDto', async () => {
+      const res = await upload(`/users/${COACH_ID}/photo`, admin);
+      expect(res.status).toBe(200);
+      expect(res.json).toEqual(userDto(COACH_ID, COACH_PHOTO_URL));
+      expect(rpc.send).toHaveBeenCalledWith(PATTERNS.users.photoSet, { id: COACH_ID, data: PHOTO.toString('base64') });
+    });
+
+    it('same upload refusals as the member photos, without calling the service', async () => {
+      const none = await call('PUT', `/users/${COACH_ID}/photo`, { auth: admin, ...form({ name: 'avatar', data: PHOTO, filename: 'a.jpg' }) });
+      expect({ status: none.status, message: none.json.message }).toEqual({ status: 400, message: MISSING });
+      const json = await call('PUT', `/users/${COACH_ID}/photo`, {
+        auth: admin,
+        headers: { 'content-type': 'application/json' },
+        body: Buffer.from(JSON.stringify({ photo: PHOTO.toString('base64') })),
+      });
+      expect({ status: json.status, message: json.json.message }).toEqual({ status: 400, message: MISSING });
+      const empty = await upload(`/users/${COACH_ID}/photo`, admin, Buffer.alloc(0));
+      expect({ status: empty.status, message: empty.json.message }).toEqual({ status: 400, message: MISSING });
+      const over = await upload(`/users/${COACH_ID}/photo`, admin, Buffer.alloc(PHOTO_MAX_BYTES + 1, 0xff));
+      expect({ status: over.status, message: over.json.message }).toEqual({ status: 413, message: TOO_LARGE });
+      expect((await upload('/users/42/photo', admin)).status).toBe(400);
+      expect(rpc.send).not.toHaveBeenCalled();
+    });
+
+    it('relays the refusals of auth-service: not a JPEG, not a coach, unknown user', async () => {
+      for (const [status, message] of [
+        [400, 'La photo doit être une image JPEG.'],
+        [400, 'Seuls les coachs ont une photo sur le site.'],
+        [404, 'Utilisateur introuvable.'],
+      ] as const) {
+        rpc.send.mockRejectedValueOnce(new RpcError(status, message, PATTERNS.users.photoSet));
+        const res = await upload(`/users/${COACH_ID}/photo`, admin);
+        expect(res.status).toBe(status);
+        expect(res.json).toEqual({ statusCode: status, message });
+      }
+    });
+  });
+
+  it('DELETE /api/users/:id/photo answers the UserDto without avatarUrl', async () => {
+    const res = await call('DELETE', `/users/${COACH_ID}/photo`, { auth: admin });
+    expect(res.status).toBe(200);
+    expect(res.json).toEqual(userDto(COACH_ID, null));
+    expect(rpc.send).toHaveBeenCalledWith(PATTERNS.users.photoRemove, { id: COACH_ID });
+  });
+
+  describe('GET /api/public/coaches/:id/photo (website, no token)', () => {
+    it('serves the JPEG to anyone: public cache for a year with ?v=, revalidated without, always with an ETag', async () => {
+      const versioned = await call('GET', `/public/coaches/${COACH_ID}/photo?v=1793782800000`);
+      expect(versioned.status).toBe(200);
+      expect(versioned.headers['content-type']).toBe('image/jpeg');
+      expect(versioned.headers['content-length']).toBe(String(PHOTO.length));
+      expect(versioned.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+      expect(versioned.headers.etag).toBe(photoEtag(PHOTO));
+      expect(versioned.body).toEqual(PHOTO);
+      expect(rpc.send).toHaveBeenCalledWith(PATTERNS.users.photoGet, { id: COACH_ID });
+
+      const latest = await call('GET', `/public/coaches/${COACH_ID}/photo`);
+      expect(latest.status).toBe(200);
+      expect(latest.headers['cache-control']).toBe('public, no-cache');
+      expect(latest.headers.etag).toBe(versioned.headers.etag);
+      expect(latest.body).toEqual(PHOTO);
+      // a token is not needed, and does not change the answer
+      const signedIn = await call('GET', `/public/coaches/${COACH_ID}/photo?v=1`, { auth: memberToken });
+      expect(signedIn.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+    });
+
+    it('304 without body when If-None-Match names the ETag', async () => {
+      const etag = photoEtag(PHOTO);
+      for (const ifNoneMatch of [etag, `W/${etag}`, '*']) {
+        const res = await call('GET', `/public/coaches/${COACH_ID}/photo?v=1`, { headers: { 'if-none-match': ifNoneMatch } });
+        expect(res.status).toBe(304);
+        expect(res.body.length).toBe(0);
+        expect(res.headers.etag).toBe(etag);
+        expect(res.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+      }
+      const changed = await call('GET', `/public/coaches/${COACH_ID}/photo`, { headers: { 'if-none-match': '"previous"' } });
+      expect(changed.status).toBe(200);
+    });
+
+    it('404 Aucune photo as JSON, without the photo cache headers (no photo, demoted or deactivated coach)', async () => {
+      rpc.send.mockRejectedValueOnce(new RpcError(404, 'Aucune photo.', PATTERNS.users.photoGet));
+      const res = await call('GET', `/public/coaches/${COACH_ID}/photo?v=1`);
+      expect(res.status).toBe(404);
+      expect(res.json).toEqual({ statusCode: 404, message: 'Aucune photo.' });
+      expect(res.headers['cache-control']).toBeUndefined();
+    });
+
+    it('400 for an id that is not a UUID', async () => {
+      expect((await call('GET', '/public/coaches/42/photo')).status).toBe(400);
+      expect(rpc.send).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PATCH /api/users/:id avatarUrl', () => {
+    const patch = (avatarUrl: unknown) =>
+      call('PATCH', `/users/${COACH_ID}`, {
+        auth: admin,
+        headers: { 'content-type': 'application/json' },
+        body: Buffer.from(JSON.stringify({ avatarUrl })),
+      });
+
+    it('takes a URL typed by hand, null, or the coach photo URL the back-office loaded', async () => {
+      for (const avatarUrl of ['https://cdn.example.com/leila.jpg', null, COACH_PHOTO_URL, `/api/public/coaches/${COACH_ID}/photo`]) {
+        expect((await patch(avatarUrl)).status).toBe(200);
+        expect(rpc.send).toHaveBeenLastCalledWith(PATTERNS.users.update, { id: COACH_ID, data: { avatarUrl } });
+      }
+    });
+
+    it('refuses other relative paths and non-text values', async () => {
+      for (const avatarUrl of ['/api/members/x/photo', `/api/public/coaches/${COACH_ID}/photo?v=1&x=2`, 'pas une url', 42]) {
+        expect([avatarUrl, (await patch(avatarUrl)).status]).toEqual([avatarUrl, 400]);
+      }
+      expect(rpc.send).not.toHaveBeenCalled();
     });
   });
 
@@ -290,6 +417,17 @@ describe('member photo routes (gateway over HTTP: guards, multer, filters)', () 
       expect(rpc.send).not.toHaveBeenCalled();
       expect((await call('GET', path, { auth: admin })).status).toBe(200);
       expect((await call('GET', path, { auth: staff })).status).toBe(200);
+    });
+
+    it('coach photo upload and removal: ADMIN only (401 without token, 403 for STAFF, COACH and MEMBER)', async () => {
+      const path = `/users/${COACH_ID}/photo`;
+      expect((await upload(path, '')).status).toBe(401);
+      expect((await call('DELETE', path)).status).toBe(401);
+      for (const auth of [staff, coachToken, memberToken]) {
+        expect((await upload(path, auth)).status).toBe(403);
+        expect((await call('DELETE', path, { auth })).status).toBe(403);
+      }
+      expect(rpc.send).not.toHaveBeenCalled();
     });
 
     it('/api/me/photo: 401 without token, 403 for staff (a member only manages their own photo)', async () => {

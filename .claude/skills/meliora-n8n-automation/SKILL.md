@@ -24,7 +24,7 @@ description: Customer e-mails and content automations for Meliora Gym in n8n —
   notification-service subscribes to the whole list.
 - **New scheduled e-mail**: prefer an existing feed; add a feed to the gateway
   `AutomationController` only when the data isn't available yet.
-- Templates: `n8n/templates/*.html`, French, Meliora black/white/red, address + Instagram footer,
+- Templates: `n8n/templates/*.html`, French, Meliora black/white/red, address + Instagram/Facebook footer,
   one clear CTA. Keep e-mails short and human; members can't reply to automations unless a
   reply-to is set.
 - De-duplicate anything sent on a schedule (workflow static data keyed by member + stage) so a

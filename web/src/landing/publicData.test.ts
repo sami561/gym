@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ClassSessionDto, PlanDto } from '../api/types';
 import { FALLBACK_PLANS } from '../lib/fallbacks';
 import { plansOnSale } from './plansOnSale';
@@ -88,8 +88,10 @@ describe('class schedule on the website', () => {
     expect(days.flatMap((d) => d.sessions).some((s) => s.id === 'next-week')).toBe(false);
   });
 
-  it('puts a class on its day in Tunis, like the admin planning', () => {
-    // 23:30 UTC on Thursday is 00:30 on Friday at the gym.
+  it('puts a class on its day in Tunis, like the admin planning, whatever the device timezone', () => {
+    // Tests run in Tunis, where the device's days are the gym's: move the device to Toronto, where 23:30 UTC on
+    // Thursday is still Thursday (18:30) while it is 00:30 on Friday at the gym.
+    vi.stubEnv('TZ', 'America/Toronto');
     const days = scheduleDays([session('late', '2026-11-05T23:30:00.000Z', '2026-11-06T00:30:00.000Z')], now);
     expect(days.find((d) => d.key === '2026-11-06')?.sessions.map((s) => s.id)).toEqual(['late']);
     expect(days.find((d) => d.key === '2026-11-05')?.sessions).toEqual([]);

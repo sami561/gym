@@ -84,6 +84,13 @@ export interface MemberListParams {
   pageSize?: number;
 }
 
+/** Multipart body of a photo upload: one file field `photo`. */
+function photoForm(photo: Blob): FormData {
+  const form = new FormData();
+  form.append('photo', photo, 'photo.jpg');
+  return form;
+}
+
 export const membersApi = {
   list: (params: MemberListParams) =>
     api<Paginated<MemberListItem>>('/api/members', { query: { ...params } }),
@@ -101,15 +108,15 @@ export const membersApi = {
     api<MemberAccessInfo>(`/api/members/${id}/card`, { method: 'PUT', body: { cardNumber } }),
   rotateAccessKey: (id: string) =>
     api<{ ok: true; rotatedAt: string }>(`/api/members/${id}/access-key/rotate`, { method: 'POST' }),
-  /** JPEG blob; `version` = Date.parse(photoUpdatedAt) makes the answer immutable. 404 = no photo. */
+  /**
+   * JPEG blob; `version` = Date.parse(photoUpdatedAt) makes the answer immutable. 404 = no photo. Never kept
+   * in the browser's HTTP cache (it would stay on disk, readable without a token, after sign-out): the
+   * react-query cache holds it in memory.
+   */
   photo: (id: string, version?: number, signal?: AbortSignal) =>
-    apiBlob(`/api/members/${id}/photo`, { query: { v: version }, signal }),
+    apiBlob(`/api/members/${id}/photo`, { query: { v: version }, signal, cache: 'no-store' }),
   /** A JPEG ≤ 512 KB prepared by src/lib/photo.ts, sent as the multipart field `photo`. */
-  setPhoto: (id: string, photo: Blob) => {
-    const form = new FormData();
-    form.append('photo', photo, 'photo.jpg');
-    return api<MemberDto>(`/api/members/${id}/photo`, { method: 'PUT', body: form });
-  },
+  setPhoto: (id: string, photo: Blob) => api<MemberDto>(`/api/members/${id}/photo`, { method: 'PUT', body: photoForm(photo) }),
   removePhoto: (id: string) => api<MemberDto>(`/api/members/${id}/photo`, { method: 'DELETE' }),
 };
 
@@ -165,6 +172,13 @@ export const usersApi = {
   update: (id: string, data: UpdateUserData) =>
     api<UserDto>(`/api/users/${id}`, { method: 'PATCH', body: data }),
   remove: (id: string) => api<OkResult>(`/api/users/${id}`, { method: 'DELETE' }),
+  /**
+   * Coach photo (ADMIN), prepared like a member photo. The answer's avatarUrl is the public
+   * `/api/public/coaches/:id/photo?v=…` (shown on the website); 400 for an account that is not a coach.
+   */
+  setPhoto: (id: string, photo: Blob) => api<UserDto>(`/api/users/${id}/photo`, { method: 'PUT', body: photoForm(photo) }),
+  /** avatarUrl back to null (also an address typed by hand before uploads existed). */
+  removePhoto: (id: string) => api<UserDto>(`/api/users/${id}/photo`, { method: 'DELETE' }),
 };
 
 // ---------- access ----------

@@ -19,16 +19,25 @@ lazy-loaded with its own dictionary). Background and structure: `README.md`.
 - Charts (`src/admin/charts/`): dataviz rules — validated palette slots, table view on every chart,
   no dual axis.
 - Member photos (`src/admin/photos/`, `src/lib/photo.ts`, `src/lib/camera.ts`): never an `<img src>`
-  to the API. `MemberAvatar` fetches the JPEG with the token (`apiBlob`) into the react-query cache
-  (`memberPhotoKey`) and shows it through an object URL it revokes, else initials. `photoUpdatedAt`
+  to the API. `MemberAvatar` fetches the JPEG with the token (`apiBlob`, `cache: 'no-store'`: never in
+  the browser's disk cache) into the react-query cache (`memberPhotoKey`, emptied at sign-out by
+  `api/queryClient.ts`) and shows it through an object URL it revokes, else initials. `photoUpdatedAt`
   null = no request, an ISO = `?v=` (immutable), undefined = latest (access logs, scanner; 404 =
   none). Uploads go through `preparePhoto` / `captureFrame` (upright, centre square, 600×600 JPEG
   ≤ 512 KB) as the multipart field `photo` (`api()` sends a `FormData` as is). The webcam needs
-  https or localhost.
+  https or localhost. Create forms (new member, team account) stage the photo with `PhotoPicker`
+  and upload it after the record exists; a failed upload keeps the record and says so.
+- Coach photos are public: `UserDto.avatarUrl` (`/api/public/coaches/:id/photo?v=…`, or an old URL
+  typed by hand) is a plain `<img>` through `apiFileUrl` (`AccountAvatar`, landing `Coaches`). Set
+  or remove it only with `PUT`/`DELETE /api/users/:id/photo`; never send `avatarUrl` in a `PATCH`.
+- Dialogs can stack (camera over a form, confirm over an edit): `Modal` closes only the top one on
+  Escape.
 - The three.js ceiling (`src/landing/three/`) stays lazy, paused off-screen, with the static fallback.
 - Use the gym's real photos in `public/images/` (copies of `assets/images/`); don't invent visuals.
 - Tests: Vitest, `*.test.ts(x)` next to the code. DOM tests opt into jsdom with a docblock and
-  render through `renderInLang` (`src/test/`). The config pins `TZ=Africa/Tunis`; never hit the
+  render through `renderInLang` (`src/test/`). The config pins `TZ=Africa/Tunis`, where device time
+  and gym time agree: a test of gym-time code (`src/lib/gymTime.ts`, the public site) moves the device
+  with `vi.stubEnv('TZ', 'America/Toronto')`, or it would pass with device-local code too. Never hit the
   network (stub `fetch` / `localStorage` with `vi.stubGlobal`); normalise raw Intl output instead of
   asserting ICU spacing. New label maps go into `LABEL_MAPS` in `src/lib/labels-ops.test.ts`, which
   checks them against the backend enums. Skipped tests pin known bugs — unskip them with the fix.

@@ -29,7 +29,6 @@ import {
   MemberDetail,
   MemberDto,
   MemberListItem,
-  MemberPhoto,
   MemberProfile,
   Paginated,
   PATTERNS,
@@ -38,7 +37,8 @@ import {
   Roles,
   RotateAccessKeyRequest,
   RpcClient,
-  SetMemberPhotoRequest,
+  SetPhotoRequest,
+  StoredPhoto,
   SubscriptionDto,
   toActor,
 } from '@app/common';
@@ -57,7 +57,7 @@ import {
   UploadedPhoto,
   photoData,
   sendPhoto,
-} from './member-photo';
+} from '../common/photo';
 
 @ApiTags('Membres')
 @ApiBearerAuth()
@@ -125,8 +125,8 @@ export class MembersController {
     @Headers('if-none-match') ifNoneMatch: string | undefined,
     @Res() res: Response,
   ): Promise<void> {
-    const photo = await this.rpc.send<MemberPhoto, IdRequest>(PATTERNS.members.photoGet, { id });
-    sendPhoto(res, photo, { version, ifNoneMatch });
+    const photo = await this.rpc.send<StoredPhoto, IdRequest>(PATTERNS.members.photoGet, { id });
+    sendPhoto(res, photo, { audience: 'private', version, ifNoneMatch });
   }
 
   /** multipart/form-data, file field `photo`: a JPEG of at most 512 KB. */
@@ -134,7 +134,7 @@ export class MembersController {
   @UseInterceptors(PhotoUploadInterceptor)
   @Put(':id/photo')
   setPhoto(@Param('id', ParseUUIDPipe) id: string, @UploadedFile() file: UploadedPhoto | undefined) {
-    return this.rpc.send<MemberDto, SetMemberPhotoRequest>(PATTERNS.members.photoSet, { id, data: photoData(file) });
+    return this.rpc.send<MemberDto, SetPhotoRequest>(PATTERNS.members.photoSet, { id, data: photoData(file) });
   }
 
   @Delete(':id/photo')

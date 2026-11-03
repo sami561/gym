@@ -12,18 +12,29 @@ import { ApiBody, ApiConsumes, ApiOkResponse, ApiQuery } from '@nestjs/swagger';
 import { createHash } from 'crypto';
 import type { Response } from 'express';
 import { Observable } from 'rxjs';
-import { MEMBER_PHOTO_ERRORS, MEMBER_PHOTO_MAX_BYTES, MemberPhoto } from '@app/common';
+import { PHOTO_ERRORS, PHOTO_MAX_BYTES, StoredPhoto } from '@app/common';
 
 /**
- * Member photos on the HTTP side (docs/API.md, Member photos): staff routes in MembersController, the
- * member's own photo in MeController. membership-service checks the JPEG and removes its metadata.
+ * Photo files on the HTTP side, shared by every photo route (docs/API.md, Member photos and Coach photos):
+ * member photos in MembersController and MeController (membership-service), coach photos in UsersController
+ * and PublicController (auth-service). The services check the JPEG and remove its metadata.
  */
 
 export const PHOTO_FIELD = 'photo';
-/** `?v=<Date.parse(photoUpdatedAt)>` names one version of the photo: cached for a year. */
-export const PHOTO_CACHE_VERSIONED = 'private, max-age=31536000, immutable';
-/** Without `v` (access logs, scanner): stored, but revalidated with If-None-Match every time. */
-export const PHOTO_CACHE_LATEST = 'private, no-cache';
+
+/**
+ * Who may keep the answer: `private` (member photos, behind a token: the browser only) or `public` (coach
+ * photos of the website: shared caches and nginx too).
+ */
+export type PhotoAudience = 'private' | 'public';
+
+/**
+ * Cache-Control of a photo. `?v=` names one version of the photo: cached for a year. Without `v` (access logs,
+ * scanner): stored, but revalidated with If-None-Match every time.
+ */
+export function photoCacheControl(audience: PhotoAudience, version: string | undefined): string {
+  return version ? `${audience}, max-age=31536000, immutable` : `${audience}, no-cache`;
+}
 
 /** The part of multer's file (memory storage) the gateway reads; spares a dependency on @types/multer. */
 export interface UploadedPhoto {
@@ -33,11 +44,11 @@ export interface UploadedPhoto {
 }
 
 /**
- * multipart/form-data, one file in `photo`, kept in memory; multer stops reading at MEMBER_PHOTO_MAX_BYTES.
+ * multipart/form-data, one file in `photo`, kept in memory; multer stops reading at PHOTO_MAX_BYTES.
  * A few short text fields are tolerated, anything bigger is refused.
  */
 const MultipartPhoto = FileInterceptor(PHOTO_FIELD, {
-  limits: { fileSize: MEMBER_PHOTO_MAX_BYTES, files: 1, fields: 5, fieldSize: 1024, parts: 6 },
+  limits: { fileSize: PHOTO_MAX_BYTES, files: 1, fields: 5, fieldSize: 1024, parts: 6 },
 });
 
 /**
@@ -55,30 +66,31 @@ export class PhotoUploadInterceptor implements NestInterceptor {
       return await this.multipart.intercept(context, next);
     } catch (err) {
       throw err instanceof PayloadTooLargeException
-        ? new PayloadTooLargeException(MEMBER_PHOTO_ERRORS.tooLarge)
-        : new BadRequestException(MEMBER_PHOTO_ERRORS.missing);
+        ? new PayloadTooLargeException(PHOTO_ERRORS.tooLarge)
+        : new BadRequestException(PHOTO_ERRORS.missing);
     }
   }
 }
 
-/** The file of the field `photo` as the base64 `data` of SetMemberPhotoRequest; 400 without (or with an empty) file. */
+/** The file of the field `photo` as the base64 `data` of SetPhotoRequest; 400 without (or with an empty) file. */
 export function photoData(file: UploadedPhoto | undefined): string {
-  if (!file?.buffer?.length) throw new BadRequestException(MEMBER_PHOTO_ERRORS.missing);
+  if (!file?.buffer?.length) throw new BadRequestException(PHOTO_ERRORS.missing);
   return file.buffer.toString('base64');
 }
 
 /**
- * Writes the JPEG: Cache-Control by `version` (the `v` query parameter), a strong ETag (hash of the bytes,
- * the same for the same photo whatever the URL), and 304 without body when If-None-Match names that ETag.
+ * Writes the JPEG: Cache-Control by `audience` and `version` (the `v` query parameter), a strong ETag (hash of
+ * the bytes, the same for the same photo whatever the URL), and 304 without body when If-None-Match names that
+ * ETag.
  */
 export function sendPhoto(
   res: Response,
-  photo: MemberPhoto,
-  { version, ifNoneMatch }: { version?: string; ifNoneMatch?: string },
+  photo: StoredPhoto,
+  { audience, version, ifNoneMatch }: { audience: PhotoAudience; version?: string; ifNoneMatch?: string },
 ): void {
   const bytes = Buffer.from(photo.data, 'base64');
   const etag = photoEtag(bytes);
-  res.setHeader('Cache-Control', version ? PHOTO_CACHE_VERSIONED : PHOTO_CACHE_LATEST);
+  res.setHeader('Cache-Control', photoCacheControl(audience, version));
   res.setHeader('ETag', etag);
   if (etagMatches(ifNoneMatch, etag)) {
     res.status(304).end();
@@ -115,8 +127,8 @@ export const ApiPhotoUpload = () =>
     }),
   );
 
-/** Swagger: the image/jpeg answer and its version parameter. */
-export const ApiPhotoDownload = () =>
+/** Swagger: the image/jpeg answer and its version parameter (`version` says where clients take `v` from). */
+export const ApiPhotoDownload = (version = 'Date.parse(photoUpdatedAt)') =>
   applyDecorators(
     ApiOkResponse({
       description: 'La photo (JPEG sans métadonnées), avec Cache-Control et ETag ; 304 si If-None-Match correspond.',
@@ -126,6 +138,6 @@ export const ApiPhotoDownload = () =>
       name: 'v',
       type: String,
       required: false,
-      description: 'Date.parse(photoUpdatedAt) : la réponse est alors gardée en cache un an (immutable).',
+      description: `${version} : la réponse est alors gardée en cache un an (immutable).`,
     }),
   );

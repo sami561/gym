@@ -44,6 +44,15 @@ describe('15-minute slots', () => {
     expect(dragStartMinute(start, 10 * 60, 60, { min: 6 * 60, max: 22 * 60 })).toBe(21 * 60);
     expect(dragStartMinute(start, 10 * 60, 50, { min: 6 * 60, max: 22 * 60 })).toBe(21 * 60); // 21:10 floors to 21:00
   });
+
+  it('never pulls a span that already runs past midnight back into the day', () => {
+    const night = local(2026, 11, 5, 22); // 22:00 – 06:00 the next day
+    const bounds = { min: 6 * 60, max: 24 * 60 };
+    expect(dragStartMinute(night, 0, 8 * 60, bounds)).toBe(22 * 60); // picked up and dropped in place
+    expect(dragStartMinute(night, 2, 8 * 60, bounds)).toBe(22 * 60); // a 5 px mouse drag
+    expect(dragStartMinute(night, 60, 8 * 60, bounds)).toBe(22 * 60); // not later than it already ends
+    expect(dragStartMinute(night, -60, 8 * 60, bounds)).toBe(21 * 60); // earlier still works
+  });
 });
 
 describe('moving a span', () => {
@@ -104,6 +113,13 @@ describe('resizing the end', () => {
   it('reads an end at midnight as the end of the start day', () => {
     const late = span(local(2026, 11, 5, 23), local(2026, 11, 6, 0));
     expect(hhmm(resizeSpan(late, -30).endsAt)).toBe('23:30');
+  });
+
+  it('does not cut a span past midnight when its end is picked up, but can shorten it', () => {
+    const night = span(local(2026, 11, 5, 22), local(2026, 11, 6, 6));
+    expect(resizeSpan(night, 0).endsAt.toISOString()).toBe(night.endsAt);
+    expect(resizeSpan(night, 5, 24 * 60).endsAt.toISOString()).toBe(night.endsAt);
+    expect(resizeSpan(night, -30).endsAt.toISOString()).toBe(local(2026, 11, 6, 5, 30).toISOString());
   });
 });
 

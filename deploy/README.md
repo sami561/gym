@@ -91,8 +91,11 @@ volumes, databases and n8n. The gateway (`GATEWAY_BIND`) and n8n (`N8N_BIND`) li
 Builds the images on the server and runs them with the same compose files as the pipeline, which
 later takes over the same project and volumes. From your clone:
 ```bash
-git archive sandbox | ssh <user>@<host> 'mkdir -p /opt/meliora/sandbox && tar -x -C /opt/meliora/sandbox'
+git archive sandbox | ssh <user>@<host> 'mkdir -p /opt/meliora/sandbox && cd /opt/meliora/sandbox && rm -rf backend web door-agent mobile docs && tar -x'
 ```
+`tar -x` never deletes: the `rm -rf` of the build folders drops files a release moved or deleted
+(they would break the image build). Leave `.env`, `n8n/` and `docker/` in place — running containers
+mount them.
 On the server, in `/opt/meliora/sandbox`: `.env` from `.env.example`, every secret from
 `openssl rand -hex 32`, `CORS_ORIGINS` = the site's address, plus
 ```

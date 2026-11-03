@@ -12,6 +12,7 @@ export const FALLBACK_GYM: GymInfo = {
   phone: '',
   email: 'contact@meliora-gym.tn',
   instagram: 'https://www.instagram.com/gymmeliora/',
+  facebook: 'https://www.facebook.com/p/Meliora-Gym-61589769249533/',
   mapsUrl: 'https://maps.app.goo.gl/CVWB98nx2RdSd8Mw8',
   location: { lat: 35.8456, lng: 10.6178 },
   geofenceMeters: 150,

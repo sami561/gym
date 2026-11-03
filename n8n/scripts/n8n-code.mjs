@@ -25,6 +25,7 @@ export function runtime() {
     mapsUrl: env('MELIORA_MAPS_URL', 'https://maps.app.goo.gl/CVWB98nx2RdSd8Mw8'),
     instagramUrl: 'https://www.instagram.com/gymmeliora/',
     instagramHandle: '@gymmeliora',
+    facebookUrl: 'https://www.facebook.com/p/Meliora-Gym-61589769249533/',
     address: 'Khzema Est, Rue Colonel Garnaoui, Sousse 4051',
     phone: env('MELIORA_GYM_PHONE'),
   };

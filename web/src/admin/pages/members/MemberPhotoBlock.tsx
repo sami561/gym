@@ -24,8 +24,7 @@ export function MemberPhotoBlock({ member, children }: { member: MemberDto; chil
   const confirm = useConfirm();
   const fileInput = useRef<HTMLInputElement>(null);
   const [camera, setCamera] = useState(false);
-  // Stable: Modal re-runs its focus handling whenever onClose changes, and this block re-renders
-  // while the photo uploads.
+  // Stable: CameraModal's own close handler (and its Escape guard while saving) depends on it.
   const closeCamera = useCallback(() => setCamera(false), []);
   const [preparing, setPreparing] = useState(false);
   const name = fullName(member);

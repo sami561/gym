@@ -1,8 +1,9 @@
 # Meliora Gym platform — guide for Claude
 
 Gym management system for **Meliora Gym** (Khzema Est, Rue Colonel Garnaoui, Sousse, Tunisia —
-Instagram @gymmeliora). Owner-facing language: French. UI languages: French (default), English,
-Arabic (RTL). Currency TND (3 decimals), timezone `Africa/Tunis`.
+Instagram @gymmeliora, Facebook https://www.facebook.com/p/Meliora-Gym-61589769249533/). Owner-facing
+language: French. UI languages: French (default), English, Arabic (RTL). Currency TND (3 decimals),
+timezone `Africa/Tunis`.
 
 ## Repo map
 | Folder | What | Stack |
@@ -58,9 +59,9 @@ docker compose up -d --build                                      # everything (
 
 ## Known gaps / gotchas
 - No TypeORM migrations yet: schemas come from `DB_SYNCHRONIZE=true`. Add migrations before production;
-  they must include `refresh_sessions` (auth), `doors.allowAppOpen`, `access_logs.context`,
-  `access_members.removedAt` (access) and `member_photos` (FK `ON DELETE CASCADE`), `members.photoUpdatedAt`
-  (membership).
+  they must include `refresh_sessions`, `user_photos` (FK `ON DELETE CASCADE`) (auth), `doors.allowAppOpen`,
+  `access_logs.context`, `access_members.removedAt` (access) and `member_photos` (FK `ON DELETE CASCADE`),
+  `members.photoUpdatedAt` (membership).
 - Redis transport = single replica per service; use `BUS_TRANSPORT=nats` (queue groups) to scale.
   The NATS path (with `NATS_TOKEN`) is configured but has not been run end to end.
 - Refresh tokens are single-use: every `POST /api/auth/refresh` returns a new one, and scripts and clients
@@ -83,6 +84,8 @@ docker compose up -d --build                                      # everything (
 - Gym phone, opening hours and exact GPS point are placeholders (env `GYM_*`) — confirm with the owner.
 - Pushing needs the SSH key loaded (`ssh-add --apple-use-keychain ~/.ssh/id_rsa`).
 - Logout does not yet remove the device's Expo push token.
+- Class reminders (`booking.reminder`) are an app push only: n8n workflow 01 has no branch for them, so a
+  member booked at the desk without the app is not reminded (nor told when the class moves).
 
 Still open after the security review (not fixed):
 - App door opening: `APP_OPEN_ALLOWED_NETWORKS` is empty by default (check off), so a faked GPS position

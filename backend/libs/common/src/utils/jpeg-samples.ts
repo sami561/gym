@@ -1,7 +1,8 @@
 /**
- * Hand-built JPEG pieces for the specs (jpeg-metadata, member-photos). The structure is a real JPEG
- * (segments, frame and scan headers, entropy-coded data with stuffed bytes and restart markers); the image
- * data itself is not a picture. Not used by the service.
+ * Hand-built JPEG pieces for the specs (jpeg-metadata, member and coach photos), imported by path
+ * (`@app/common/utils/jpeg-samples`), not exported by the library. The structure is a real JPEG (segments,
+ * frame and scan headers, entropy-coded data with stuffed bytes and restart markers); the image data itself is
+ * not a picture. Not used by the services.
  */
 
 /** `FF <marker> <length> <payload>`, the length counting its own two bytes. */
@@ -102,3 +103,13 @@ export function cleanJpeg(): Buffer {
 }
 
 export const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48, 0x44, 0x52]);
+
+/** A valid JPEG of exactly `size` bytes: cameraJpeg() padded with comment segments (removed on upload). */
+export function jpegOfSize(size: number): Buffer {
+  const jpeg = cameraJpeg();
+  const room = size - jpeg.length;
+  const count = Math.ceil(room / 0xfff0);
+  const sizes = Array.from({ length: count }, (_, i) => Math.floor(room / count) + (i < room % count ? 1 : 0));
+  const padding = sizes.map((bytes) => segment(0xfe, Buffer.alloc(bytes - 4, 0x20)));
+  return Buffer.concat([jpeg.subarray(0, 2), ...padding, jpeg.subarray(2)]);
+}

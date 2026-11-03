@@ -1,5 +1,6 @@
 export * from './common.contracts';
 export * from './auth.contracts';
+export * from './photo.contracts';
 export * from './membership.contracts';
 export * from './class.contracts';
 export * from './access.contracts';

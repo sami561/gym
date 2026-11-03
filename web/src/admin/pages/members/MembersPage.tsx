@@ -16,6 +16,8 @@ import { Tabs } from '../../../components/ui/Tabs';
 import { useToast } from '../../../components/ui/Toast';
 import { formatDate, formatTND, fullName, PAYMENT_METHOD_LABELS } from '../../../lib/format';
 import { MemberAvatar } from '../../photos/MemberAvatar';
+import { PhotoPicker } from '../../photos/PhotoPicker';
+import { memberPhotoKey, photoErrorText, photoVersion } from '../../photos/photos';
 import { PromoField, usePromoQuote } from './PromoField';
 import { useI18n, type TKey } from '../../../i18n';
 
@@ -59,10 +61,19 @@ const EMPTY_FORM = {
   reference: '',
 };
 
-function CreateMemberModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (result: CreateMemberResult) => void }) {
+/** The new member, and what could not be saved with them (subscription with a promo code, photo). */
+interface CreatedMember extends CreateMemberResult {
+  warnings: string[];
+}
+
+function CreateMemberModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (result: CreatedMember) => void }) {
   const { t } = useI18n();
+  const queryClient = useQueryClient();
   const plans = useQuery({ queryKey: ['plans', 'all'], queryFn: () => plansApi.list(false), enabled: open });
   const [form, setForm] = useState(EMPTY_FORM);
+  // Taken or imported here, uploaded once the member exists (PUT /api/members/:id/photo).
+  const [photo, setPhoto] = useState<Blob | null>(null);
+  const [preparingPhoto, setPreparingPhoto] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const plan = plans.data?.find((p) => p.id === form.planId);
@@ -71,6 +82,7 @@ function CreateMemberModal({ open, onClose, onCreated }: { open: boolean; onClos
   useEffect(() => {
     if (open) {
       setForm(EMPTY_FORM);
+      setPhoto(null);
       setError(null);
     }
   }, [open]);
@@ -99,13 +111,23 @@ function CreateMemberModal({ open, onClose, onCreated }: { open: boolean; onClos
         body.planId = form.planId;
         body.payment = payment;
       }
-      const result = await membersApi.create(body);
+      const result: CreatedMember = { ...(await membersApi.create(body)), warnings: [] };
+      // From here the member exists: what fails next is reported in the "Membre créé" dialog, to be
+      // finished from the member file.
       if (form.planId && promoCode) {
         try {
           result.subscription = await membersApi.subscribe(result.member.id, { planId: form.planId, promoCode, payment });
         } catch (err) {
-          onCreated(result);
-          throw new Error(t('Membre créé, mais l’abonnement n’a pas pu être enregistré : {error} Ajoutez-le depuis sa fiche.', { error: errorMessage(err) }));
+          result.warnings.push(t('Membre créé, mais l’abonnement n’a pas pu être enregistré : {error} Ajoutez-le depuis sa fiche.', { error: errorMessage(err) }));
+        }
+      }
+      if (photo) {
+        try {
+          result.member = await membersApi.setPhoto(result.member.id, photo);
+          // The JPEG just sent is the photo of that version: no need to download it again.
+          queryClient.setQueryData(memberPhotoKey(result.member.id, photoVersion(result.member.photoUpdatedAt)), photo);
+        } catch (err) {
+          result.warnings.push(t('Membre créé, mais la photo n’a pas été enregistrée : {error} Ajoutez-la depuis sa fiche.', { error: photoErrorText(err, t) }));
         }
       }
       onCreated(result);
@@ -130,7 +152,7 @@ function CreateMemberModal({ open, onClose, onCreated }: { open: boolean; onClos
           <Button variant="ghost" onClick={onClose}>
             {t('Annuler')}
           </Button>
-          <Button loading={saving} onClick={() => void submit()} disabled={!form.firstName || !form.lastName || !form.email}>
+          <Button loading={saving} onClick={() => void submit()} disabled={!form.firstName || !form.lastName || !form.email || preparingPhoto}>
             {t('Créer le membre')}
           </Button>
         </>
@@ -159,6 +181,18 @@ function CreateMemberModal({ open, onClose, onCreated }: { open: boolean; onClos
             wrapperClassName="sm:col-span-2"
           />
         </div>
+
+        <fieldset className="rounded-xl bg-page p-4 ring-1 ring-line">
+          <legend className="px-1 text-sm font-semibold text-fg">{t('Photo')}</legend>
+          <PhotoPicker
+            draft={photo}
+            onChange={(next) => setPhoto(next instanceof Blob ? next : null)}
+            name={`${form.firstName} ${form.lastName}`}
+            hint={t('Affichée à l’accueil et dans l’application du membre.')}
+            disabled={saving}
+            onPreparingChange={setPreparingPhoto}
+          />
+        </fieldset>
 
         <fieldset className="rounded-xl bg-page p-4 ring-1 ring-line">
           <legend className="px-1 text-sm font-semibold text-fg">{t('Abonnement')}</legend>
@@ -205,7 +239,7 @@ function CreateMemberModal({ open, onClose, onCreated }: { open: boolean; onClos
   );
 }
 
-function CreatedModal({ result, onClose }: { result: CreateMemberResult | null; onClose: () => void }) {
+function CreatedModal({ result, onClose }: { result: CreatedMember | null; onClose: () => void }) {
   const navigate = useNavigate();
   const { t } = useI18n();
   return (
@@ -225,7 +259,10 @@ function CreatedModal({ result, onClose }: { result: CreateMemberResult | null; 
     >
       {result && (
         <div className="flex flex-col gap-4 text-sm text-fg-2">
-          <p>{t('{name} est inscrit sous le code {code}.', { name: fullName(result.member), code: result.member.memberCode })}</p>
+          <div className="flex items-center gap-4">
+            <MemberAvatar memberId={result.member.id} name={fullName(result.member)} photoUpdatedAt={result.member.photoUpdatedAt} size="md" />
+            <p className="min-w-0">{t('{name} est inscrit sous le code {code}.', { name: fullName(result.member), code: result.member.memberCode })}</p>
+          </div>
           {result.temporaryPassword && (
             <div className="rounded-xl bg-page p-4 ring-1 ring-line">
               <p className="flex items-center gap-2 font-semibold text-fg">
@@ -239,6 +276,9 @@ function CreatedModal({ result, onClose }: { result: CreateMemberResult | null; 
           {result.subscription && (
             <p>{t('Abonnement {plan} du {from} au {to}.', { plan: result.subscription.plan.name, from: formatDate(result.subscription.startDate), to: formatDate(result.subscription.endDate) })}</p>
           )}
+          {result.warnings.map((warning) => (
+            <ErrorNote key={warning} message={warning} />
+          ))}
         </div>
       )}
     </Modal>
@@ -254,7 +294,7 @@ export function MembersPage() {
   const [status, setStatus] = useState<MemberStatusFilter>('all');
   const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
-  const [created, setCreated] = useState<CreateMemberResult | null>(null);
+  const [created, setCreated] = useState<CreatedMember | null>(null);
   const debounced = useDebounced(search);
   const pageSize = 20;
 

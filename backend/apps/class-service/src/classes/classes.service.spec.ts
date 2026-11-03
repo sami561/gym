@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { DataSource, EntityManager, FindOperator, Repository } from 'typeorm';
-import { BookingStatus, EventBus, RpcClient } from '@app/common';
+import { BookingStatus, EVENTS, EventBus, RpcClient } from '@app/common';
 import { Booking } from '../bookings/booking.entity';
 import { ClassSession } from './class-session.entity';
 import { ClassesService } from './classes.service';
@@ -31,23 +31,25 @@ const session = (overrides: Partial<ClassSession> = {}): ClassSession =>
 type OverlapQuery = { where: Record<string, FindOperator<unknown>> };
 type FindMock = jest.Mock<Promise<ClassSession[]>, [OverlapQuery]>;
 
-function setup({ stored = session(), overlapping = [] as ClassSession[], checkedIn = 0 } = {}) {
+function setup({ stored = session(), overlapping = [] as ClassSession[], checkedIn = 0, booked = [] as Booking[] } = {}) {
   const locked = Object.assign(new ClassSession(), stored);
   const overlapRepo = { find: jest.fn<Promise<ClassSession[]>, [OverlapQuery]>().mockResolvedValue(overlapping) };
   const manager = {
+    query: jest.fn<Promise<unknown[]>, [string, unknown[]]>().mockResolvedValue([]),
     count: jest.fn().mockResolvedValue(checkedIn),
     getRepository: jest.fn(() => overlapRepo),
-    save: jest.fn(async (row: ClassSession) => row),
+    save: jest.fn(async (row: ClassSession | ClassSession[]) => row),
     update: jest.fn().mockResolvedValue({ affected: 2 }),
-    find: jest.fn().mockResolvedValue([]),
+    find: jest.fn().mockResolvedValue(booked),
   };
   const sessions = {
     findOne: jest.fn().mockResolvedValue(Object.assign(new ClassSession(), stored)),
-    find: jest.fn().mockResolvedValue(overlapping),
     create: jest.fn((data: Partial<ClassSession>) => Object.assign(new ClassSession(), data)),
-    save: jest.fn(async (rows: ClassSession[]) => rows.map((row, i) => Object.assign(row, { id: `new-${i}` }))),
   };
-  const dataSource = { transaction: jest.fn(async (work: (m: EntityManager) => unknown) => work(manager as unknown as EntityManager)) };
+  // transaction(work) or transaction(isolation, work): the work is the last argument.
+  const dataSource = {
+    transaction: jest.fn(async (...args: unknown[]) => (args[args.length - 1] as (m: EntityManager) => unknown)(manager as unknown as EntityManager)),
+  };
   const occupancy = {
     lockSession: jest.fn().mockResolvedValue(locked),
     loadOne: jest.fn().mockResolvedValue({ booked: 6, takenSpots: [], waitlist: [] }),
@@ -56,16 +58,29 @@ function setup({ stored = session(), overlapping = [] as ClassSession[], checked
     load: jest.fn().mockResolvedValue(new Map()),
   };
   const rpc = { send: jest.fn() };
+  const events = { publish: jest.fn() };
   const service = new ClassesService(
     sessions as unknown as Repository<ClassSession>,
     {} as Repository<Booking>,
     dataSource as unknown as DataSource,
     occupancy as unknown as OccupancyService,
     rpc as unknown as RpcClient,
-    { publish: jest.fn() } as unknown as EventBus,
+    events as unknown as EventBus,
   );
-  return { service, manager, sessions, overlapRepo, locked };
+  const scheduleLocks = () => manager.query.mock.calls.filter(([sql]) => sql.includes('pg_advisory_xact_lock'));
+  return { service, manager, sessions, overlapRepo, locked, dataSource, events, scheduleLocks };
 }
+
+const bookedRow = (id: string, memberName: string): Booking =>
+  Object.assign(new Booking(), {
+    id,
+    sessionId: SESSION_ID,
+    memberId: `m-${id}`,
+    memberName,
+    memberEmail: `${id}@example.com`,
+    status: BookingStatus.BOOKED,
+    spotNumber: null,
+  });
 
 /** The `where` of the overlap query, operators reduced to their values. */
 function overlapWhere(find: FindMock): Record<string, unknown> {
@@ -78,7 +93,7 @@ describe('ClassesService moves (Africa/Tunis)', () => {
   afterEach(() => jest.useRealTimers());
 
   it('moves a booked session, checks the new slot against the other sessions and re-arms the reminders', async () => {
-    const { service, manager, overlapRepo, locked } = setup();
+    const { service, manager, overlapRepo, locked, dataSource, events, scheduleLocks } = setup();
     const dto = await service.update({
       id: SESSION_ID,
       data: { startsAt: '2026-11-06T19:30:00+01:00', endsAt: '2026-11-06T20:30:00+01:00' },
@@ -91,6 +106,27 @@ describe('ClassesService moves (Africa/Tunis)', () => {
       id: `not:${SESSION_ID}`,
     });
     expect(manager.update).toHaveBeenCalledWith(Booking, { sessionId: SESSION_ID, status: BookingStatus.BOOKED }, { reminderSentAt: null });
+    // More than 2 h ahead: the sweep sends the reminder later.
+    expect(events.publish).not.toHaveBeenCalled();
+    // The overlap check runs under the schedule lock, on committed rows.
+    expect(dataSource.transaction).toHaveBeenCalledWith('READ COMMITTED', expect.any(Function));
+    expect(scheduleLocks()).toHaveLength(1);
+    expect(manager.query.mock.invocationCallOrder[0]).toBeLessThan(overlapRepo.find.mock.invocationCallOrder[0]);
+  });
+
+  it('moves a session to less than 2 h away: the booked members get the reminder with the new time right away', async () => {
+    const booked = [bookedRow('b-1', 'Amira Jaziri'), bookedRow('b-2', 'Youssef Ben Ali')];
+    const { service, manager, events } = setup({ booked });
+    // 11:00 in Tunis: Thursday's class moves to today 12:30–13:30, before the next sweep may run.
+    await service.update({ id: SESSION_ID, data: { startsAt: '2026-11-03T11:30:00.000Z', endsAt: '2026-11-03T12:30:00.000Z' } });
+    expect(manager.update).toHaveBeenCalledWith(Booking, { sessionId: SESSION_ID, status: BookingStatus.BOOKED }, { reminderSentAt: NOW });
+    expect(manager.find).toHaveBeenCalledWith(Booking, { where: { sessionId: SESSION_ID, status: BookingStatus.BOOKED } });
+    expect(events.publish).toHaveBeenCalledTimes(2);
+    expect(events.publish).toHaveBeenCalledWith(
+      EVENTS.bookingReminder,
+      expect.objectContaining({ bookingId: 'b-1', memberId: 'm-b-1', startsAt: '2026-11-03T11:30:00.000Z', endsAt: '2026-11-03T12:30:00.000Z' }),
+    );
+    expect(events.publish).toHaveBeenCalledWith(EVENTS.bookingReminder, expect.objectContaining({ bookingId: 'b-2', email: 'b-2@example.com' }));
   });
 
   it('refuses a room already taken, and saves nothing', async () => {
@@ -137,7 +173,7 @@ describe('ClassesService moves (Africa/Tunis)', () => {
 
   it('keeps editing a past session from the form: same minute, no move, no slot check', async () => {
     const past = session({ startsAt: new Date('2026-11-02T17:00:20.000Z'), endsAt: new Date('2026-11-02T18:00:00.000Z') });
-    const { service, manager, overlapRepo, locked } = setup({ stored: past });
+    const { service, manager, overlapRepo, locked, scheduleLocks } = setup({ stored: past });
     const dto = await service.update({
       id: SESSION_ID,
       data: { title: 'Body Pump (remplacement)', startsAt: '2026-11-02T17:00:00.000Z', endsAt: '2026-11-02T18:00:00.000Z', room: 'Salle cours collectifs' },
@@ -145,6 +181,7 @@ describe('ClassesService moves (Africa/Tunis)', () => {
     expect(dto.title).toBe('Body Pump (remplacement)');
     expect(locked.startsAt.toISOString()).toBe('2026-11-02T17:00:20.000Z');
     expect(overlapRepo.find).not.toHaveBeenCalled();
+    expect(scheduleLocks()).toHaveLength(0);
     expect(manager.update).not.toHaveBeenCalled();
   });
 
@@ -163,8 +200,8 @@ describe('ClassesService create (conflicts)', () => {
 
   it('checks every repeated week before saving anything', async () => {
     const cycling = session({ id: 's-cyc', title: 'Cycling', coachId: 'c-9', coachName: 'Nour Hamdi', startsAt: new Date('2026-11-12T17:30:00.000Z'), endsAt: new Date('2026-11-12T18:15:00.000Z') });
-    const { service, sessions } = setup();
-    sessions.find.mockResolvedValueOnce([]).mockResolvedValueOnce([cycling]);
+    const { service, manager, overlapRepo, dataSource, scheduleLocks } = setup();
+    overlapRepo.find.mockResolvedValueOnce([]).mockResolvedValueOnce([cycling]);
     await expect(
       service.create({
         title: 'Body Pump',
@@ -174,13 +211,34 @@ describe('ClassesService create (conflicts)', () => {
         repeatWeeks: 2,
       }),
     ).rejects.toThrow(new ConflictException('La salle « Salle cours collectifs » est déjà prise par « Cycling » le 12/11/2026 de 18:30 à 19:15.'));
-    expect(sessions.save).not.toHaveBeenCalled();
+    expect(manager.save).not.toHaveBeenCalled();
+    // Checked and saved in one transaction, under the schedule lock: two creates cannot both find the room free.
+    expect(dataSource.transaction).toHaveBeenCalledWith('READ COMMITTED', expect.any(Function));
+    expect(scheduleLocks()).toHaveLength(1);
+    expect(manager.query.mock.invocationCallOrder[0]).toBeLessThan(overlapRepo.find.mock.invocationCallOrder[0]);
+  });
+
+  it('saves the checked weeks in the same transaction', async () => {
+    const { service, manager, overlapRepo } = setup();
+    const created = await service.create({
+      title: 'Body Pump',
+      room: 'Salle cours collectifs',
+      startsAt: '2026-11-05T17:00:00.000Z',
+      endsAt: '2026-11-05T18:00:00.000Z',
+      repeatWeeks: 1,
+    });
+    expect(created.map((s) => s.startsAt)).toEqual(['2026-11-05T17:00:00.000Z', '2026-11-12T17:00:00.000Z']);
+    expect(overlapRepo.find).toHaveBeenCalledTimes(2);
+    expect(manager.save).toHaveBeenCalledTimes(1);
+    expect(overlapRepo.find.mock.invocationCallOrder[1]).toBeLessThan(manager.save.mock.invocationCallOrder[0]);
   });
 
   it('creates sessions without room or coach without looking for conflicts', async () => {
-    const { service, sessions } = setup();
+    const { service, manager, overlapRepo, scheduleLocks } = setup();
     const created = await service.create({ title: 'Open gym', startsAt: '2026-11-05T17:00:00.000Z', endsAt: '2026-11-05T18:00:00.000Z' });
     expect(created).toHaveLength(1);
-    expect(sessions.find).not.toHaveBeenCalled();
+    expect(overlapRepo.find).not.toHaveBeenCalled();
+    expect(scheduleLocks()).toHaveLength(0);
+    expect(manager.save).toHaveBeenCalledTimes(1);
   });
 });

@@ -2,7 +2,7 @@
 
 ![Meliora Gym, Sousse](assets/images/facade.jpg)
 
-Complete management system for **Meliora Gym** (Khzema Est, Rue Colonel Garnaoui, Sousse — [@gymmeliora](https://www.instagram.com/gymmeliora/)):
+Complete management system for **Meliora Gym** (Khzema Est, Rue Colonel Garnaoui, Sousse — Instagram [@gymmeliora](https://www.instagram.com/gymmeliora/), [Facebook](https://www.facebook.com/p/Meliora-Gym-61589769249533/)):
 a public website, an admin back-office, a member mobile app, **automatic door opening** (QR code, app,
 RFID badge, fingerprint) and **n8n automations** for customer e-mails and content — on a
 **NestJS microservices** backend with **PostgreSQL**.

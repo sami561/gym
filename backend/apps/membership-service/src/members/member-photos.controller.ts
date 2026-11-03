@@ -1,6 +1,6 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import { IdRequest, PATTERNS, SetMemberPhotoRequest } from '@app/common';
+import { IdRequest, PATTERNS, SetPhotoRequest } from '@app/common';
 import { MemberPhotosService } from './member-photos.service';
 
 @Controller()
@@ -13,7 +13,7 @@ export class MemberPhotosController {
   }
 
   @MessagePattern(PATTERNS.members.photoSet)
-  set(@Payload() req: SetMemberPhotoRequest) {
+  set(@Payload() req: SetPhotoRequest) {
     return this.photos.set(req);
   }
 

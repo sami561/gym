@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { Camera, CameraOff, Check, ImageUp, RotateCcw, SwitchCamera } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
@@ -54,7 +54,15 @@ export function CameraModal({ open, onClose, onUse, onImport }: CameraModalProps
   const [shot, setShot] = useState<Blob | null>(null);
   const shotUrl = useObjectUrl(shot);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const shutter = useRef<HTMLButtonElement>(null);
+
+  // While the photo is being saved, Escape, the backdrop and × do nothing: closing would hide a refusal
+  // (the upload keeps running). Stable while saving starts and ends, so Modal keeps its focus handling.
+  const close = useCallback(() => {
+    if (!savingRef.current) onClose();
+  }, [onClose]);
 
   // The camera runs only while the dialog is open: closing it (or switching camera) stops every
   // track, so the camera light goes out. A camera that starts after the dialog closed is stopped too.
@@ -99,6 +107,12 @@ export function CameraModal({ open, onClose, onUse, onImport }: CameraModalProps
     setSaving(false);
   }, [open]);
 
+  // The shutter is disabled until the first frame shows, so autoFocus cannot reach it: give it the
+  // keyboard focus once the camera is ready (first opening, after "Réessayer", after a retake).
+  useEffect(() => {
+    if (open && ready && !shot && !problem) shutter.current?.focus();
+  }, [open, ready, shot, problem]);
+
   const capture = async () => {
     if (!video.current) return;
     setError(null);
@@ -111,6 +125,7 @@ export function CameraModal({ open, onClose, onUse, onImport }: CameraModalProps
 
   const use = async () => {
     if (!shot) return;
+    savingRef.current = true;
     setSaving(true);
     setError(null);
     try {
@@ -118,6 +133,7 @@ export function CameraModal({ open, onClose, onUse, onImport }: CameraModalProps
     } catch (reason) {
       setError(photoErrorText(reason, t));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -141,7 +157,7 @@ export function CameraModal({ open, onClose, onUse, onImport }: CameraModalProps
           </Button>
         )}
         {CAMERA_FINAL_PROBLEMS.includes(problem) ? (
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={close} autoFocus data-autofocus>
             {t('Fermer')}
           </Button>
         ) : (
@@ -150,6 +166,8 @@ export function CameraModal({ open, onClose, onUse, onImport }: CameraModalProps
               setCameraId(undefined); // back to the default camera, in case the one picked was unplugged
               setAttempt((n) => n + 1);
             }}
+            autoFocus
+            data-autofocus
           >
             {t('Réessayer')}
           </Button>
@@ -175,10 +193,11 @@ export function CameraModal({ open, onClose, onUse, onImport }: CameraModalProps
             {t('Changer de caméra')}
           </Button>
         )}
-        <Button variant="ghost" onClick={onClose}>
+        <Button variant="ghost" onClick={close}>
           {t('Annuler')}
         </Button>
-        <Button icon={<Camera className="size-4" />} disabled={!ready} onClick={() => void capture()} autoFocus>
+        {/* Focused by the effect above once ready; data-autofocus lets Modal's first focus pick it too. */}
+        <Button ref={shutter} icon={<Camera className="size-4" />} disabled={!ready} onClick={() => void capture()} data-autofocus={ready || undefined}>
           {t('Prendre la photo')}
         </Button>
       </Fragment>
@@ -188,7 +207,7 @@ export function CameraModal({ open, onClose, onUse, onImport }: CameraModalProps
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={close}
       title={t('Prendre une photo')}
       description={problem ? undefined : t('Cadrez le visage au centre du carré, puis prenez la photo.')}
       footer={footer}

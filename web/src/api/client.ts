@@ -109,6 +109,8 @@ interface RequestOptions {
   /** Send the bearer token (default true). */
   auth?: boolean;
   signal?: AbortSignal;
+  /** Browser HTTP cache mode; 'no-store' keeps personal data (member photos) off the disk. */
+  cache?: RequestCache;
 }
 
 function buildUrl(path: string, query?: Query): string {
@@ -145,7 +147,7 @@ async function toApiError(res: Response): Promise<ApiError> {
  * replays it. Resolves the successful response, rejects with an ApiError.
  */
 async function request(path: string, options: RequestOptions): Promise<Response> {
-  const { method = 'GET', body, query, auth = true, signal } = options;
+  const { method = 'GET', body, query, auth = true, signal, cache } = options;
   const url = buildUrl(path, query);
   const form = body instanceof FormData ? body : null;
 
@@ -153,6 +155,7 @@ async function request(path: string, options: RequestOptions): Promise<Response>
     fetch(url, {
       method,
       signal,
+      cache,
       headers: {
         ...(body !== undefined && !form ? { 'Content-Type': 'application/json' } : {}),
         ...(auth && accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -187,6 +190,14 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
 export async function apiBlob(path: string, options: Omit<RequestOptions, 'body'> = {}): Promise<Blob> {
   const res = await request(path, options);
   return res.blob();
+}
+
+/**
+ * A file URL the API hands out (`/api/public/coaches/:id/photo?v=…`), on the gateway's origin when
+ * VITE_API_URL is set. Other URLs (a photo address typed by hand before uploads existed) pass as is.
+ */
+export function apiFileUrl(url: string): string {
+  return url.startsWith('/api/') ? `${API_BASE}${url}` : url;
 }
 
 export function errorMessage(error: unknown): string {
