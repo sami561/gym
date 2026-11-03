@@ -43,6 +43,7 @@ source of truth for every payload. Web and mobile clients should mirror them in 
 | GET | `/api/public/plans` | `PlanDto[]` (active plans, sorted) |
 | GET | `/api/public/classes?from&to` | `ClassSessionDto[]` (default: next 7 days) |
 | GET | `/api/public/coaches` | `PublicCoach[]` |
+| GET | `/api/public/coaches/:id/photo?v=` | `image/jpeg`, the uploaded photo of an active coach (`PublicCoach.avatarUrl`, see "Coach photos"); 404 `Aucune photo.` |
 | GET | `/api/health` | `{ status, services: { auth: 'up'|'down', membership, class, access, notification } }` |
 
 ## Auth
@@ -181,6 +182,31 @@ minute (the editor form does) is not a move and keeps the stored value.
 `PATCH /api/users/:id` → `UserDto` · `DELETE /api/users/:id` → `{ ok: true }`.
 A new `password` or `isActive: false` ends every session of that user. Demoting, deactivating or deleting the
 last active ADMIN → 409 `Impossible : c’est le dernier administrateur actif.` (checked atomically).
+
+| Method | Path | Body | Result |
+|---|---|---|---|
+| PUT | `/api/users/:id/photo` | `multipart/form-data`, field `photo` | `UserDto` with `avatarUrl: "/api/public/coaches/<id>/photo?v=<epoch ms>"` — COACH accounts only: 400 `Seuls les coachs ont une photo sur le site.`; 404 `Utilisateur introuvable.` |
+| DELETE | `/api/users/:id/photo` | – | `UserDto` with `avatarUrl: null` (also when there was no photo) |
+| GET | `/api/public/coaches/:id/photo?v=` | – (public, no token) | `image/jpeg`; 404 `Aucune photo.` |
+
+**Coach photos** — the photo of a coach on the website (Coaches section) and in the back-office Team page.
+- Upload (ADMIN): same file rules, refusals and metadata removal as "Member photos" above (one JPEG file in
+  `photo`, 512 KB at most, 400 `Ajoutez une photo (champ « photo »).` / `La photo doit être une image JPEG.`,
+  413 `La photo dépasse 512 Ko.`), for an account whose role is COACH (deactivated coaches included). The
+  answer's `avatarUrl` is the public route of the photo, a path on the API origin, with a new `v` (epoch ms
+  of the upload) at every upload: clients show `avatarUrl` as it is when they are served with the API (nginx,
+  Vite proxy), prefixed with the API base URL otherwise; a URL typed by hand is shown as it is.
+- `GET /api/public/coaches/:id/photo` needs no token (the website shows it): with `v` the answer carries
+  `Cache-Control: public, max-age=31536000, immutable`, without it `public, no-cache`, always with an `ETag`
+  (taken from the bytes); a matching `If-None-Match` answers 304 without body. 404 `Aucune photo.` (JSON)
+  when no photo was uploaded, for an unknown id, and as soon as the user is no longer an active COACH:
+  demoted or deactivated coaches disappear from the site (the photo is kept and comes back with the role).
+- `DELETE /api/users/:id/photo` deletes the stored photo and sets `avatarUrl` to null, whatever it was.
+- `avatarUrl` typed by hand still works (`POST` with a URL, `PATCH` with a URL or null): a `PATCH` that changes
+  it replaces the uploaded photo, which is deleted. A `PATCH` sending back the coach's own
+  `/api/public/coaches/<id>/photo…` value (any `v`, e.g. a form re-sending what it loaded) is accepted and
+  changes nothing: only the photo routes write that value. Any other relative path → 400.
+- Stored by auth-service (`user_photos`, deleted with the user). Never in logs, events or n8n payloads.
 
 ### Access control (staff)
 | Method | Path | Body / query | Result |

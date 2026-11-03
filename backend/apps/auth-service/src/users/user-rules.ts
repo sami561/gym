@@ -1,4 +1,4 @@
-import { Role } from '@app/common';
+import { Role, coachPhotoOwner } from '@app/common';
 
 interface AdminCandidate {
   role: Role;
@@ -13,6 +13,19 @@ export function isActiveAdmin(user: AdminCandidate): boolean {
 export function removesActiveAdmin(user: AdminCandidate, change: { role?: Role; isActive?: boolean }): boolean {
   if (!isActiveAdmin(user)) return false;
   return (change.role !== undefined && change.role !== Role.ADMIN) || change.isActive === false;
+}
+
+/**
+ * Whether the avatarUrl of an update changes the column. A URL typed by hand, or null, does when it differs from
+ * the current value (and then replaces the uploaded photo). The user's own coach photo URL never does, whatever
+ * its version: only the photo routes write it, and a form may send back the value it loaded, maybe older.
+ */
+export function changesAvatarUrl(
+  user: { id: string; avatarUrl: string | null },
+  requested: string | null | undefined,
+): requested is string | null {
+  if (requested === undefined || requested === user.avatarUrl) return false;
+  return coachPhotoOwner(requested) !== user.id;
 }
 
 /** Bootstrap admin password outside production (documented in backend/.env.example). */

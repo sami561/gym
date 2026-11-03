@@ -14,6 +14,10 @@ export interface UserDto {
   role: Role;
   firstName: string;
   lastName: string;
+  /**
+   * Coach photo on the website: a URL typed by hand, or `/api/public/coaches/<id>/photo?v=<epoch ms>` once a
+   * photo file was uploaded (coachPhotoUrl, docs/API.md, Coach photos); null without photo.
+   */
   avatarUrl: string | null;
   specialty: string | null;
   bio: string | null;
@@ -118,3 +122,8 @@ export interface PublicCoach {
   bio: string | null;
   avatarUrl: string | null;
 }
+
+/** The refusal of `PUT /api/users/:id/photo` for an account that is not a coach (docs/API.md, Coach photos). */
+export const COACH_PHOTO_ERRORS = {
+  notCoach: 'Seuls les coachs ont une photo sur le site.',
+} as const;

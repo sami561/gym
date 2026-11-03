@@ -58,9 +58,9 @@ docker compose up -d --build                                      # everything (
 
 ## Known gaps / gotchas
 - No TypeORM migrations yet: schemas come from `DB_SYNCHRONIZE=true`. Add migrations before production;
-  they must include `refresh_sessions` (auth), `doors.allowAppOpen`, `access_logs.context`,
-  `access_members.removedAt` (access) and `member_photos` (FK `ON DELETE CASCADE`), `members.photoUpdatedAt`
-  (membership).
+  they must include `refresh_sessions`, `user_photos` (FK `ON DELETE CASCADE`) (auth), `doors.allowAppOpen`,
+  `access_logs.context`, `access_members.removedAt` (access) and `member_photos` (FK `ON DELETE CASCADE`),
+  `members.photoUpdatedAt` (membership).
 - Redis transport = single replica per service; use `BUS_TRANSPORT=nats` (queue groups) to scale.
   The NATS path (with `NATS_TOKEN`) is configured but has not been run end to end.
 - Refresh tokens are single-use: every `POST /api/auth/refresh` returns a new one, and scripts and clients

@@ -1,8 +1,9 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
-import { EVENTS, EventBus, Role } from '@app/common';
+import { EVENTS, EventBus, Role, coachPhotoUrl } from '@app/common';
 import { RefreshSessionsService } from '../sessions/refresh-sessions.service';
 import { User } from './user.entity';
+import { UserPhotoEntity } from './user-photo.entity';
 import { UsersService } from './users.service';
 
 const ADMIN_ID = '1f6d8a52-4f0e-4c1e-9b7a-0a1b2c3d4e01';
@@ -171,5 +172,46 @@ describe('UsersService — sessions', () => {
     await service.recordLogin(MEMBER_ID, at);
     expect(repository.update).toHaveBeenCalledWith({ id: MEMBER_ID }, { lastLoginAt: at });
     expect(repository.save).not.toHaveBeenCalled();
+  });
+});
+
+describe('UsersService — avatarUrl and the uploaded coach photo', () => {
+  const COACH_ID = '1f6d8a52-4f0e-4c1e-9b7a-0a1b2c3d4e03';
+  const uploaded = coachPhotoUrl(COACH_ID, new Date('2026-11-03T09:00:00.000Z'));
+  const photoDeletes = (manager: ReturnType<typeof setup>['manager']) =>
+    (manager.delete.mock.calls as unknown[][]).filter(([entity]) => entity === UserPhotoEntity);
+
+  it('a URL typed by hand still works and replaces the uploaded photo, deleted in the same transaction', async () => {
+    const coach = makeUser(COACH_ID, Role.COACH, { avatarUrl: uploaded });
+    const { manager, service } = setup(coach, 1);
+    const dto = await service.update({ id: COACH_ID, data: { avatarUrl: 'https://cdn.example.com/leila.jpg' } });
+    expect(dto.avatarUrl).toBe('https://cdn.example.com/leila.jpg');
+    expect(photoDeletes(manager)).toEqual([[UserPhotoEntity, { userId: COACH_ID }]]);
+    expect(manager.save).toHaveBeenCalledWith(expect.objectContaining({ avatarUrl: 'https://cdn.example.com/leila.jpg' }));
+  });
+
+  it('null clears the photo as well', async () => {
+    const { manager, service } = setup(makeUser(COACH_ID, Role.COACH, { avatarUrl: uploaded }), 1);
+    expect((await service.update({ id: COACH_ID, data: { avatarUrl: null } })).avatarUrl).toBeNull();
+    expect(photoDeletes(manager)).toHaveLength(1);
+  });
+
+  it('sending back the own photo URL (even an older version) or the same URL changes nothing', async () => {
+    const coach = setup(makeUser(COACH_ID, Role.COACH, { avatarUrl: uploaded }), 1);
+    const older = coachPhotoUrl(COACH_ID, new Date('2026-11-01T09:00:00.000Z'));
+    const dto = await coach.service.update({ id: COACH_ID, data: { avatarUrl: older, bio: 'Yoga et mobilité' } });
+    expect(dto).toMatchObject({ avatarUrl: uploaded, bio: 'Yoga et mobilité' });
+
+    const typed = setup(makeUser(COACH_ID, Role.COACH, { avatarUrl: 'https://cdn.example.com/a.jpg' }), 1);
+    await typed.service.update({ id: COACH_ID, data: { avatarUrl: 'https://cdn.example.com/a.jpg' } });
+    await typed.service.update({ id: COACH_ID, data: { firstName: 'Leila' } });
+    expect(photoDeletes(coach.manager)).toHaveLength(0);
+    expect(photoDeletes(typed.manager)).toHaveLength(0);
+  });
+
+  it('a demotion keeps the photo (the public route stops serving it)', async () => {
+    const { manager, service } = setup(makeUser(COACH_ID, Role.COACH, { avatarUrl: uploaded }), 1);
+    expect((await service.update({ id: COACH_ID, data: { role: Role.STAFF } })).avatarUrl).toBe(uploaded);
+    expect(photoDeletes(manager)).toHaveLength(0);
   });
 });

@@ -1,7 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
-import { MEMBER_PHOTO_ERRORS } from '@app/common';
+import { PHOTO_ERRORS } from '../contracts/photo.contracts';
 
 /*
+ * Shared by every photo upload (member photos in membership-service, coach photos in auth-service).
+ *
  * JPEG layout (ITU-T T.81, annex B): SOI `FF D8`, then marker segments `FF xx <length:2> <payload>` (the
  * length counts itself, any number of `FF` fill bytes may come before a marker), a frame header (SOFn), and
  * scans: a SOS header followed by entropy-coded data in which `FF` is always followed by `00` (stuffing) or
@@ -19,7 +21,7 @@ const isMetadata = (marker: number) => (marker >= 0xe1 && marker <= 0xef) || mar
 const isFrameHeader = (marker: number) =>
   marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
 
-const notJpeg = () => new BadRequestException(MEMBER_PHOTO_ERRORS.notJpeg);
+const notJpeg = () => new BadRequestException(PHOTO_ERRORS.notJpeg);
 
 /**
  * The JPEG without its metadata segments: APP1–APP15 and COM are removed wherever they are (before the first

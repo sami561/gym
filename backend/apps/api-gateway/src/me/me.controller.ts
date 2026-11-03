@@ -36,7 +36,6 @@ import {
   MemberAccessInfo,
   MemberDoor,
   MemberDto,
-  MemberPhoto,
   MemberProfile,
   OpenByAppRequest,
   PATTERNS,
@@ -45,7 +44,8 @@ import {
   Roles,
   RotateAccessKeyRequest,
   RpcClient,
-  SetMemberPhotoRequest,
+  SetPhotoRequest,
+  StoredPhoto,
   toActor,
   UserDto,
   WorkoutProgramDto,
@@ -58,7 +58,7 @@ import {
   UploadedPhoto,
   photoData,
   sendPhoto,
-} from '../members/member-photo';
+} from '../common/photo';
 import {
   BookDto,
   BookingsQuery,
@@ -176,8 +176,8 @@ export class MeController {
     @Headers('if-none-match') ifNoneMatch: string | undefined,
     @Res() res: Response,
   ): Promise<void> {
-    const photo = await this.rpc.send<MemberPhoto, IdRequest>(PATTERNS.members.photoGet, { id: user.id });
-    sendPhoto(res, photo, { version, ifNoneMatch });
+    const photo = await this.rpc.send<StoredPhoto, IdRequest>(PATTERNS.members.photoGet, { id: user.id });
+    sendPhoto(res, photo, { audience: 'private', version, ifNoneMatch });
   }
 
   /** multipart/form-data, file field `photo`: a JPEG of at most 512 KB, resized by the app beforehand. */
@@ -186,7 +186,7 @@ export class MeController {
   @UseInterceptors(PhotoUploadInterceptor)
   @Put('photo')
   setPhoto(@CurrentUser() user: AuthUser, @UploadedFile() file: UploadedPhoto | undefined) {
-    return this.rpc.send<MemberDto, SetMemberPhotoRequest>(PATTERNS.members.photoSet, {
+    return this.rpc.send<MemberDto, SetPhotoRequest>(PATTERNS.members.photoSet, {
       id: user.id,
       data: photoData(file),
     });
