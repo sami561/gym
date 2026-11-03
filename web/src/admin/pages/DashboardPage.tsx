@@ -29,6 +29,7 @@ import {
 import { POSITION_LABELS } from '../../lib/labels-ops';
 import { AgeGroupsChart, CheckinsChart, GenderSplit, HourlyChart, MonthlyCountChart, PlanMixChart, RevenueChart } from '../charts/Charts';
 import { StatTile, type Delta } from '../charts/StatTile';
+import { LogAvatar } from '../photos/LogAvatar';
 import { POSITION_ORDER, ShiftTimeline, useNow, usePositionColor } from './hr/team';
 import { KpiCards } from './PerformancePage';
 
@@ -75,9 +76,9 @@ export function LiveFeed({ compact = false }: { compact?: boolean }) {
               initial={{ opacity: 0, backgroundColor: 'var(--hover-wash)' }}
               animate={{ opacity: 1, backgroundColor: 'rgba(0,0,0,0)' }}
               transition={{ duration: 1.2 }}
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5"
+              className="flex items-center gap-3 rounded-lg px-3 py-2"
             >
-              <span className={clsx('size-2 shrink-0 rounded-full', log.result === 'GRANTED' ? 'bg-[#0ca30c]' : 'bg-[#d03b3b]')} aria-hidden />
+              <LogAvatar log={log} showResult />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-fg">
                   {log.memberName ?? (log.method === 'MANUAL' ? (log.openedByName ? t('Ouverture manuelle par {name}', { name: log.openedByName }) : t('Ouverture manuelle')) : t('Inconnu'))}

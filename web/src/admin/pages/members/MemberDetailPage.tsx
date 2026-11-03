@@ -29,6 +29,7 @@ import {
   SUBSCRIPTION_STATUS_LABELS,
 } from '../../../lib/format';
 import { WeightChart } from '../../charts/Charts';
+import { MemberPhotoBlock } from './MemberPhotoBlock';
 import { PromoField, usePromoQuote } from './PromoField';
 import { useI18n } from '../../../i18n';
 
@@ -592,7 +593,7 @@ export function MemberDetailPage() {
           {t('Membres')}
         </Link>
         <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
-          <div>
+          <MemberPhotoBlock member={m}>
             <h1 className="type-wide text-2xl text-fg sm:text-[28px]">{fullName(m)}</h1>
             <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-fg-2">
               <span>{m.memberCode}</span>
@@ -600,7 +601,7 @@ export function MemberDetailPage() {
               <span>{t('Inscrit le {date}', { date: formatDate(m.joinedAt) })}</span>
               {suspended ? <Badge tone="bad">{t('Suspendu')}</Badge> : data.membership.active ? <Badge tone="good">{t('Actif')}</Badge> : <Badge>{t('Sans abonnement')}</Badge>}
             </p>
-          </div>
+          </MemberPhotoBlock>
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" icon={<CreditCard className="size-4" />} onClick={() => setTab('payments')}>
               {t('Paiements')}
