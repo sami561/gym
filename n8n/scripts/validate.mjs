@@ -177,7 +177,7 @@ for (const file of files) {
 
 // ---- 2. Templates ---------------------------------------------------------------------------------
 console.log('Templates');
-const LAYOUT_KEYS = new Set(['logoUrl', 'websiteUrl', 'appUrl', 'adminUrl', 'mapsUrl', 'instagramUrl', 'instagramHandle', 'address', 'phone', 'year', 'subject', 'preheader', 'footerNote']);
+const LAYOUT_KEYS = new Set(['logoUrl', 'websiteUrl', 'appUrl', 'adminUrl', 'mapsUrl', 'instagramUrl', 'instagramHandle', 'facebookUrl', 'address', 'phone', 'year', 'subject', 'preheader', 'footerNote']);
 const usedTemplates = new Set();
 for (const wf of Object.values(workflows)) {
   for (const node of wf.nodes.filter((n) => n.type === 'n8n-nodes-base.code')) {

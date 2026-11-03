@@ -1,8 +1,9 @@
 # Meliora Gym platform — guide for Claude
 
 Gym management system for **Meliora Gym** (Khzema Est, Rue Colonel Garnaoui, Sousse, Tunisia —
-Instagram @gymmeliora). Owner-facing language: French. UI languages: French (default), English,
-Arabic (RTL). Currency TND (3 decimals), timezone `Africa/Tunis`.
+Instagram @gymmeliora, Facebook https://www.facebook.com/p/Meliora-Gym-61589769249533/). Owner-facing
+language: French. UI languages: French (default), English, Arabic (RTL). Currency TND (3 decimals),
+timezone `Africa/Tunis`.
 
 ## Repo map
 | Folder | What | Stack |

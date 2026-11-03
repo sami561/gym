@@ -39,7 +39,7 @@ source of truth for every payload. Web and mobile clients should mirror them in 
 
 | Method | Path | Result |
 |---|---|---|
-| GET | `/api/public/gym` | `GymInfo` — name, tagline, address, city, phone, email, instagram, mapsUrl, location `{lat,lng}`, geofenceMeters, openingHours `[{days,open,close}]` |
+| GET | `/api/public/gym` | `GymInfo` — name, tagline, address, city, phone, email, instagram, facebook, mapsUrl, location `{lat,lng}`, geofenceMeters, openingHours `[{days,open,close}]` |
 | GET | `/api/public/plans` | `PlanDto[]` (active plans, sorted) |
 | GET | `/api/public/classes?from&to` | `ClassSessionDto[]` (default: next 7 days) |
 | GET | `/api/public/coaches` | `PublicCoach[]` |

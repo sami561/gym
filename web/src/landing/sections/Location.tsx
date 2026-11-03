@@ -2,6 +2,7 @@ import { Mail, MapPin, Phone } from 'lucide-react';
 import { useI18n } from '../../lib/i18n';
 import { MAPS_EMBED_URL } from '../../lib/fallbacks';
 import { useGym } from '../useLandingData';
+import { FacebookGlyph } from './FacebookGlyph';
 import { InstagramGlyph } from './InstagramGlyph';
 
 export function Location() {
@@ -81,6 +82,12 @@ export function Location() {
                   <a href={gym.instagram} target="_blank" rel="noreferrer" className="flex items-center gap-3 hover:text-led">
                     <InstagramGlyph className="size-4 text-steel-400" />
                     {handle}
+                  </a>
+                </li>
+                <li>
+                  <a href={gym.facebook} target="_blank" rel="noreferrer" className="flex items-center gap-3 hover:text-led">
+                    <FacebookGlyph className="size-4 text-steel-400" />
+                    <span className="sr-only">Facebook</span> {gym.name}
                   </a>
                 </li>
               </ul>
