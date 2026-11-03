@@ -41,6 +41,7 @@ What it does:
 - sends a `heartbeat` every 30 s so the admin shows each door online/offline.
 
 The protocol is documented in [`docs/API.md`](../docs/API.md) ("Door agents" and "Rotating QR access code").
+Turnstiles and face terminals (which SDK applies, integration paths per brand, legal checks): [`docs/hardware/turnstile-integration.md`](../docs/hardware/turnstile-integration.md).
 
 ## Quick start
 
