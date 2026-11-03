@@ -20,4 +20,6 @@ export * from './utils/access-code';
 export * from './utils/geo';
 export * from './utils/codes';
 export * from './utils/outbound-url';
+export * from './utils/jpeg-metadata';
+export * from './utils/photos';
 export * from './bootstrap/bootstrap';

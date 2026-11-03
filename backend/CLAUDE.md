@@ -26,10 +26,12 @@ also serves the door-agent socket on :4004), `app.module.ts` (`databaseModule('<
 - `decimalTransformer` on numeric columns, `timestamptz` for instants, `date` for gym-calendar days. A column
   only SQL writes (`members.photoUpdatedAt`) is `insert: false, update: false`: `save()` of an entity loaded
   earlier would write the old value back.
-- Files (member photos, `api-gateway/src/members/member-photo.ts`): multipart through `FileInterceptor` wrapped
-  to give French refusals (multer `limits`, memory storage, a local file type instead of `@types/multer`), bytes
-  on the bus in base64 (keep messages well under NATS' 1 MB), binary answers written with `@Res()` and explicit
-  `Content-Type` / `Cache-Control` / `ETag`. Bytes never go to logs or events (`RedactingQueryLogger` hides
+- Files (member and coach photos, `api-gateway/src/common/photo.ts`, shared by every photo route): multipart
+  through `FileInterceptor` wrapped to give French refusals (multer `limits`, memory storage, a local file type
+  instead of `@types/multer`), bytes on the bus in base64 (keep messages well under NATS' 1 MB), binary answers
+  written with `@Res()` and explicit `Content-Type` / `Cache-Control` (`private` behind a token, `public` for the
+  website) / `ETag`. The owning service checks and cleans the JPEG with `stripJpegMetadata` and
+  `decodePhotoUpload` (`libs/common/src/utils`). Bytes never go to logs or events (`RedactingQueryLogger` hides
   binary query parameters).
 - Event handlers are idempotent and tolerate out-of-order delivery (unique keys, upserts, retries).
 - Cross-service reads that are optional degrade gracefully (`.catch(() => null)` / placeholder names).

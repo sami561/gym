@@ -1,6 +1,37 @@
+import { useState } from 'react';
+import { apiFileUrl } from '../../api/client';
 import { useI18n } from '../../lib/i18n';
 import { initials } from '../../lib/format';
 import { usePublicCoaches } from '../useLandingData';
+
+/**
+ * The coach's photo: avatarUrl is the public `/api/public/coaches/:id/photo?v=…` uploaded from the
+ * back office (a 600×600 square), or an older address typed by hand. Initials when there is none or
+ * it does not load. Decorative: the name is the heading next to it.
+ */
+function CoachPortrait({ name, avatarUrl }: { name: string; avatarUrl: string | null }) {
+  const src = avatarUrl ? apiFileUrl(avatarUrl) : null;
+  const [broken, setBroken] = useState<string | null>(null);
+  if (src && src !== broken) {
+    return (
+      <img
+        src={src}
+        alt=""
+        width={80}
+        height={80}
+        loading="lazy"
+        decoding="async"
+        onError={() => setBroken(src)}
+        className="size-20 shrink-0 rounded-full bg-steel-800 object-cover ring-1 ring-white/15"
+      />
+    );
+  }
+  return (
+    <span className="type-wide flex size-20 shrink-0 items-center justify-center rounded-full bg-steel-800 text-xl text-led ring-1 ring-white/10" aria-hidden>
+      {initials(name)}
+    </span>
+  );
+}
 
 export function Coaches() {
   const { t } = useI18n();
@@ -19,13 +50,7 @@ export function Coaches() {
               const name = `${coach.firstName} ${coach.lastName}`;
               return (
                 <li key={coach.id} className="flex gap-5">
-                  {coach.avatarUrl ? (
-                    <img src={coach.avatarUrl} alt="" loading="lazy" className="size-20 shrink-0 rounded-full object-cover ring-1 ring-white/15" />
-                  ) : (
-                    <span className="type-wide flex size-20 shrink-0 items-center justify-center rounded-full bg-steel-800 text-xl text-led ring-1 ring-white/10" aria-hidden>
-                      {initials(name)}
-                    </span>
-                  )}
+                  <CoachPortrait name={name} avatarUrl={coach.avatarUrl} />
                   <div>
                     <h3 className="type-wide text-xl">{name}</h3>
                     {coach.specialty && <p className="mt-1 text-sm font-semibold text-brand-400">{coach.specialty}</p>}

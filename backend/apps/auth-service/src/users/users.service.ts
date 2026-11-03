@@ -15,7 +15,8 @@ import {
 import { RefreshSessionsService } from '../sessions/refresh-sessions.service';
 import { hashPassword } from './passwords';
 import { User } from './user.entity';
-import { bootstrapAdminPassword, isActiveAdmin, removesActiveAdmin } from './user-rules';
+import { UserPhotoEntity } from './user-photo.entity';
+import { bootstrapAdminPassword, changesAvatarUrl, isActiveAdmin, removesActiveAdmin } from './user-rules';
 
 /**
  * Transaction-scoped advisory lock taken by every change that takes an active admin away (demotion,
@@ -135,9 +136,14 @@ export class UsersService implements OnApplicationBootstrap {
       const endSessions = passwordHash !== null || (data.isActive === false && user.isActive);
       if (passwordHash) user.passwordHash = passwordHash;
       if (endSessions) user.tokenVersion += 1;
-      const fields = ['role', 'firstName', 'lastName', 'phone', 'specialty', 'bio', 'avatarUrl', 'isActive'] as const;
+      const fields = ['role', 'firstName', 'lastName', 'phone', 'specialty', 'bio', 'isActive'] as const;
       for (const field of fields) {
         if (data[field] !== undefined) (user as unknown as Record<string, unknown>)[field] = data[field];
+      }
+      if (changesAvatarUrl(user, data.avatarUrl)) {
+        // A URL typed by hand (or none) replaces the uploaded photo, whose bytes are not kept.
+        user.avatarUrl = data.avatarUrl;
+        await manager.delete(UserPhotoEntity, { userId: user.id });
       }
       const updated = await manager.save(user);
       if (endSessions) await this.sessions.revokeAll(user.id, manager);

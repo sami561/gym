@@ -18,6 +18,13 @@ export const PATTERNS = {
     update: 'users.update',
     remove: 'users.remove',
     publicCoaches: 'users.public-coaches',
+    /**
+     * Coach photos (docs/API.md, Coach photos). get: { id } → StoredPhoto, 404 'Aucune photo.' unless the user is
+     * an active COACH with an uploaded photo (public); set: SetPhotoRequest → UserDto (COACH only); remove: { id } → UserDto.
+     */
+    photoGet: 'users.photo.get',
+    photoSet: 'users.photo.set',
+    photoRemove: 'users.photo.remove',
   },
   members: {
     create: 'members.create',
@@ -27,7 +34,7 @@ export const PATTERNS = {
     remove: 'members.remove',
     profile: 'members.profile',
     entitlements: 'members.entitlements',
-    /** { id } → MemberPhoto (404 'Aucune photo.'); set: SetMemberPhotoRequest → MemberDto; remove: { id } → MemberDto. */
+    /** { id } → StoredPhoto (404 'Aucune photo.'); set: SetPhotoRequest → MemberDto; remove: { id } → MemberDto. */
     photoGet: 'members.photo.get',
     photoSet: 'members.photo.set',
     photoRemove: 'members.photo.remove',

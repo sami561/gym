@@ -5,6 +5,26 @@ import { membersApi } from '../../api/endpoints';
 import type { TFunction } from '../../i18n';
 import { PHOTO_ERROR_MESSAGES, PhotoError } from '../../lib/photo';
 
+export type AvatarSize = 'sm' | 'md' | 'lg' | 'xl';
+
+/** Square like the stored photo, corners rounding up with the size: an access-badge portrait. */
+export const AVATAR_SIZES: Record<AvatarSize, string> = {
+  /** Live feed, access log. */
+  sm: 'size-8 rounded-md text-[11px]',
+  /** Member list, team list. */
+  md: 'size-10 rounded-lg text-[13px]',
+  /** Member file, photo picker of the new member and coach forms. */
+  lg: 'size-20 rounded-xl text-2xl sm:size-28 sm:rounded-2xl sm:text-3xl',
+  /** Reception scanner: big enough to compare with the face at the desk. */
+  xl: 'size-28 rounded-2xl text-4xl sm:size-44 sm:rounded-3xl sm:text-6xl lg:size-48 xl:size-56',
+};
+
+export const AVATAR_TONES = {
+  plain: 'bg-card-2 text-fg-2 ring-1 ring-line',
+  /** On the scanner's green or red verdict. */
+  verdict: 'bg-white/15 text-white ring-4 ring-white/90',
+};
+
 /**
  * Cache key of a member's photo: one entry per upload (`version`), and 'latest' where only the
  * member id is known (access logs, live feed, scanner). memberPhotoKey(id, undefined) is the latest.

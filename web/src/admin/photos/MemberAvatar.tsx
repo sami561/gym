@@ -3,27 +3,7 @@ import clsx from 'clsx';
 import { Spinner } from '../../components/ui/Spinner';
 import { useI18n } from '../../i18n';
 import { initials } from '../../lib/format';
-import { useMemberPhoto, useNearViewport, useObjectUrl } from './photos';
-
-export type AvatarSize = 'sm' | 'md' | 'lg' | 'xl';
-
-/** Square like the stored photo, corners rounding up with the size: an access-badge portrait. */
-const SIZES: Record<AvatarSize, string> = {
-  /** Live feed, access log. */
-  sm: 'size-8 rounded-md text-[11px]',
-  /** Member list. */
-  md: 'size-10 rounded-lg text-[13px]',
-  /** Member file. */
-  lg: 'size-20 rounded-xl text-2xl sm:size-28 sm:rounded-2xl sm:text-3xl',
-  /** Reception scanner: big enough to compare with the face at the desk. */
-  xl: 'size-28 rounded-2xl text-4xl sm:size-44 sm:rounded-3xl sm:text-6xl lg:size-48 xl:size-56',
-};
-
-const TONES = {
-  plain: 'bg-card-2 text-fg-2 ring-1 ring-line',
-  /** On the scanner's green or red verdict. */
-  verdict: 'bg-white/15 text-white ring-4 ring-white/90',
-};
+import { AVATAR_SIZES, AVATAR_TONES, useMemberPhoto, useNearViewport, useObjectUrl, type AvatarSize } from './photos';
 
 interface MemberAvatarProps {
   memberId: string;
@@ -35,7 +15,7 @@ interface MemberAvatarProps {
    */
   photoUpdatedAt: string | null | undefined;
   size?: AvatarSize;
-  tone?: keyof typeof TONES;
+  tone?: keyof typeof AVATAR_TONES;
   /** The name is written right next to it: hide the picture from screen readers. */
   decorative?: boolean;
   /** Shows a spinner over the picture, announced with this text (upload in progress). */
@@ -60,7 +40,7 @@ export function MemberAvatar({ memberId, name, photoUpdatedAt, size = 'md', tone
   return (
     <span
       ref={ref}
-      className={clsx('relative inline-flex shrink-0 items-center justify-center overflow-hidden select-none', SIZES[size], TONES[tone], className)}
+      className={clsx('relative inline-flex shrink-0 items-center justify-center overflow-hidden select-none', AVATAR_SIZES[size], AVATAR_TONES[tone], className)}
     >
       <span
         className="type-wide leading-none"

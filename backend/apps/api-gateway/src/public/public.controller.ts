@@ -1,17 +1,21 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, ParseUUIDPipe, Post, Query, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import type { Response } from 'express';
 import {
   ClassSessionDto,
   GymInfo,
+  IdRequest,
   PATTERNS,
   PlanDto,
   Public,
   PublicCoach,
   RoomDto,
   RpcClient,
+  StoredPhoto,
   gymInfo,
 } from '@app/common';
+import { ApiPhotoDownload, sendPhoto } from '../common/photo';
 import { ClassRangeQuery, PublicTrialDto } from './public.dto';
 
 @ApiTags('Public')
@@ -38,6 +42,22 @@ export class PublicController {
   @Get('coaches')
   coaches() {
     return this.rpc.send<PublicCoach[]>(PATTERNS.users.publicCoaches, {});
+  }
+
+  /**
+   * The uploaded photo of a coach (docs/API.md, Coach photos), the `avatarUrl` of PublicCoach: JPEG without
+   * metadata, cacheable by anyone. 404 'Aucune photo.' without photo, or once the coach is demoted or deactivated.
+   */
+  @ApiPhotoDownload('Le v de avatarUrl')
+  @Get('coaches/:id/photo')
+  async coachPhoto(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('v') version: string | undefined,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
+    const photo = await this.rpc.send<StoredPhoto, IdRequest>(PATTERNS.users.photoGet, { id });
+    sendPhoto(res, photo, { audience: 'public', version, ifNoneMatch });
   }
 
   @Get('rooms')

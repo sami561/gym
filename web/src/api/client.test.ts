@@ -172,6 +172,12 @@ describe('api()', () => {
   it('drops the trailing slash of VITE_API_URL', () => {
     expect(client.API_BASE).toBe(BASE);
   });
+
+  it('puts the public file URLs of the API on the gateway, and leaves other addresses alone', () => {
+    expect(client.apiFileUrl('/api/public/coaches/c-1/photo?v=1762160100000')).toBe(`${BASE}/api/public/coaches/c-1/photo?v=1762160100000`);
+    expect(client.apiFileUrl('https://example.com/coach.jpg')).toBe('https://example.com/coach.jpg');
+    expect(client.apiFileUrl('/images/coach.jpg')).toBe('/images/coach.jpg');
+  });
 });
 
 describe('refresh on 401', () => {

@@ -1,20 +1,18 @@
-import { BadRequestException, Injectable, NotFoundException, PayloadTooLargeException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import {
-  MEMBER_PHOTO_ERRORS,
-  MEMBER_PHOTO_MAX_BYTES,
   MemberDto,
-  MemberPhoto,
-  SetMemberPhotoRequest,
+  PHOTO_ERRORS,
+  SetPhotoRequest,
+  StoredPhoto,
+  decodePhotoUpload,
+  nextPhotoVersion,
+  stripJpegMetadata,
 } from '@app/common';
 import { toMemberDto } from '../mappers';
-import { stripJpegMetadata } from './jpeg-metadata';
 import { MemberPhotoEntity } from './member-photo.entity';
 import { Member } from './member.entity';
-
-/** Length of the base64 text of MEMBER_PHOTO_MAX_BYTES bytes: longer texts are refused before decoding. */
-const MAX_BASE64_LENGTH = Math.ceil(MEMBER_PHOTO_MAX_BYTES / 3) * 4;
 
 /**
  * Member photos (docs/API.md, Member photos). The bytes live in member_photos, members.photoUpdatedAt tells
@@ -30,12 +28,12 @@ export class MemberPhotosService {
   ) {}
 
   /** 404 'Aucune photo.' for a member without photo, 'Membre introuvable.' for an unknown id. */
-  async get(id: string): Promise<MemberPhoto> {
+  async get(id: string): Promise<StoredPhoto> {
     requireId(id);
     const photo = await this.photos.findOne({ where: { memberId: id } });
     if (!photo) {
       if (!(await this.members.existsBy({ id }))) throw new NotFoundException('Membre introuvable.');
-      throw new NotFoundException(MEMBER_PHOTO_ERRORS.none);
+      throw new NotFoundException(PHOTO_ERRORS.none);
     }
     return { data: photo.data.toString('base64'), contentType: 'image/jpeg', updatedAt: photo.updatedAt.toISOString() };
   }
@@ -44,8 +42,8 @@ export class MemberPhotosService {
    * Replaces the photo with the upload stripped of its metadata (the gateway already limits the size; checked
    * again here). photoUpdatedAt moves forward at every upload, so each version gets its own `?v=`.
    */
-  async set(req: SetMemberPhotoRequest): Promise<MemberDto> {
-    const jpeg = stripJpegMetadata(decodeUpload(req?.data));
+  async set(req: SetPhotoRequest): Promise<MemberDto> {
+    const jpeg = stripJpegMetadata(decodePhotoUpload(req?.data));
     const member = await this.db.transaction(async (tx) => {
       const locked = await lockMember(tx, req.id);
       const at = nextPhotoVersion(locked.photoUpdatedAt, new Date());
@@ -66,20 +64,6 @@ export class MemberPhotosService {
     });
     return toMemberDto(member);
   }
-}
-
-/** The uploaded bytes: 400 without data, 413 above MEMBER_PHOTO_MAX_BYTES. */
-export function decodeUpload(data: unknown): Buffer {
-  if (typeof data !== 'string' || !data) throw new BadRequestException(MEMBER_PHOTO_ERRORS.missing);
-  if (data.length > MAX_BASE64_LENGTH) throw new PayloadTooLargeException(MEMBER_PHOTO_ERRORS.tooLarge);
-  const bytes = Buffer.from(data, 'base64');
-  if (bytes.length > MEMBER_PHOTO_MAX_BYTES) throw new PayloadTooLargeException(MEMBER_PHOTO_ERRORS.tooLarge);
-  return bytes;
-}
-
-/** `now`, or 1 ms after the previous upload when the clock has not passed it: every upload gets a new version. */
-export function nextPhotoVersion(previous: Date | null | undefined, now: Date): Date {
-  return previous && previous.getTime() >= now.getTime() ? new Date(previous.getTime() + 1) : now;
 }
 
 function requireId(id: string): void {
