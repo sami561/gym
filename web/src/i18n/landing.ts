@@ -56,6 +56,7 @@ export const landingFr = {
   'plans.priceOnSite': 'Tarif en salle',
   'plans.cta': 'Je commence',
   'plans.offline': 'Tarifs à jour disponibles à l’accueil.',
+  'plans.empty': 'Les offres sont en cours de mise à jour. Les tarifs sont disponibles à l’accueil.',
 
   'schedule.title': 'Les cours de la semaine',
   'schedule.lead': 'Réserve ta place depuis l’application Meliora.',
@@ -188,6 +189,7 @@ export const landingEn: Record<LandingKey, string> = {
   'plans.priceOnSite': 'Price at the gym',
   'plans.cta': 'Get started',
   'plans.offline': 'Up-to-date prices available at the front desk.',
+  'plans.empty': 'Our plans are being updated. Prices are available at the front desk.',
 
   'schedule.title': 'This week’s classes',
   'schedule.lead': 'Book your spot from the Meliora app.',
@@ -317,6 +319,7 @@ export const landingAr: Record<LandingKey, string> = {
   'plans.priceOnSite': 'السعر في القاعة',
   'plans.cta': 'ابدأ الآن',
   'plans.offline': 'الأسعار المحدثة متوفرة في الاستقبال.',
+  'plans.empty': 'يجري تحديث الاشتراكات. الأسعار متوفرة في الاستقبال.',
 
   'schedule.title': 'حصص هذا الأسبوع',
   'schedule.lead': 'احجز مكانك من تطبيق ميليورا.',
