@@ -10,7 +10,9 @@ describe('RedactingQueryLogger (TypeORM logger of every service)', () => {
   });
   afterEach(() => printed.mockRestore());
 
-  const output = () => printed.mock.calls.flat().map(String).join('\n');
+  // Without the colours TypeORM adds where the terminal supports them (GitHub Actions does).
+  // eslint-disable-next-line no-control-regex
+  const output = () => printed.mock.calls.flat().map(String).join('\n').replace(/\u001b\[[0-9;]*m/g, '');
 
   it('logs a failed query with its ids and dates, a photo only as its size', () => {
     const logger = new RedactingQueryLogger(['error']);
