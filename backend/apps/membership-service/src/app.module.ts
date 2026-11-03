@@ -3,6 +3,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BusModule, databaseModule } from '@app/common';
 import { Member } from './members/member.entity';
+import { MemberPhotoEntity } from './members/member-photo.entity';
 import { Plan } from './plans/plan.entity';
 import { Subscription } from './subscriptions/subscription.entity';
 import { Payment } from './payments/payment.entity';
@@ -10,6 +11,8 @@ import { PromoCode } from './promos/promo.entity';
 import { Lead, LeadActivity } from './leads/lead.entity';
 import { MembersService } from './members/members.service';
 import { MembersController } from './members/members.controller';
+import { MemberPhotosService } from './members/member-photos.service';
+import { MemberPhotosController } from './members/member-photos.controller';
 import { PlansService } from './plans/plans.service';
 import { PlansController } from './plans/plans.controller';
 import { SubscriptionsService } from './subscriptions/subscriptions.service';
@@ -27,12 +30,13 @@ import { StatsController } from './stats/stats.controller';
 @Module({
   imports: [
     databaseModule('membership'),
-    TypeOrmModule.forFeature([Member, Plan, Subscription, Payment, PromoCode, Lead, LeadActivity]),
+    TypeOrmModule.forFeature([Member, MemberPhotoEntity, Plan, Subscription, Payment, PromoCode, Lead, LeadActivity]),
     BusModule.forRoot(),
     ScheduleModule.forRoot(),
   ],
   controllers: [
     MembersController,
+    MemberPhotosController,
     PlansController,
     SubscriptionsController,
     PaymentsController,
@@ -42,6 +46,7 @@ import { StatsController } from './stats/stats.controller';
   ],
   providers: [
     MembersService,
+    MemberPhotosService,
     PlansService,
     SubscriptionsService,
     SubscriptionsScheduler,

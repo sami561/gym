@@ -32,23 +32,44 @@ let tokens: Tokens | null = null;
 let refreshInFlight: Promise<boolean> | null = null;
 let onSessionExpired: () => void = () => {};
 let onRefreshed: (result: AuthResult) => void = () => {};
+const tokenListeners = new Set<() => void>();
+
+function setTokens(next: Tokens | null) {
+  tokens = next;
+  tokenListeners.forEach((listener) => listener());
+}
 
 /** Token persistence + hooks used by the AuthProvider. */
 export const session = {
   async restore(): Promise<boolean> {
-    tokens = await storage.getJSON<Tokens>(STORAGE_KEYS.tokens);
+    setTokens(await storage.getJSON<Tokens>(STORAGE_KEYS.tokens));
     return tokens !== null;
   },
   async save(next: Tokens): Promise<void> {
-    tokens = { accessToken: next.accessToken, refreshToken: next.refreshToken };
-    await storage.setJSON(STORAGE_KEYS.tokens, tokens);
+    const saved = { accessToken: next.accessToken, refreshToken: next.refreshToken };
+    setTokens(saved);
+    await storage.setJSON(STORAGE_KEYS.tokens, saved);
   },
   async clear(): Promise<void> {
-    tokens = null;
+    setTokens(null);
     await storage.remove(STORAGE_KEYS.tokens);
   },
   hasTokens(): boolean {
     return tokens !== null;
+  },
+  /**
+   * For requests made outside api(), which cannot refresh on 401: expo-image loads the member photo with this
+   * token in its headers (useAccessToken re-renders it after every refresh).
+   */
+  accessToken(): string | null {
+    return tokens?.accessToken ?? null;
+  },
+  /** Calls `listener` after every token change (sign-in, refresh, sign-out); returns the unsubscribe function. */
+  subscribe(listener: () => void): () => void {
+    tokenListeners.add(listener);
+    return () => {
+      tokenListeners.delete(listener);
+    };
   },
   setHandlers(handlers: { onSessionExpired: () => void; onRefreshed: (result: AuthResult) => void }) {
     onSessionExpired = handlers.onSessionExpired;
@@ -60,7 +81,10 @@ type Query = Record<string, string | number | boolean | null | undefined>;
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  /** Sent as JSON. */
   body?: unknown;
+  /** Multipart body (file upload), sent as is: fetch writes its Content-Type with the boundary. */
+  form?: FormData;
   query?: Query;
   /** Attach the bearer token and refresh it on 401 (default true). */
   auth?: boolean;
@@ -139,7 +163,7 @@ async function refreshSession(): Promise<boolean> {
 }
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, auth = true, timeoutMs } = options;
+  const { method = 'GET', body, form, auth = true, timeoutMs } = options;
   const url = path + buildQuery(options.query);
 
   const send = () =>
@@ -152,7 +176,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
           ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
           ...(auth && tokens ? { Authorization: `Bearer ${tokens.accessToken}` } : {}),
         },
-        body: body !== undefined ? JSON.stringify(body) : undefined,
+        body: form ?? (body !== undefined ? JSON.stringify(body) : undefined),
       },
       timeoutMs,
     );

@@ -265,6 +265,8 @@ export const fr = {
     emergencyContact: "Contact d'urgence",
     notProvided: 'Non renseigné',
     edit: 'Modifier le profil',
+    addPhoto: 'Ajouter ma photo',
+    changePhoto: 'Changer ma photo',
     changePassword: 'Changer le mot de passe',
     language: 'Langue',
     notifications: 'Notifications',
@@ -289,6 +291,21 @@ export const fr = {
     restartManual: "Fermez puis rouvrez l'application pour appliquer le sens d'affichage.",
     rtlExpoGo:
       "Dans Expo Go, le sens d'affichage suit la langue du téléphone. Il s'applique entièrement dans l'application installée.",
+  },
+  photo: {
+    title: 'Ma photo',
+    subtitle: "Elle s'affiche sur votre pass : l'accueil s'en sert pour vous reconnaître.",
+    takePhoto: 'Prendre une photo',
+    chooseFromLibrary: 'Choisir dans la galerie',
+    remove: 'Supprimer ma photo',
+    removeConfirm: 'Voulez-vous supprimer votre photo ? Votre pass affichera vos initiales.',
+    saved: 'Photo mise à jour',
+    removed: 'Photo supprimée',
+    cameraDenied: "L'accès à l'appareil photo est nécessaire pour prendre votre photo.",
+    openSettings: 'Ouvrir les réglages',
+    tooLarge: 'Cette photo reste trop lourde (plus de 512 Ko) même compressée. Choisissez-en une autre.',
+    failed: "Impossible d'utiliser cette photo. Réessayez ou choisissez-en une autre.",
+    photoOf: 'Photo de {name}',
   },
 };
 

@@ -29,6 +29,7 @@ export function toMemberDto(m: Member): MemberDto {
     notes: m.notes,
     status: m.status,
     joinedAt: m.joinedAt.toISOString(),
+    photoUpdatedAt: m.photoUpdatedAt ? m.photoUpdatedAt.toISOString() : null,
   };
 }
 

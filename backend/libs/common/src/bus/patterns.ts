@@ -27,6 +27,10 @@ export const PATTERNS = {
     remove: 'members.remove',
     profile: 'members.profile',
     entitlements: 'members.entitlements',
+    /** { id } → MemberPhoto (404 'Aucune photo.'); set: SetMemberPhotoRequest → MemberDto; remove: { id } → MemberDto. */
+    photoGet: 'members.photo.get',
+    photoSet: 'members.photo.set',
+    photoRemove: 'members.photo.remove',
     health: 'membership.health',
   },
   plans: {

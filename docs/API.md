@@ -79,6 +79,9 @@ logout, a password change, a deactivation or a demotion.
 | POST | `/api/me/bookings` | `{ sessionId }` | `BookingDto` (requires an active membership) |
 | DELETE | `/api/me/bookings/:id` | – | `BookingDto` (status CANCELLED) |
 | PUT | `/api/me/push-token` | `{ token }` (Expo push token) | `{ ok: true }` |
+| GET | `/api/me/photo?v=` | – | the member's own photo, `image/jpeg` (see "Member photos"); 404 `Aucune photo.` |
+| PUT | `/api/me/photo` | `multipart/form-data`, field `photo` (10/min) | `MemberDto` with the new `photoUpdatedAt` |
+| DELETE | `/api/me/photo` | – | `MemberDto` with `photoUpdatedAt: null` (also when there was no photo) |
 
 **Opening from the app** — checks in this order: member, door active, `allowAppOpen`, network, geofence.
 A refusal is `granted: false` with a French `reason`, logged like any denial:
@@ -106,8 +109,34 @@ faked: `APP_OPEN_ALLOWED_NETWORKS` is the effective gate.
 | POST | `/api/members/:id/payments` | `{ amount, method, reference?, subscriptionId?, paidAt? }` | `PaymentDto` |
 | PUT | `/api/members/:id/card` | `{ cardNumber: string | null }` (RFID badge) | `MemberAccessInfo` |
 | POST | `/api/members/:id/access-key/rotate` | – (lost or shared phone) | `{ ok: true, rotatedAt }` — the member's QR codes stop working at once; the app gets the new key from `GET /api/me/access-key`. 404 `Membre introuvable.` |
+| GET | `/api/members/:id/photo?v=` | – | `image/jpeg` (see "Member photos"); 404 `Aucune photo.` or `Membre introuvable.` |
+| PUT | `/api/members/:id/photo` | `multipart/form-data`, field `photo` | `MemberDto` with the new `photoUpdatedAt` |
+| DELETE | `/api/members/:id/photo` | – | `MemberDto` with `photoUpdatedAt: null` (also when there was no photo) |
 | PATCH | `/api/subscriptions/:id` | `{ status?: ACTIVE|FROZEN|CANCELLED, endDate? }` | `SubscriptionDto` |
 | GET | `/api/payments` | `?from&to&method&memberId&page&pageSize` | `PaymentsPage` (`items, total, page, pageSize, sum`) |
+
+**Member photos** — one photo per member, shown to staff (member list and file, live access feed,
+reception scanner) and to the member (app profile and pass). ADMIN and STAFF manage any member's photo,
+a MEMBER only their own (`/api/me/photo`).
+- Upload: `multipart/form-data` with one file field `photo`, a **JPEG** of at most **512 KB** (clients
+  resize to a 600×600 square, quality ≈ 0.85, orientation applied, before sending). Refusals: 400
+  `Ajoutez une photo (champ « photo »).` (no file in `photo`, and any other unreadable upload: another
+  field name, several files, a broken multipart body), 400 `La photo doit être une image JPEG.` (checked
+  on the bytes, not on the declared type; a JPEG cut short is refused too), 413 `La photo dépasse 512 Ko.`
+  Behind nginx a body over 10 MB is stopped by nginx itself (413 without the JSON body).
+- The server removes the JPEG metadata segments (APP1–APP15 and comments: EXIF with the GPS position,
+  XMP, the camera thumbnail, also the ICC colour profile, so send sRGB) wherever they are, and drops what
+  phones append after the end of the image (second images, motion-photo videos), before storing the file;
+  APP0 and the image data are kept byte for byte. What is served is that cleaned file.
+- `MemberDto.photoUpdatedAt` (ISO instant, `null` without photo) changes at every upload. Clients load
+  `…/photo?v=<Date.parse(photoUpdatedAt)>`: with `v` the answer carries `Cache-Control: private,
+  max-age=31536000, immutable`, without it `private, no-cache`, always with an `ETag` (taken from the
+  bytes: the same photo has the same ETag on every URL); a matching `If-None-Match` answers 304 without
+  body. Photos need the bearer token like any other route: web and app fetch them with it (blob / image
+  headers), never through a public URL. Where only a `memberId` is known (access logs, scanner), load
+  without `v`; 404 = no photo.
+- Deleting a member (`DELETE /api/members/:id`) deletes the photo. A photo is personal data: never in
+  logs, events, n8n payloads or the automation API.
 
 ### Plans
 | Method | Path | Roles | Body | Result |
@@ -121,11 +150,29 @@ faked: `APP_OPEN_ALLOWED_NETWORKS` is the effective gate.
 | Method | Path | Roles | Body | Result |
 |---|---|---|---|---|
 | GET | `/api/classes?from&to` | staff, COACH | – | `ClassSessionDto[]` |
-| POST | `/api/classes` | staff, COACH | `CreateClassRequest` | `ClassSessionDto[]` (one per repeated week) |
-| PATCH | `/api/classes/:id` | staff, COACH | `UpdateClassRequest['data']` | `ClassSessionDto` |
+| POST | `/api/classes` | staff, COACH | `CreateClassRequest` | `ClassSessionDto[]` (one per repeated week) — 409 when the room or the coach is taken (below), checked on every week before anything is saved |
+| PATCH | `/api/classes/:id` | staff, COACH | `UpdateClassRequest['data']` | `ClassSessionDto` — moving a session (rules below) |
 | DELETE | `/api/classes/:id` | staff | – | `{ ok: true }` |
 | GET | `/api/classes/:id/bookings` | staff, COACH | – | `BookingDto[]` |
 | PATCH | `/api/bookings/:id` | staff, COACH | `{ status: BOOKED|CANCELLED|ATTENDED|NO_SHOW }` | `BookingDto` — NO_SHOW only once the class has started (400 `Impossible de marquer absent avant le début du cours.`); WAITLISTED and LATE_CANCELLED come from the booking flow only (400 `Statut invalide (BOOKED, CANCELLED, ATTENDED ou NO_SHOW).`) |
+
+**Moving a session** (`PATCH /api/classes/:id` with `startsAt` / `endsAt`; the back-office planning drags
+sessions on 15-minute slots and sends both). Times are compared to the minute: resending the same
+minute (the editor form does) is not a move and keeps the stored value.
+- 400 `Cette séance a déjà commencé : elle ne peut plus être déplacée.` — the start of a session in
+  progress or over never moves; only the end of a running session may move, and not into the past
+  (`La fin de la séance ne peut pas être dans le passé.`, `Cette séance est terminée : ses horaires ne
+  peuvent plus changer.`).
+- 400 `Impossible de déplacer une séance dans le passé.` — the new start must be in the future
+  (BOOKED rows of an ended session become NO_SHOW strikes).
+- 400 `Des membres sont déjà pointés pour cette séance : elle ne peut plus être déplacée.`
+- 409 when an overlapping session (back-to-back is fine) uses the same room (free text compared
+  without case, accents or extra spaces) or the same coach: `La salle « Studio » est déjà prise par
+  « Yoga » le 05/11/2026 de 18:30 à 19:30.` / `Leila Ayari anime déjà « Yoga » le 05/11/2026 de 18:30
+  à 19:30.` Also checked when only `room` or `coachId` changes, and by `POST /api/classes`.
+- Bookings (booked, waitlist, spots) stay on the session. No message is sent about the change:
+  when the start moves, BOOKED members get the usual `booking.reminder` (push + n8n e-mail) again,
+  2 h before the new start, or at the next sweep (≤ 5 min) when it starts sooner.
 
 ### Users (staff accounts & coaches) — ADMIN
 `GET /api/users?role&search` → `UserDto[]` · `POST /api/users` (`CreateUserRequest`, role ADMIN|STAFF|COACH) → `UserDto` ·
@@ -310,7 +357,7 @@ and the "Freeze, promo codes, CRM leads" part of `membership.contracts.ts`. Same
 | Resource | Endpoints |
 |---|---|
 | Employees | `GET /api/employees?search&position&status` → `EmployeeDto[]` · `POST /api/employees` · `GET/PATCH/DELETE /api/employees/:id` |
-| Shift planning | `GET /api/shifts?from&to&employeeId` → `ShiftDto[]` · `POST /api/shifts` (`repeatWeeks`) → `ShiftDto[]` · `PATCH/DELETE /api/shifts/:id` |
+| Shift planning | `GET /api/shifts?from&to&employeeId` → `ShiftDto[]` (shifts starting in the range) · `POST /api/shifts` (`repeatWeeks`) → `ShiftDto[]` · `PATCH /api/shifts/:id` `{ employeeId?, startsAt?, endsAt?, task?, roomName? }` → `ShiftDto` (the team calendar drags shifts to another day, time or employee) · `DELETE /api/shifts/:id`. End after start, 24 h at most (400); 409 `Chevauchement avec un créneau existant (05/11/2026 08:00).` when the employee already has an overlapping shift (every repeated week is checked, nothing saved). Past shifts can be corrected |
 | Time clock | `POST /api/attendance/clock-in` `{ employeeId, at? }` → `AttendanceDto` · `POST /api/attendance/clock-out` `{ employeeId, at? }` → `AttendanceDto` · `GET /api/attendance?from&to&employeeId` → `AttendanceDto[]` |
 | Leave | `GET /api/leaves?status&employeeId` → `LeaveDto[]` · `POST /api/leaves` · `POST /api/leaves/:id/decision` `{ status: APPROVED|REJECTED }` (ADMIN) · `DELETE /api/leaves/:id` |
 | Payroll (ADMIN) | `GET /api/payroll?period&employeeId` → `PayrollDto[]` · `POST /api/payroll/generate` `{ period? }` → `PayrollDto[]` · `PATCH /api/payroll/:id` `{ bonuses?, deductions?, commissions?, notes? }` · `POST /api/payroll/:id/pay` `{ method }` → `PayrollDto` (also records a SALARY expense) |

@@ -23,7 +23,14 @@ also serves the door-agent socket on :4004), `app.module.ts` (`databaseModule('<
   `assertSecureConfig` and the process refuses example, weak or reused secrets. A new secret env var
   (name with SECRET, PASSWORD, TOKEN or KEY) goes into `SECRETS` in `libs/common/src/config/secure-config.ts`
   (its spec fails otherwise) and into both `.env.example` files.
-- `decimalTransformer` on numeric columns, `timestamptz` for instants, `date` for gym-calendar days.
+- `decimalTransformer` on numeric columns, `timestamptz` for instants, `date` for gym-calendar days. A column
+  only SQL writes (`members.photoUpdatedAt`) is `insert: false, update: false`: `save()` of an entity loaded
+  earlier would write the old value back.
+- Files (member photos, `api-gateway/src/members/member-photo.ts`): multipart through `FileInterceptor` wrapped
+  to give French refusals (multer `limits`, memory storage, a local file type instead of `@types/multer`), bytes
+  on the bus in base64 (keep messages well under NATS' 1 MB), binary answers written with `@Res()` and explicit
+  `Content-Type` / `Cache-Control` / `ETag`. Bytes never go to logs or events (`RedactingQueryLogger` hides
+  binary query parameters).
 - Event handlers are idempotent and tolerate out-of-order delivery (unique keys, upserts, retries).
 - Cross-service reads that are optional degrade gracefully (`.catch(() => null)` / placeholder names).
 - Gateway: class-validator DTOs (Swagger plugin documents them), `@Roles`, `@Public`, `@ApiKeyAuth`,

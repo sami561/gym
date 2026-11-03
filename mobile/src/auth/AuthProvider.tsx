@@ -1,4 +1,5 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { Image } from 'expo-image';
 import { ApiError, session } from '@/api/client';
 import { authApi } from '@/api/endpoints';
 import type { AuthResult, RegisterRequest, UserDto } from '@/api/types';
@@ -33,6 +34,9 @@ async function wipeLocalSession(): Promise<void> {
     storage.remove(STORAGE_KEYS.user),
     storage.remove(STORAGE_KEYS.accessKey),
     storage.remove(STORAGE_KEYS.pushToken),
+    // The member's photo (personal data) stays in expo-image's caches otherwise.
+    Image.clearDiskCache().catch(() => false),
+    Image.clearMemoryCache().catch(() => false),
   ]);
   queryClient.clear();
 }

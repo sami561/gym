@@ -1,12 +1,13 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, LessThan, MoreThan, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, LessThan, MoreThan, Not, Repository } from 'typeorm';
 import {
   BookingDto,
   BookingStatus,
@@ -36,14 +37,20 @@ import {
   DEFAULT_CAPACITY,
   DEFAULT_WAITLIST_CAPACITY,
   MAX_RANGE_DAYS,
+  ScheduleSlot,
   assertCapacity,
   assertRepeatWeeks,
+  assertReschedule,
   assertUuid,
   assertWaitlistCapacity,
   averageFillRate,
   dayRange,
+  findScheduleConflict,
   normaliseColor,
   parseDateTime,
+  roomKey,
+  sameMinute,
+  scheduleConflictMessage,
   shiftWeeks,
 } from './class-rules';
 import { HOLDING_STATUSES, firstFreeSpot, waitlistPosition } from './occupancy';
@@ -114,12 +121,19 @@ export class ClassesService {
         waitlistCapacity,
       }),
     );
+    // Every repeated week is checked before anything is saved.
+    for (const row of rows) await this.assertSlotFree(this.sessions, row);
     const saved = await this.sessions.save(rows);
     const policy = loadBookingPolicy();
     return saved.map((session) => toSessionDto(session, undefined, policy));
   }
 
-  /** Place-related changes happen under the session lock; freed capacity promotes the waitlist. */
+  /**
+   * Place-related changes happen under the session lock; freed capacity promotes the waitlist.
+   * Moving a session (drag and drop or editor): not once it started, not into the past, not onto a room
+   * or a coach already taken; bookings follow the session and BOOKED members get their 2 h reminder
+   * again for the new time.
+   */
   async update({ id, data }: UpdateClassRequest): Promise<ClassSessionDto> {
     const current = await this.findSession(id);
     // Resolve the coach before locking: never hold a row lock during an RPC.
@@ -132,6 +146,7 @@ export class ClassesService {
 
     const { session, promoted } = await this.dataSource.transaction(async (manager) => {
       const session = await this.occupancy.lockSession(manager, current.id);
+      const before = { startsAt: session.startsAt, endsAt: session.endsAt, room: session.room, coachId: session.coachId };
       if (data.title !== undefined) {
         const title = data.title?.trim();
         if (!title) throw new BadRequestException('Le titre est obligatoire.');
@@ -140,15 +155,36 @@ export class ClassesService {
       if (data.description !== undefined) session.description = data.description?.trim() || null;
       if (data.room !== undefined) session.room = data.room?.trim() || null;
       if (data.color !== undefined) session.color = normaliseColor(data.color);
-      if (data.startsAt !== undefined) session.startsAt = parseDateTime(data.startsAt, 'startsAt');
-      if (data.endsAt !== undefined) session.endsAt = parseDateTime(data.endsAt, 'endsAt');
+      // The editor works to the minute: the same minute keeps the stored time (seconds included).
+      if (data.startsAt !== undefined) {
+        const startsAt = parseDateTime(data.startsAt, 'startsAt');
+        if (!sameMinute(startsAt, session.startsAt)) session.startsAt = startsAt;
+      }
+      if (data.endsAt !== undefined) {
+        const endsAt = parseDateTime(data.endsAt, 'endsAt');
+        if (!sameMinute(endsAt, session.endsAt)) session.endsAt = endsAt;
+      }
       if (session.endsAt <= session.startsAt) {
         throw new BadRequestException("L'heure de fin doit être après l'heure de début.");
+      }
+      assertReschedule(before, session);
+      const startMoved = session.startsAt.getTime() !== before.startsAt.getTime();
+      if (startMoved) {
+        const checkedIn = await manager.count(Booking, { where: { sessionId: session.id, status: BookingStatus.ATTENDED } });
+        if (checkedIn) {
+          throw new BadRequestException('Des membres sont déjà pointés pour cette séance : elle ne peut plus être déplacée.');
+        }
       }
       if (coach !== undefined) {
         session.coachId = coach?.id ?? null;
         session.coachName = coach?.name ?? null;
       }
+      const slotChanged =
+        startMoved ||
+        session.endsAt.getTime() !== before.endsAt.getTime() ||
+        roomKey(session.room) !== roomKey(before.room) ||
+        session.coachId !== before.coachId;
+      if (slotChanged) await this.assertSlotFree(manager.getRepository(ClassSession), session);
       if (data.waitlistCapacity !== undefined) session.waitlistCapacity = assertWaitlistCapacity(data.waitlistCapacity);
 
       const occupancy = await this.occupancy.loadOne(session.id, manager);
@@ -170,6 +206,10 @@ export class ClassesService {
       session.spotSelection = Boolean(spotSelection);
 
       const saved = await manager.save(session);
+      if (startMoved) {
+        // A reminder already sent named the old time: the next sweep sends one with the new time.
+        await manager.update(Booking, { sessionId: saved.id, status: BookingStatus.BOOKED }, { reminderSentAt: null });
+      }
       return { session: saved, promoted: await this.occupancy.promote(manager, saved) };
     });
     this.occupancy.publishPromoted(promoted, session);
@@ -286,6 +326,16 @@ export class ClassesService {
       .groupBy('b.sessionId')
       .getRawMany<{ sessionId: string; count: string }>();
     return new Map(rows.map((r) => [r.sessionId, Number(r.count)]));
+  }
+
+  /** 409 when an overlapping session already uses the room or the coach of `slot` (itself excluded). */
+  private async assertSlotFree(repo: Repository<ClassSession>, slot: ScheduleSlot): Promise<void> {
+    if (!roomKey(slot.room) && !slot.coachId) return;
+    const overlapping = await repo.find({
+      where: { startsAt: LessThan(slot.endsAt), endsAt: MoreThan(slot.startsAt), ...(slot.id ? { id: Not(slot.id) } : {}) },
+    });
+    const conflict = findScheduleConflict(slot, overlapping);
+    if (conflict) throw new ConflictException(scheduleConflictMessage(conflict));
   }
 
   /** Turning spot selection on: give the people already in the class the first free numbers. */

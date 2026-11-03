@@ -41,6 +41,14 @@
       ],
       "expo-image",
       [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Meliora Gym utilise l'appareil photo uniquement pour prendre votre photo de membre, affichée sur votre pass pour que l'accueil vous reconnaisse.",
+          "photosPermission": "Meliora Gym accède à vos photos uniquement pour que vous choisissiez votre photo de membre, affichée sur votre pass.",
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-location",
         {
           "locationWhenInUsePermission": "Meliora Gym utilise votre position uniquement pour vérifier que vous êtes devant la salle avant d'ouvrir la porte."
