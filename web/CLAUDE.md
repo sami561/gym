@@ -25,7 +25,13 @@ lazy-loaded with its own dictionary). Background and structure: `README.md`.
   null = no request, an ISO = `?v=` (immutable), undefined = latest (access logs, scanner; 404 =
   none). Uploads go through `preparePhoto` / `captureFrame` (upright, centre square, 600×600 JPEG
   ≤ 512 KB) as the multipart field `photo` (`api()` sends a `FormData` as is). The webcam needs
-  https or localhost.
+  https or localhost. Create forms (new member, team account) stage the photo with `PhotoPicker`
+  and upload it after the record exists; a failed upload keeps the record and says so.
+- Coach photos are public: `UserDto.avatarUrl` (`/api/public/coaches/:id/photo?v=…`, or an old URL
+  typed by hand) is a plain `<img>` through `apiFileUrl` (`AccountAvatar`, landing `Coaches`). Set
+  or remove it only with `PUT`/`DELETE /api/users/:id/photo`; never send `avatarUrl` in a `PATCH`.
+- Dialogs can stack (camera over a form, confirm over an edit): `Modal` closes only the top one on
+  Escape.
 - The three.js ceiling (`src/landing/three/`) stays lazy, paused off-screen, with the static fallback.
 - Use the gym's real photos in `public/images/` (copies of `assets/images/`); don't invent visuals.
 - Tests: Vitest, `*.test.ts(x)` next to the code. DOM tests opt into jsdom with a docblock and

@@ -192,6 +192,14 @@ export async function apiBlob(path: string, options: Omit<RequestOptions, 'body'
   return res.blob();
 }
 
+/**
+ * A file URL the API hands out (`/api/public/coaches/:id/photo?v=…`), on the gateway's origin when
+ * VITE_API_URL is set. Other URLs (a photo address typed by hand before uploads existed) pass as is.
+ */
+export function apiFileUrl(url: string): string {
+  return url.startsWith('/api/') ? `${API_BASE}${url}` : url;
+}
+
 export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.messages.join(' · ');
   if (error instanceof Error) return error.message;
