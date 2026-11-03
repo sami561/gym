@@ -169,10 +169,12 @@ minute (the editor form does) is not a move and keeps the stored value.
 - 409 when an overlapping session (back-to-back is fine) uses the same room (free text compared
   without case, accents or extra spaces) or the same coach: `La salle « Studio » est déjà prise par
   « Yoga » le 05/11/2026 de 18:30 à 19:30.` / `Leila Ayari anime déjà « Yoga » le 05/11/2026 de 18:30
-  à 19:30.` Also checked when only `room` or `coachId` changes, and by `POST /api/classes`.
-- Bookings (booked, waitlist, spots) stay on the session. No message is sent about the change:
-  when the start moves, BOOKED members get the usual `booking.reminder` (push + n8n e-mail) again,
-  2 h before the new start, or at the next sweep (≤ 5 min) when it starts sooner.
+  à 19:30.` Also checked when only `room` or `coachId` changes, and by `POST /api/classes`. The checks
+  run one at a time (database lock), so two requests at the same moment cannot both take the slot.
+- Bookings (booked, waitlist, spots) stay on the session. No message is sent about the change itself:
+  when the start moves, BOOKED members get the usual `booking.reminder` again with the new time, 2 h
+  before the new start, or right away when the new start is less than 2 h away. That reminder is an app
+  push only (n8n workflow 01 sends no e-mail for it): members without the app must be told by the gym.
 
 ### Users (staff accounts & coaches) — ADMIN
 `GET /api/users?role&search` → `UserDto[]` · `POST /api/users` (`CreateUserRequest`, role ADMIN|STAFF|COACH) → `UserDto` ·
@@ -479,8 +481,10 @@ Types: `contracts/class.contracts.ts` (BookingStatus, BookingPolicy, ClassSessio
 - Strikes — `NO_SHOW_LIMIT` strikes (no-show or late cancel) in 30 days block new bookings for
   `NO_SHOW_BLOCK_DAYS`. `GET /api/me/booking-standing` → `MemberBookingStanding`;
   `GET /api/bookings/policy` (public) → `BookingPolicy`.
-- Reminders — `booking.reminder` is published 2 h before the class for every BOOKED member (push +
-  n8n email); `booking.promoted` notifies the member who got the place.
+- Reminders — `booking.reminder` is published 2 h before the class for every BOOKED member (sweep every
+  `BOOKING_SWEEP_SECONDS`, 300 by default). It reaches members as an app push only: it is forwarded to
+  n8n, but workflow 01 has no branch for it (no e-mail). `booking.promoted` notifies the member who got
+  the place.
 - Staff: `POST /api/classes` accepts `spotSelection` and `waitlistCapacity`; `GET /api/classes/:id/bookings`
   returns booked, waitlisted (with position), attended and no-show rows.
 

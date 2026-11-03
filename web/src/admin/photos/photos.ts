@@ -40,7 +40,7 @@ export function useMemberPhoto(memberId: string, photoUpdatedAt: string | null |
     queryKey: memberPhotoKey(memberId, version),
     queryFn: ({ signal }) => fetchPhoto(memberId, version, signal),
     enabled: enabled && Boolean(memberId) && photoUpdatedAt !== null,
-    // A versioned photo never changes; the latest one is checked again after a minute (ETag → 304).
+    // A versioned photo never changes; the latest one is downloaded again after a minute (no HTTP cache).
     staleTime: version === undefined ? 60_000 : Infinity,
     // After an upload, keep the previous photo of the same member on screen until the new one loads.
     placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[1] === memberId ? previous : undefined),

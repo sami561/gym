@@ -72,8 +72,14 @@ export default function PassScreen() {
   const kind = me.data ? membershipKind(me.data.profile) : null;
   const member = me.data?.profile.member;
 
+  // Pull to refresh reloads the member too: photo, name and status can change at the desk while the pass is open.
+  const refreshAll = () => {
+    refresh();
+    me.refetch();
+  };
+
   return (
-    <Screen onRefresh={refresh} refreshing={false} contentStyle={styles.content}>
+    <Screen onRefresh={refreshAll} refreshing={false} contentStyle={styles.content}>
       <View style={styles.titles}>
         <AppText variant="display" align="center">
           {t('pass.title')}

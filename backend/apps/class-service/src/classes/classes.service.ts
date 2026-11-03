@@ -30,7 +30,7 @@ import {
 } from '@app/common';
 import { Booking } from '../bookings/booking.entity';
 import { toBookingDto, toBookingEvent, toSessionDto } from '../mappers';
-import { loadBookingPolicy } from './booking-policy';
+import { REMINDER_MINUTES, loadBookingPolicy } from './booking-policy';
 import { ClassSession } from './class-session.entity';
 import {
   DAY_MS,
@@ -55,6 +55,12 @@ import {
 } from './class-rules';
 import { HOLDING_STATUSES, firstFreeSpot, waitlistPosition } from './occupancy';
 import { OccupancyService } from './occupancy.service';
+
+/**
+ * Transaction-scoped advisory lock taken by every room/coach overlap check (create, move): the checks run
+ * one after the other, so two requests cannot both find the same room or coach free and both save.
+ */
+const SCHEDULE_LOCK_KEY = 74_270_201;
 
 /** Order of the staff booking list: who is in, then the queue, then the rest. */
 const STATUS_ORDER: BookingStatus[] = [
@@ -122,8 +128,10 @@ export class ClassesService {
       }),
     );
     // Every repeated week is checked before anything is saved.
-    for (const row of rows) await this.assertSlotFree(this.sessions, row);
-    const saved = await this.sessions.save(rows);
+    const saved = await this.dataSource.transaction('READ COMMITTED', async (manager) => {
+      await this.assertSlotsFree(manager, rows);
+      return manager.save(rows);
+    });
     const policy = loadBookingPolicy();
     return saved.map((session) => toSessionDto(session, undefined, policy));
   }
@@ -132,7 +140,7 @@ export class ClassesService {
    * Place-related changes happen under the session lock; freed capacity promotes the waitlist.
    * Moving a session (drag and drop or editor): not once it started, not into the past, not onto a room
    * or a coach already taken; bookings follow the session and BOOKED members get their 2 h reminder
-   * again for the new time.
+   * again for the new time (right away when the new start is less than 2 h away).
    */
   async update({ id, data }: UpdateClassRequest): Promise<ClassSessionDto> {
     const current = await this.findSession(id);
@@ -144,7 +152,7 @@ export class ClassesService {
           : null
         : undefined;
 
-    const { session, promoted } = await this.dataSource.transaction(async (manager) => {
+    const { session, promoted, reminded } = await this.dataSource.transaction('READ COMMITTED', async (manager) => {
       const session = await this.occupancy.lockSession(manager, current.id);
       const before = { startsAt: session.startsAt, endsAt: session.endsAt, room: session.room, coachId: session.coachId };
       if (data.title !== undefined) {
@@ -184,7 +192,7 @@ export class ClassesService {
         session.endsAt.getTime() !== before.endsAt.getTime() ||
         roomKey(session.room) !== roomKey(before.room) ||
         session.coachId !== before.coachId;
-      if (slotChanged) await this.assertSlotFree(manager.getRepository(ClassSession), session);
+      if (slotChanged) await this.assertSlotsFree(manager, [session]);
       if (data.waitlistCapacity !== undefined) session.waitlistCapacity = assertWaitlistCapacity(data.waitlistCapacity);
 
       const occupancy = await this.occupancy.loadOne(session.id, manager);
@@ -206,13 +214,19 @@ export class ClassesService {
       session.spotSelection = Boolean(spotSelection);
 
       const saved = await manager.save(session);
+      let reminded: Booking[] = [];
       if (startMoved) {
-        // A reminder already sent named the old time: the next sweep sends one with the new time.
-        await manager.update(Booking, { sessionId: saved.id, status: BookingStatus.BOOKED }, { reminderSentAt: null });
+        // A reminder already sent named the old time. Inside the reminder window it goes out now (the next
+        // sweep may only run after the new start); otherwise the sweep sends it 2 h before the new start.
+        const remindNow = saved.startsAt.getTime() <= Date.now() + REMINDER_MINUTES * 60_000;
+        const booked = { sessionId: saved.id, status: BookingStatus.BOOKED };
+        await manager.update(Booking, booked, { reminderSentAt: remindNow ? new Date() : null });
+        if (remindNow) reminded = await manager.find(Booking, { where: booked });
       }
-      return { session: saved, promoted: await this.occupancy.promote(manager, saved) };
+      return { session: saved, promoted: await this.occupancy.promote(manager, saved), reminded };
     });
     this.occupancy.publishPromoted(promoted, session);
+    for (const booking of reminded) this.events.publish(EVENTS.bookingReminder, toBookingEvent(booking, session));
     const [dto] = await this.toDtos([session]);
     return dto;
   }
@@ -328,14 +342,22 @@ export class ClassesService {
     return new Map(rows.map((r) => [r.sessionId, Number(r.count)]));
   }
 
-  /** 409 when an overlapping session already uses the room or the coach of `slot` (itself excluded). */
-  private async assertSlotFree(repo: Repository<ClassSession>, slot: ScheduleSlot): Promise<void> {
-    if (!roomKey(slot.room) && !slot.coachId) return;
-    const overlapping = await repo.find({
-      where: { startsAt: LessThan(slot.endsAt), endsAt: MoreThan(slot.startsAt), ...(slot.id ? { id: Not(slot.id) } : {}) },
-    });
-    const conflict = findScheduleConflict(slot, overlapping);
-    if (conflict) throw new ConflictException(scheduleConflictMessage(conflict));
+  /**
+   * 409 when an overlapping session already uses the room or the coach of a slot (itself excluded). Call it
+   * inside the transaction that saves the slots: it takes the schedule lock, then reads committed sessions.
+   */
+  private async assertSlotsFree(manager: EntityManager, slots: ScheduleSlot[]): Promise<void> {
+    const checked = slots.filter((slot) => roomKey(slot.room) || slot.coachId);
+    if (!checked.length) return;
+    await manager.query('SELECT pg_advisory_xact_lock($1)', [SCHEDULE_LOCK_KEY]);
+    const repo = manager.getRepository(ClassSession);
+    for (const slot of checked) {
+      const overlapping = await repo.find({
+        where: { startsAt: LessThan(slot.endsAt), endsAt: MoreThan(slot.startsAt), ...(slot.id ? { id: Not(slot.id) } : {}) },
+      });
+      const conflict = findScheduleConflict(slot, overlapping);
+      if (conflict) throw new ConflictException(scheduleConflictMessage(conflict));
+    }
   }
 
   /** Turning spot selection on: give the people already in the class the first free numbers. */

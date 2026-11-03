@@ -71,7 +71,7 @@ Typed API contracts mirror `backend/libs/common/src/contracts` by hand (`src/api
 
 - From the member file, staff import a photo or take one with the webcam (preview, take, retake, use), and can delete it. The browser applies the EXIF orientation, keeps the centre square and sends a 600×600 JPEG of at most 512 KB (quality 0.85, lowered if needed); the server strips the metadata.
 - The photo shows in the member list, the live entries (dashboard, access log) and, large, on the reception scanner, so the desk can compare it with the face.
-- A photo is personal data: it is fetched with the staff token and shown from memory (object URLs, revoked after use), never through a public URL. List thumbnails load once their row is on screen.
+- A photo is personal data: it is fetched with the staff token and shown from memory (object URLs, revoked after use), never through a public URL. The back office keeps photos in memory only: they are requested with `cache: 'no-store'`, so the browser never writes them to its disk cache (where they would stay readable without a token), and the react-query cache is emptied at sign-out. List thumbnails load once their row is on screen.
 - The webcam only works on an https:// address (or localhost). Over plain http, import a file instead.
 
 ## Auth and security
