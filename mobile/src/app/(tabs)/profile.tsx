@@ -9,6 +9,7 @@ import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Logo } from '@/components/Logo';
+import { MemberAvatar } from '@/components/MemberAvatar';
 import { Screen } from '@/components/Screen';
 import { SectionHeader } from '@/components/SectionHeader';
 import { SegmentedControl } from '@/components/SegmentedControl';
@@ -16,11 +17,13 @@ import { ErrorState, LoadingState } from '@/components/States';
 import { useGymInfo, useMe } from '@/hooks/queries';
 import { getPushStatus, PushStatus } from '@/hooks/usePushRegistration';
 import { isRTLLang, Lang, LANGUAGES, translate, useI18n } from '@/i18n';
-import { formatDate, initials } from '@/lib/format';
+import { formatDate } from '@/lib/format';
 import { colors, radius, spacing } from '@/theme';
 import { mirrorInRTL } from '@/lib/direction';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
+
+const AVATAR_SIZE = 72;
 
 function InfoRow({ icon, label, value }: { icon: IconName; label: string; value: string }) {
   return (
@@ -88,6 +91,8 @@ export default function ProfileScreen() {
 
   const member = me.data?.profile.member;
   const notProvided = t('profile.notProvided');
+  const photoLabel = member?.photoUpdatedAt ? t('profile.changePhoto') : t('profile.addPhoto');
+  const openPhoto = () => router.push('/change-photo');
 
   return (
     <Screen onRefresh={() => me.refetch()} refreshing={me.isRefetching}>
@@ -98,15 +103,28 @@ export default function ProfileScreen() {
       ) : (
         <>
           <Animated.View entering={FadeInDown.duration(350)} style={styles.identity}>
-            <View style={styles.avatar}>
-              <AppText variant="display">{initials(member.firstName, member.lastName)}</AppText>
-            </View>
+            <Pressable
+              onPress={openPhoto}
+              accessibilityRole="button"
+              accessibilityLabel={photoLabel}
+              style={({ pressed }) => pressed && styles.pressed}
+            >
+              <MemberAvatar member={member} size={AVATAR_SIZE} />
+              <View style={styles.avatarBadge}>
+                <Ionicons name="camera" size={13} color={colors.white} />
+              </View>
+            </Pressable>
             <View style={styles.flex}>
               <AppText variant="title" numberOfLines={1}>
                 {member.firstName} {member.lastName}
               </AppText>
               <AppText variant="label">{member.memberCode}</AppText>
               <AppText variant="caption">{t('profile.memberSince', { date: formatDate(member.joinedAt, locale) })}</AppText>
+              <Pressable onPress={openPhoto} hitSlop={10} accessibilityRole="button" style={styles.photoLink}>
+                <AppText variant="label" color={colors.red}>
+                  {photoLabel}
+                </AppText>
+              </Pressable>
             </View>
           </Animated.View>
 
@@ -221,14 +239,20 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   pressed: { opacity: 0.7 },
   identity: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, marginTop: spacing.sm },
-  avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: colors.red,
+  avatarBadge: {
+    position: 'absolute',
+    bottom: -2,
+    end: -2,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.surfaceHigh,
+    borderWidth: 2,
+    borderColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  photoLink: { alignSelf: 'flex-start', marginTop: spacing.xs },
   section: { gap: spacing.md },
   infoCard: { gap: spacing.lg },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

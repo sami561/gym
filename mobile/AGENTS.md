@@ -63,6 +63,14 @@ Docs: https://docs.expo.dev/eas/index.md
 - Reanimated shared values: use `.get()` / `.set()` (React Compiler lint rule), and respect `useReducedMotion()`
   for looping animations.
 - Keep `src/lib/accessCode.ts` byte-for-byte compatible with `backend/libs/common/src/utils/access-code.ts`.
+- Member photo (`docs/API.md`, "Member photos"): render it with `MemberAvatar` (initials underneath). Its source
+  (`memberPhotoSource`, `src/lib/memberPhoto.ts`) is `GET /api/me/photo?v=` with the bearer token in the image
+  headers (`useAccessToken` re-renders after each refresh) and an expo-image cache key per member + version, seeded
+  with the uploaded file and cleared at sign-out. `src/app/change-photo.tsx` picks (expo-image-picker, square crop;
+  only the camera needs a permission: refused → message + `Linking.openSettings()`), prepares (`preparePhoto`:
+  expo-image-manipulator, 600×600 JPEG from quality 0.85 down until ≤ 512 KB, no EXIF) and sends multipart field
+  `photo`. Both modules are in Expo Go; the French permission texts (`expo-image-picker` plugin in `app.json`,
+  microphone blocked) only apply in a development or store build.
 - Tests: Jest with the `jest-expo` preset (`npm test`), `*.test.ts` next to the code, helpers in
   `src/test/`. `jest.config.js` pins `TZ=Africa/Tunis`. The suites enforce: en/ar keys and
   `{placeholders}` match fr, `t()` parameters match the placeholders, fonts are loaded in

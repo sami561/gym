@@ -8,7 +8,9 @@ import QRCode from 'react-native-qrcode-svg';
 import { ApiError } from '@/api/client';
 import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
+import { Card } from '@/components/Card';
 import { CountdownRing } from '@/components/CountdownRing';
+import { MemberAvatar } from '@/components/MemberAvatar';
 import { membershipKind, membershipTone } from '@/components/MembershipCard';
 import { Screen } from '@/components/Screen';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
@@ -22,6 +24,8 @@ import { colors, radius, shadow, spacing } from '@/theme';
 
 const QR_SIZE = 220;
 const RING_SIZE = QR_SIZE + 64;
+/** Large enough for the front desk to check the member's face against the pass. */
+const ID_PHOTO_SIZE = 88;
 
 /** Raise screen brightness while the pass is visible so door scanners read it reliably. */
 function useMaxBrightnessWhileFocused() {
@@ -97,25 +101,25 @@ export default function PassScreen() {
             </CountdownRing>
           </Animated.View>
 
-          <View style={styles.meta}>
-            <AppText variant="title" align="center">
-              {t('pass.rotates', { seconds: secondsLeft })}
-            </AppText>
-            {member ? (
-              <AppText variant="label" align="center">
-                {member.firstName} {member.lastName} · {t('pass.memberCode')} {key.memberCode}
-              </AppText>
-            ) : (
-              <AppText variant="label" align="center">
+          <AppText variant="title" align="center">
+            {t('pass.rotates', { seconds: secondsLeft })}
+          </AppText>
+
+          {/* Identity check at the desk: photo (initials without one), name, member code, membership status. */}
+          <Card style={styles.identity}>
+            {member ? <MemberAvatar member={member} size={ID_PHOTO_SIZE} shape="rounded" /> : null}
+            <View style={styles.identityText}>
+              {member ? (
+                <AppText variant="heading" numberOfLines={2}>
+                  {member.firstName} {member.lastName}
+                </AppText>
+              ) : null}
+              <AppText variant="label">
                 {t('pass.memberCode')} {key.memberCode}
               </AppText>
-            )}
-            {kind ? (
-              <View style={styles.center}>
-                <StatusPill label={t(`membership.${kind}` as const)} tone={membershipTone[kind]} />
-              </View>
-            ) : null}
-          </View>
+              {kind ? <StatusPill label={t(`membership.${kind}` as const)} tone={membershipTone[kind]} /> : null}
+            </View>
+          </Card>
 
           {offline ? (
             <View style={[styles.banner, styles.bannerInfo]}>
@@ -161,8 +165,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadow,
   },
-  meta: { gap: spacing.sm, alignItems: 'stretch' },
-  center: { alignItems: 'center' },
+  identity: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, padding: spacing.md },
+  identityText: { flex: 1, gap: spacing.xs },
   flex: { flex: 1 },
   banner: {
     flexDirection: 'row',

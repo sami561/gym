@@ -59,7 +59,8 @@ function sent(): SentRequest[] {
   return fetchMock.mock.calls.map(([input, init]) => ({
     url: String(input),
     auth: new Headers(init?.headers).get('Authorization'),
-    body: init?.body ? JSON.parse(String(init.body)) : undefined,
+    // JSON bodies are compared as values; a FormData (photo upload) as the object sent.
+    body: typeof init?.body === 'string' ? JSON.parse(init.body) : (init?.body ?? undefined),
   }));
 }
 
@@ -403,6 +404,111 @@ describe('a refresh answer that arrives after the session changed', () => {
 
     await expect(pending).resolves.toBeNull();
     expect(storage.getItem(REFRESH_KEY)).toBe('refresh-7');
+  });
+});
+
+// Member photos: multipart upload, JPEG download (docs/API.md, "Member photos").
+describe('FormData bodies and binary answers', () => {
+  const jpegBytes = [0xff, 0xd8, 0xff, 0xd9];
+  const jpeg = () => new Response(new Uint8Array(jpegBytes), { status: 200, headers: { 'Content-Type': 'image/jpeg' } });
+  const form = () => {
+    const body = new FormData();
+    body.append('photo', new Blob([new Uint8Array(jpegBytes)], { type: 'image/jpeg' }), 'photo.jpg');
+    return body;
+  };
+
+  it('sends a FormData as is, without a JSON content type, so the browser writes the multipart boundary', async () => {
+    client.session.set(tokens(1));
+    fetchMock.mockResolvedValueOnce(json(200, { id: 'm-1', photoUpdatedAt: '2026-11-03T09:15:00.000Z' }));
+    const body = form();
+
+    const updated = await client.api('/api/members/m-1/photo', { method: 'PUT', body });
+
+    expect(updated).toEqual({ id: 'm-1', photoUpdatedAt: '2026-11-03T09:15:00.000Z' });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${BASE}/api/members/m-1/photo`);
+    expect(init?.method).toBe('PUT');
+    expect(init?.headers).toEqual({ Authorization: 'Bearer access-1' });
+    expect(init?.body).toBe(body);
+  });
+
+  it('replays the same FormData after refreshing an expired token', async () => {
+    client.session.set(tokens(1));
+    server.validToken = 'access-2';
+    server.refresh = () => json(200, tokens(2));
+    const body = form();
+
+    await expect(client.api('/api/members/m-1/photo', { method: 'PUT', body })).resolves.toEqual({ path: '/api/members/m-1/photo' });
+
+    expect(callsTo('/api/members/m-1/photo').map((request) => [request.auth, request.body])).toEqual([
+      ['Bearer access-1', body],
+      ['Bearer access-2', body],
+    ]);
+    expect(refreshCalls()).toHaveLength(1);
+  });
+
+  it('keeps the French refusal of an upload', async () => {
+    fetchMock.mockResolvedValueOnce(json(413, { statusCode: 413, message: 'La photo dépasse 512 Ko.' }));
+    const error = await failure(client.api('/api/members/m-1/photo', { method: 'PUT', body: form() }));
+    expect(error.status).toBe(413);
+    expect(client.errorMessage(error)).toBe('La photo dépasse 512 Ko.');
+  });
+
+  it('reads a binary answer as a Blob, sent with the token and no body', async () => {
+    client.session.set(tokens(1));
+    fetchMock.mockResolvedValueOnce(jpeg());
+
+    const photo = await client.apiBlob('/api/members/m-1/photo', { query: { v: 1793697300000 } });
+
+    expect(photo.type).toBe('image/jpeg');
+    expect([...new Uint8Array(await photo.arrayBuffer())]).toEqual(jpegBytes);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${BASE}/api/members/m-1/photo?v=1793697300000`);
+    expect(init?.method).toBe('GET');
+    expect(init?.headers).toEqual({ Authorization: 'Bearer access-1' });
+    expect(init?.body).toBeUndefined();
+  });
+
+  it('refreshes an expired token before reading a binary answer', async () => {
+    client.session.set(tokens(1));
+    server.validToken = 'access-2';
+    server.refresh = () => json(200, tokens(2));
+
+    const answer = await client.apiBlob('/api/members/m-1/photo');
+
+    expect(await answer.text()).toBe('{"path":"/api/members/m-1/photo"}');
+    expect(callsTo('/api/members/m-1/photo').map((request) => request.auth)).toEqual(['Bearer access-1', 'Bearer access-2']);
+  });
+
+  it('turns an error answer into an ApiError with the message of the API (no photo)', async () => {
+    fetchMock.mockResolvedValueOnce(json(404, { statusCode: 404, message: 'Aucune photo.' }));
+    const error = await failure(client.apiBlob('/api/members/m-1/photo'));
+    expect(error.status).toBe(404);
+    expect(error.messages).toEqual(['Aucune photo.']);
+  });
+
+  it('membersApi sends the photo as the multipart field "photo" and asks for a version with v', async () => {
+    const { membersApi } = await import('./endpoints');
+    client.session.set(tokens(1));
+    fetchMock.mockResolvedValueOnce(json(200, { id: 'm-1' }));
+    fetchMock.mockResolvedValueOnce(jpeg());
+    fetchMock.mockResolvedValueOnce(jpeg());
+    fetchMock.mockResolvedValueOnce(json(200, { id: 'm-1', photoUpdatedAt: null }));
+
+    await membersApi.setPhoto('m-1', new Blob([new Uint8Array(jpegBytes)], { type: 'image/jpeg' }));
+    await membersApi.photo('m-1', 1793697300000);
+    await membersApi.photo('m-1');
+    await membersApi.removePhoto('m-1');
+
+    const calls = fetchMock.mock.calls.map(([url, init]) => [init?.method, String(url)]);
+    expect(calls).toEqual([
+      ['PUT', `${BASE}/api/members/m-1/photo`],
+      ['GET', `${BASE}/api/members/m-1/photo?v=1793697300000`],
+      ['GET', `${BASE}/api/members/m-1/photo`],
+      ['DELETE', `${BASE}/api/members/m-1/photo`],
+    ]);
+    const sentFile = (fetchMock.mock.calls[0][1]?.body as FormData).get('photo') as File;
+    expect([sentFile.name, sentFile.type, sentFile.size]).toEqual(['photo.jpg', 'image/jpeg', 4]);
   });
 });
 

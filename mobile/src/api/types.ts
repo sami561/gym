@@ -67,6 +67,8 @@ export interface MemberDto {
   notes: string | null;
   status: MemberStatus;
   joinedAt: string;
+  /** ISO instant of the last photo upload, null without photo; load it with …/photo?v=<Date.parse(it)>. */
+  photoUpdatedAt: string | null;
 }
 
 export interface SubscriptionDto {

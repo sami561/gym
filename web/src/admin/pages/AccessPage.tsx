@@ -18,6 +18,7 @@ import { Tabs } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { ACCESS_METHOD_LABELS, DOOR_DRIVER_LABELS, formatDateTime, relativeTime } from '../../lib/format';
 import { useI18n } from '../../i18n';
+import { LogAvatar } from '../photos/LogAvatar';
 
 type TabKey = 'doors' | 'log' | 'agents';
 
@@ -280,7 +281,16 @@ function LogTab() {
         empty={<EmptyState title={t('Aucun passage enregistré')} />}
         columns={[
           { key: 'when', header: 'Quand', cell: (l) => <span title={formatDateTime(l.createdAt)}>{relativeTime(l.createdAt)}</span> },
-          { key: 'who', header: 'Qui', cell: (l) => l.memberName ?? (l.openedByName ? t('{name} (équipe)', { name: l.openedByName }) : '—') },
+          {
+            key: 'who',
+            header: 'Qui',
+            cell: (l) => (
+              <span className="flex items-center gap-2.5">
+                <LogAvatar log={l} />
+                <span className="min-w-0">{l.memberName ?? (l.openedByName ? t('{name} (équipe)', { name: l.openedByName }) : '—')}</span>
+              </span>
+            ),
+          },
           { key: 'door', header: 'Porte', hideOnMobile: true, cell: (l) => l.doorName ?? '—' },
           { key: 'method', header: 'Moyen', hideOnMobile: true, cell: (l) => t(ACCESS_METHOD_LABELS[l.method]) },
           { key: 'result', header: 'Résultat', cell: (l) => (l.result === 'GRANTED' ? <Badge tone="good">{t('Autorisé')}</Badge> : <Badge tone="bad">{l.reason ?? t('Refusé')}</Badge>) },

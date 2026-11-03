@@ -44,8 +44,8 @@ src/
   i18n/           FR / EN / AR: provider, switcher, landing dictionary, back-office messages
   components/ui/  buttons, fields, modal + confirm, toasts, data table, tabs, form builder (FormModal)
   landing/        public site sections and the three.js ceiling (lazy loaded)
-  admin/          AdminApp (lazy chunk: routes + dictionary), layout, nav, charts, pages/*
-  lib/            locale-aware formatters, enum labels, theme
+  admin/          AdminApp (lazy chunk: routes + dictionary), layout, nav, charts, member photos, pages/*
+  lib/            locale-aware formatters, enum labels, theme, photo preparation and camera helpers
 ```
 
 Typed API contracts mirror `backend/libs/common/src/contracts` by hand (`src/api/types.ts`, `src/api/types-ops.ts`); the HTTP contract is `docs/API.md`.
@@ -65,6 +65,14 @@ Typed API contracts mirror `backend/libs/common/src/contracts` by hand (`src/api
 - The hero recreates the hexagon LED ceiling in three.js. The tubes light up like fluorescent lamps and follow the pointer. The scene is lazy-loaded, its DPR is capped, it pauses when off-screen, and it falls back to a static image for reduced motion or when WebGL is missing.
 - Charts follow the dataviz rules: categorical slots 1–3 (blue, orange, aqua) and the employee-position slots 1–6 were checked with the palette validator in both themes. Age groups use an ordinal blue ramp. Every chart has a table view, there is no dual axis, and margin % gets its own chart.
 - The back office has dark (default) and light themes, switched from the top bar.
+- Member photos are square portraits, like on an access badge, with corners that round more as they grow; without a photo, the initials in wide Archivo. Staff accounts keep their round initials.
+
+## Member photos
+
+- From the member file, staff import a photo or take one with the webcam (preview, take, retake, use), and can delete it. The browser applies the EXIF orientation, keeps the centre square and sends a 600×600 JPEG of at most 512 KB (quality 0.85, lowered if needed); the server strips the metadata.
+- The photo shows in the member list, the live entries (dashboard, access log) and, large, on the reception scanner, so the desk can compare it with the face.
+- A photo is personal data: it is fetched with the staff token and shown from memory (object URLs, revoked after use), never through a public URL. List thumbnails load once their row is on screen.
+- The webcam only works on an https:// address (or localhost). Over plain http, import a file instead.
 
 ## Auth and security
 

@@ -1,8 +1,8 @@
 import { Check } from 'lucide-react';
 import clsx from 'clsx';
 import { useI18n } from '../../lib/i18n';
-import { FALLBACK_PLANS, type FallbackPlan } from '../../lib/fallbacks';
 import { Skeleton } from '../../components/ui/Spinner';
+import { plansOnSale } from '../plansOnSale';
 import { usePublicPlans } from '../useLandingData';
 import { currencySymbol, formatInt } from '../../lib/format';
 
@@ -29,11 +29,8 @@ function Price({ value, onSite }: { value: number | null; onSite: string }) {
 export function Plans({ onChoose }: { onChoose: (planId: string | null) => void }) {
   const { t } = useI18n();
   const query = usePublicPlans();
-  const plans: FallbackPlan[] =
-    query.data && query.data.length > 0
-      ? [...query.data].filter((p) => p.isActive).sort((a, b) => a.sortOrder - b.sortOrder || a.durationDays - b.durationDays)
-      : FALLBACK_PLANS;
-  const offline = !query.isLoading && (!query.data || query.data.length === 0);
+  const { plans, fromApi } = plansOnSale(query.data);
+  const offline = !query.isLoading && !fromApi;
 
   return (
     <section id="offres" className="bg-shield py-24 text-white sm:py-32">
@@ -43,54 +40,58 @@ export function Plans({ onChoose }: { onChoose: (planId: string | null) => void 
           <p className="max-w-md text-steel-300">{offline ? t('plans.offline') : t('plans.lead')}</p>
         </div>
 
-        <div className="mt-14 grid gap-px overflow-hidden rounded-2xl bg-white/12 ring-1 ring-white/12 md:grid-cols-2 lg:grid-cols-3">
-          {query.isLoading
-            ? Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="bg-steel-950 p-8">
-                  <Skeleton className="h-6 w-32 bg-white/10" />
-                  <Skeleton className="mt-6 h-14 w-48 bg-white/10" />
-                  <Skeleton className="mt-8 h-24 w-full bg-white/10" />
-                </div>
-              ))
-            : plans.map((plan) => (
-                <article
-                  key={plan.id}
-                  className={clsx('relative flex flex-col p-8 sm:p-10', plan.isFeatured ? 'bg-steel-900' : 'bg-steel-950')}
-                >
-                  {plan.isFeatured && <span className="absolute inset-x-0 top-0 h-1 bg-brand-500" aria-hidden />}
-                  <div className="flex items-baseline justify-between gap-4">
-                    <h3 className="type-wide text-2xl">{plan.name}</h3>
-                    <span className="text-sm text-steel-400">{durationLabel(plan.durationDays, t)}</span>
+        {fromApi && plans.length === 0 ? (
+          <p className="mt-14 rounded-2xl border border-dashed border-white/15 px-6 py-12 text-center text-steel-300">{t('plans.empty')}</p>
+        ) : (
+          <div className="mt-14 grid gap-px overflow-hidden rounded-2xl bg-white/12 ring-1 ring-white/12 md:grid-cols-2 lg:grid-cols-3">
+            {query.isLoading
+              ? Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="bg-steel-950 p-8">
+                    <Skeleton className="h-6 w-32 bg-white/10" />
+                    <Skeleton className="mt-6 h-14 w-48 bg-white/10" />
+                    <Skeleton className="mt-8 h-24 w-full bg-white/10" />
                   </div>
-                  {plan.isFeatured && <p className="mt-2 text-sm font-semibold text-brand-400">{t('plans.featured')}</p>}
-                  <div className="mt-8">
-                    <Price value={plan.price} onSite={t('plans.priceOnSite')} />
-                  </div>
-                  {plan.description && <p className="mt-4 text-steel-300">{plan.description}</p>}
-                  <ul className="mt-8 flex flex-1 flex-col gap-3 border-t border-white/10 pt-6">
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex gap-3 text-sm text-steel-200">
-                        <Check className="mt-0.5 size-4 shrink-0 text-led" aria-hidden />
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-                  <button
-                    type="button"
-                    onClick={() => onChoose(plan.id.startsWith('fallback-') ? null : plan.id)}
-                    className={clsx(
-                      'mt-10 h-12 rounded-lg font-semibold transition-[background-color,transform] active:scale-[0.98]',
-                      plan.isFeatured ? 'bg-brand-500 text-white hover:bg-brand-600' : 'text-white ring-1 ring-white/30 hover:bg-white/10',
-                    )}
+                ))
+              : plans.map((plan) => (
+                  <article
+                    key={plan.id}
+                    className={clsx('relative flex flex-col p-8 sm:p-10', plan.isFeatured ? 'bg-steel-900' : 'bg-steel-950')}
                   >
-                    {t('plans.cta')}
-                  </button>
-                </article>
-              ))}
-          {!query.isLoading &&
-            Array.from({ length: (3 - (plans.length % 3)) % 3 }).map((_, i) => <div key={`fill-lg-${i}`} className="hidden bg-steel-950 lg:block" aria-hidden />)}
-          {!query.isLoading && plans.length % 2 === 1 && <div className="hidden bg-steel-950 md:block lg:hidden" aria-hidden />}
-        </div>
+                    {plan.isFeatured && <span className="absolute inset-x-0 top-0 h-1 bg-brand-500" aria-hidden />}
+                    <div className="flex items-baseline justify-between gap-4">
+                      <h3 className="type-wide text-2xl">{plan.name}</h3>
+                      <span className="text-sm text-steel-400">{durationLabel(plan.durationDays, t)}</span>
+                    </div>
+                    {plan.isFeatured && <p className="mt-2 text-sm font-semibold text-brand-400">{t('plans.featured')}</p>}
+                    <div className="mt-8">
+                      <Price value={plan.price} onSite={t('plans.priceOnSite')} />
+                    </div>
+                    {plan.description && <p className="mt-4 text-steel-300">{plan.description}</p>}
+                    <ul className="mt-8 flex flex-1 flex-col gap-3 border-t border-white/10 pt-6">
+                      {plan.features.map((feature) => (
+                        <li key={feature} className="flex gap-3 text-sm text-steel-200">
+                          <Check className="mt-0.5 size-4 shrink-0 text-led" aria-hidden />
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      type="button"
+                      onClick={() => onChoose(plan.id.startsWith('fallback-') ? null : plan.id)}
+                      className={clsx(
+                        'mt-10 h-12 rounded-lg font-semibold transition-[background-color,transform] active:scale-[0.98]',
+                        plan.isFeatured ? 'bg-brand-500 text-white hover:bg-brand-600' : 'text-white ring-1 ring-white/30 hover:bg-white/10',
+                      )}
+                    >
+                      {t('plans.cta')}
+                    </button>
+                  </article>
+                ))}
+            {!query.isLoading &&
+              Array.from({ length: (3 - (plans.length % 3)) % 3 }).map((_, i) => <div key={`fill-lg-${i}`} className="hidden bg-steel-950 lg:block" aria-hidden />)}
+            {!query.isLoading && plans.length % 2 === 1 && <div className="hidden bg-steel-950 md:block lg:hidden" aria-hidden />}
+          </div>
+        )}
       </div>
     </section>
   );

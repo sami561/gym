@@ -60,6 +60,7 @@ function RootNavigator() {
         <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
         <Stack.Screen name="door" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="edit-profile" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="change-photo" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="change-password" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="add-measurement" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="program/[id]" options={{ animation: pushAnimation }} />

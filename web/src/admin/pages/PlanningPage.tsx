@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { CalendarPlus, ChevronLeft, ChevronRight, Pencil, Trash2, UserCheck, UserX } from 'lucide-react';
 import clsx from 'clsx';
 import { classesApi, usersApi } from '../../api/endpoints';
@@ -15,6 +15,16 @@ import { Skeleton } from '../../components/ui/Spinner';
 import { useToast } from '../../components/ui/Toast';
 import { addDays, BOOKING_STATUS_LABELS, formatDate, formatTime, formatWeekday, fullName, isoDay, startOfWeek } from '../../lib/format';
 import { useI18n, type TKey } from '../../i18n';
+import { spanLabel } from '../calendar/labels';
+import { classMoveRefusal, sameSpan, type Move } from '../calendar/slots';
+import { useNow } from './hr/team';
+import { ClassWeek, type ClassMove } from './planning/ClassWeek';
+
+/** The back office and the public site (same browser cache when staff open the site) show the new planning at once. */
+function refreshClasses(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: ['classes'] });
+  void queryClient.invalidateQueries({ queryKey: ['public', 'classes'] });
+}
 
 const CLASS_COLORS: { value: string; label: TKey }[] = [
   { value: '#d7141a', label: 'Rouge Meliora' },
@@ -109,7 +119,7 @@ function BookingsPanel({ session, onClose, onEdit }: { session: ClassSessionDto;
       await classesApi.setBookingStatus(booking.id, status);
       toast.success(`${booking.memberName} : ${t(BOOKING_STATUS_LABELS[status])}`);
       void queryClient.invalidateQueries({ queryKey: ['class-bookings', session.id] });
-      void queryClient.invalidateQueries({ queryKey: ['classes'] });
+      refreshClasses(queryClient);
     } catch (err) {
       toast.error(errorMessage(err));
     }
@@ -152,7 +162,7 @@ function BookingsPanel({ session, onClose, onEdit }: { session: ClassSessionDto;
                 try {
                   await classesApi.remove(session.id);
                   toast.success(t('Cours supprimé.'));
-                  void queryClient.invalidateQueries({ queryKey: ['classes'] });
+                  refreshClasses(queryClient);
                   onClose();
                 } catch (err) {
                   toast.error(errorMessage(err));
@@ -246,26 +256,26 @@ function BookingsPanel({ session, onClose, onEdit }: { session: ClassSessionDto;
   );
 }
 
-function SessionCard({ session, onOpen }: { session: ClassSessionDto; onOpen: () => void }) {
+/** What the move changes, who is booked, and what they will (not) be told — the class-service sends no message. */
+function MoveSummary({ session, next }: { session: ClassSessionDto; next: Move }) {
   const { t } = useI18n();
-  const full = session.spotsLeft <= 0;
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="w-full rounded-lg border-s-[3px] bg-page p-3 text-start ring-1 ring-line transition-shadow hover:ring-fg-2/40"
-      style={{ borderInlineStartColor: session.color ?? '#d7141a' }}
-    >
-      <p className="text-xs text-muted tabular">
-        {formatTime(session.startsAt)} – {formatTime(session.endsAt)}
+    <div className="flex flex-col gap-3">
+      <p className="flex flex-col gap-0.5">
+        <span className="text-muted line-through decoration-1">{spanLabel(session)}</span>
+        <span className="font-semibold text-fg">{spanLabel(next)}</span>
       </p>
-      <p className="mt-0.5 text-sm leading-snug font-semibold text-fg">{session.title}</p>
-      {session.coachName && <p className="truncate text-xs text-fg-2">{session.coachName}</p>}
-      <p className={clsx('mt-2 text-xs font-medium', full ? 'text-warn' : 'text-fg-2')}>
-        {full ? t('Complet') : t('{left} places sur {capacity}', { left: session.spotsLeft, capacity: session.capacity })}
-        {session.waitlistCount > 0 && `, ${t('{n} en attente', { n: session.waitlistCount })}`}
+      <p className="text-fg">
+        {session.bookedCount === 1 && t('Un membre a réservé ce cours.')}
+        {session.bookedCount > 1 && t('{n} membres ont réservé ce cours.', { n: session.bookedCount })}
+        {session.bookedCount > 0 && session.waitlistCount > 0 && ' '}
+        {session.waitlistCount === 1 && t('Un membre est en liste d’attente.')}
+        {session.waitlistCount > 1 && t('{n} membres sont en liste d’attente.', { n: session.waitlistCount })}
       </p>
-    </button>
+      <p>
+        {t('Aucun message n’est envoyé pour ce changement : seul le rappel automatique, 2 h avant le cours, donnera le nouvel horaire aux membres inscrits. Prévenez-les si besoin.')}
+      </p>
+    </div>
   );
 }
 
@@ -273,32 +283,62 @@ export function PlanningPage() {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const toast = useToast();
+  const confirm = useConfirm();
+  const now = useNow(30_000);
   const [weekStart, setWeekStart] = useState(() => startOfWeek());
   const [open, setOpen] = useState<ClassSessionDto | null>(null);
   const [editing, setEditing] = useState<ClassSessionDto | 'new' | null>(null);
+  const [pending, setPending] = useState<ReadonlySet<string>>(() => new Set());
   const weekEnd = addDays(weekStart, 7);
+  const weekKey = ['classes', isoDay(weekStart)];
 
   const query = useQuery({
-    queryKey: ['classes', isoDay(weekStart)],
+    queryKey: weekKey,
     queryFn: () => classesApi.list(weekStart.toISOString(), weekEnd.toISOString()),
   });
   const coaches = useQuery({ queryKey: ['users', 'COACH'], queryFn: () => usersApi.list('COACH') });
   const coachOptions = (coaches.data ?? []).map((c) => ({ value: c.id, label: fullName(c) }));
+  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
 
-  const days = useMemo(
-    () =>
-      Array.from({ length: 7 }, (_, i) => {
-        const date = addDays(weekStart, i);
-        const key = isoDay(date);
-        return {
-          date,
-          key,
-          sessions: (query.data ?? []).filter((s) => isoDay(new Date(s.startsAt)) === key).sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
-        };
-      }),
-    [weekStart, query.data],
-  );
-  const today = isoDay();
+  const replace = (id: string, update: (session: ClassSessionDto) => ClassSessionDto) =>
+    queryClient.setQueryData<ClassSessionDto[]>(weekKey, (list) => list?.map((s) => (s.id === id ? update(s) : s)));
+
+  /** Drop on the grid: checks, confirmation when members are booked, then an optimistic move rolled back on error. */
+  const moveSession = async ({ session, next, resize }: ClassMove) => {
+    if (sameSpan(session, next)) return;
+    const refusal = classMoveRefusal(session, next, new Date());
+    if (refusal) {
+      toast.error(refusal === 'started' ? t('Ce cours a déjà commencé : il ne peut plus être déplacé.') : t('Impossible de placer un cours dans le passé.'));
+      return;
+    }
+    if (session.bookedCount + session.waitlistCount > 0) {
+      const ok = await confirm({
+        title: resize ? t('Changer l’horaire de « {title} » ?', { title: session.title }) : t('Déplacer « {title} » ?', { title: session.title }),
+        message: <MoveSummary session={session} next={next} />,
+        confirmLabel: resize ? t('Changer l’horaire') : t('Déplacer le cours'),
+      });
+      if (!ok) return;
+    }
+    const body = { startsAt: next.startsAt.toISOString(), endsAt: next.endsAt.toISOString() };
+    setPending((ids) => new Set(ids).add(session.id));
+    await queryClient.cancelQueries({ queryKey: weekKey });
+    replace(session.id, (s) => ({ ...s, ...body }));
+    try {
+      const saved = await classesApi.update(session.id, body);
+      replace(session.id, () => saved);
+      toast.success(resize ? t('Horaire modifié : {when}.', { when: spanLabel(saved) }) : t('Cours déplacé : {when}.', { when: spanLabel(saved) }));
+    } catch (err) {
+      replace(session.id, () => session);
+      toast.error(errorMessage(err));
+    } finally {
+      setPending((ids) => {
+        const rest = new Set(ids);
+        rest.delete(session.id);
+        return rest;
+      });
+      refreshClasses(queryClient);
+    }
+  };
 
   return (
     <div>
@@ -324,27 +364,16 @@ export function PlanningPage() {
         <Button variant="ghost" size="sm" onClick={() => setWeekStart(startOfWeek())}>
           {t('Cette semaine')}
         </Button>
+        <p className="ms-auto max-w-md text-xs text-muted">{t('Glissez un cours vers un autre jour ou une autre heure, ou tirez son bord bas pour changer la fin. Les cours commencés restent en place.')}</p>
       </div>
       {query.isError && <ErrorNote message={errorMessage(query.error)} onRetry={() => query.refetch()} />}
-      <div className="scroll-thin overflow-x-auto pb-2">
-        <div className="grid min-w-[980px] grid-cols-7 gap-3">
-          {days.map((day) => (
-            <Card key={day.key} className={clsx('flex min-h-[320px] flex-col', day.key === today && 'ring-brand-500/60')}>
-              <div className="border-b border-line px-3 py-2.5">
-                <p className="text-sm font-semibold text-fg">{formatWeekday(day.date)}</p>
-                <p className="text-xs text-muted">{formatDate(day.date, { day: 'numeric', month: 'short' })}</p>
-              </div>
-              <div className="flex flex-1 flex-col gap-2 p-2">
-                {query.isLoading && <Skeleton className="h-20" />}
-                {day.sessions.map((s) => (
-                  <SessionCard key={s.id} session={s} onOpen={() => setOpen(s)} />
-                ))}
-                {!query.isLoading && day.sessions.length === 0 && <p className="px-1 py-2 text-xs text-muted">{t('Aucun cours')}</p>}
-              </div>
-            </Card>
-          ))}
-        </div>
-      </div>
+      <Card className="overflow-hidden">
+        {query.isLoading ? (
+          <Skeleton className="m-3 h-[560px]" />
+        ) : (
+          <ClassWeek days={days} sessions={query.data ?? []} now={now} pendingIds={pending} onOpen={setOpen} onMove={(move) => void moveSession(move)} />
+        )}
+      </Card>
       {!query.isLoading && query.data?.length === 0 && (
         <EmptyState className="mt-2" title={t('Aucun cours cette semaine')} description={t('Créez un cours et répétez-le sur plusieurs semaines en une fois.')} />
       )}
@@ -383,7 +412,7 @@ export function PlanningPage() {
             await classesApi.update(editing.id, data);
             toast.success(t('Cours enregistré.'));
           }
-          void queryClient.invalidateQueries({ queryKey: ['classes'] });
+          refreshClasses(queryClient);
         }}
       />
     </div>

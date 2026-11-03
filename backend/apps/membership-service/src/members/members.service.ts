@@ -27,6 +27,7 @@ import {
   toDateOnly,
 } from '@app/common';
 import { Member } from './member.entity';
+import { MemberPhotoEntity } from './member-photo.entity';
 import { Subscription } from '../subscriptions/subscription.entity';
 import { Payment } from '../payments/payment.entity';
 import { toMemberDto, toPaymentDto, toSubscriptionDto } from '../mappers';
@@ -220,7 +221,7 @@ export class MembersService implements OnModuleInit {
 
   async remove(id: string): Promise<{ ok: true }> {
     await this.findOrFail(id);
-    await this.members.delete(id);
+    await this.deleteWithPhoto(id);
     await this.rpc.send(PATTERNS.users.remove, { id }).catch((e: RpcError) => {
       if (e.statusCode !== 404) this.logger.warn(`Could not delete auth user ${id}: ${e.message}`);
     });
@@ -248,8 +249,21 @@ export class MembersService implements OnModuleInit {
   }
 
   async onUserDeleted(userId: string): Promise<void> {
-    const result = await this.members.delete(userId);
-    if (result.affected) this.events.publish(EVENTS.memberDeleted, { memberId: userId });
+    if (await this.deleteWithPhoto(userId)) this.events.publish(EVENTS.memberDeleted, { memberId: userId });
+  }
+
+  /**
+   * Deletes the member with its photo (personal data) in one transaction, locking the member row first like a
+   * photo upload does; subscriptions and payments go with it (FK cascade). False when there was no member.
+   */
+  private deleteWithPhoto(id: string): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      const member = await tx.findOne(Member, { where: { id }, lock: { mode: 'pessimistic_write' } });
+      await tx.delete(MemberPhotoEntity, { memberId: id });
+      if (!member) return false;
+      await tx.delete(Member, id);
+      return true;
+    });
   }
 
   async entitlements(req: EntitlementsRequest): Promise<Entitlement[]> {

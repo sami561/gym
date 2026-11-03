@@ -31,6 +31,7 @@ const member = (): Member =>
     emergencyContact: null,
     notes: null,
     status: MemberStatus.ACTIVE,
+    photoUpdatedAt: null,
     joinedAt: at,
     updatedAt: at,
     subscriptions: [],
@@ -86,7 +87,15 @@ describe('membership mappers', () => {
       notes: null,
       status: MemberStatus.ACTIVE,
       joinedAt: '2026-11-02T09:15:00.000Z',
+      photoUpdatedAt: null,
     });
+  });
+
+  it('gives the photo version as an ISO instant, null without photo or right after an insert', () => {
+    const withPhoto = Object.assign(member(), { photoUpdatedAt: new Date('2026-11-03T09:00:00.001Z') });
+    expect(toMemberDto(withPhoto).photoUpdatedAt).toBe('2026-11-03T09:00:00.001Z');
+    // insert: false — save() leaves the property undefined on a member it just created
+    expect(toMemberDto(Object.assign(member(), { photoUpdatedAt: undefined })).photoUpdatedAt).toBeNull();
   });
 
   it('maps a plan, with no features as an empty list', () => {

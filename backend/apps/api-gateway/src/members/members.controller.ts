@@ -1,5 +1,22 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Res,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import {
   ACCESS_ROTATE_KEY_PATTERN,
   AccessKeyRotation,
@@ -7,10 +24,12 @@ import {
   AuthUser,
   CreateMemberResult,
   CurrentUser,
+  IdRequest,
   MemberAccessInfo,
   MemberDetail,
   MemberDto,
   MemberListItem,
+  MemberPhoto,
   MemberProfile,
   Paginated,
   PATTERNS,
@@ -19,6 +38,7 @@ import {
   Roles,
   RotateAccessKeyRequest,
   RpcClient,
+  SetMemberPhotoRequest,
   SubscriptionDto,
   toActor,
 } from '@app/common';
@@ -30,6 +50,14 @@ import {
   ListMembersQuery,
   UpdateMemberDto,
 } from './members.dto';
+import {
+  ApiPhotoDownload,
+  ApiPhotoUpload,
+  PhotoUploadInterceptor,
+  UploadedPhoto,
+  photoData,
+  sendPhoto,
+} from './member-photo';
 
 @ApiTags('Membres')
 @ApiBearerAuth()
@@ -86,6 +114,32 @@ export class MembersController {
   @Post(':id/payments')
   pay(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: CreatePaymentDto) {
     return this.rpc.send<PaymentDto>(PATTERNS.payments.create, { ...dto, memberId: id, actor: toActor(user) });
+  }
+
+  /** JPEG without metadata (docs/API.md, Member photos); 404 'Aucune photo.' or 'Membre introuvable.'. */
+  @ApiPhotoDownload()
+  @Get(':id/photo')
+  async photo(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('v') version: string | undefined,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
+    const photo = await this.rpc.send<MemberPhoto, IdRequest>(PATTERNS.members.photoGet, { id });
+    sendPhoto(res, photo, { version, ifNoneMatch });
+  }
+
+  /** multipart/form-data, file field `photo`: a JPEG of at most 512 KB. */
+  @ApiPhotoUpload()
+  @UseInterceptors(PhotoUploadInterceptor)
+  @Put(':id/photo')
+  setPhoto(@Param('id', ParseUUIDPipe) id: string, @UploadedFile() file: UploadedPhoto | undefined) {
+    return this.rpc.send<MemberDto, SetMemberPhotoRequest>(PATTERNS.members.photoSet, { id, data: photoData(file) });
+  }
+
+  @Delete(':id/photo')
+  removePhoto(@Param('id', ParseUUIDPipe) id: string) {
+    return this.rpc.send<MemberDto, IdRequest>(PATTERNS.members.photoRemove, { id });
   }
 
   @Put(':id/card')

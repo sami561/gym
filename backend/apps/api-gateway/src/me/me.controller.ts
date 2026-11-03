@@ -1,6 +1,24 @@
-import { Body, Controller, Delete, Get, HttpCode, Ip, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  HttpCode,
+  Ip,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Res,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import type { Response } from 'express';
 import {
   ACCESS_ROTATE_KEY_PATTERN,
   AccessDecision,
@@ -12,11 +30,13 @@ import {
   ClassSessionDto,
   MemberBookingStanding,
   CurrentUser,
+  IdRequest,
   MeResponse,
   MeasurementDto,
   MemberAccessInfo,
   MemberDoor,
   MemberDto,
+  MemberPhoto,
   MemberProfile,
   OpenByAppRequest,
   PATTERNS,
@@ -25,11 +45,20 @@ import {
   Roles,
   RotateAccessKeyRequest,
   RpcClient,
+  SetMemberPhotoRequest,
   toActor,
   UserDto,
   WorkoutProgramDto,
 } from '@app/common';
 import { ClassRangeQuery } from '../public/public.dto';
+import {
+  ApiPhotoDownload,
+  ApiPhotoUpload,
+  PhotoUploadInterceptor,
+  UploadedPhoto,
+  photoData,
+  sendPhoto,
+} from '../members/member-photo';
 import {
   BookDto,
   BookingsQuery,
@@ -136,6 +165,36 @@ export class MeController {
   @Delete('bookings/:id')
   cancelBooking(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.rpc.send<BookingDto>(PATTERNS.bookings.cancel, { bookingId: id, memberId: user.id });
+  }
+
+  /** The member's own photo (docs/API.md, Member photos); 404 'Aucune photo.'. */
+  @ApiPhotoDownload()
+  @Get('photo')
+  async photo(
+    @CurrentUser() user: AuthUser,
+    @Query('v') version: string | undefined,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
+    const photo = await this.rpc.send<MemberPhoto, IdRequest>(PATTERNS.members.photoGet, { id: user.id });
+    sendPhoto(res, photo, { version, ifNoneMatch });
+  }
+
+  /** multipart/form-data, file field `photo`: a JPEG of at most 512 KB, resized by the app beforehand. */
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiPhotoUpload()
+  @UseInterceptors(PhotoUploadInterceptor)
+  @Put('photo')
+  setPhoto(@CurrentUser() user: AuthUser, @UploadedFile() file: UploadedPhoto | undefined) {
+    return this.rpc.send<MemberDto, SetMemberPhotoRequest>(PATTERNS.members.photoSet, {
+      id: user.id,
+      data: photoData(file),
+    });
+  }
+
+  @Delete('photo')
+  removePhoto(@CurrentUser() user: AuthUser) {
+    return this.rpc.send<MemberDto, IdRequest>(PATTERNS.members.photoRemove, { id: user.id });
   }
 
   @Put('push-token')

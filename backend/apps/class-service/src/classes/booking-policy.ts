@@ -98,9 +98,17 @@ function format(date: Date, options: Intl.DateTimeFormatOptions): string {
   }
 }
 
+/** "10/11/2026" in the gym timezone. */
+export function formatDayFr(date: Date): string {
+  return format(date, { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+/** "18:00" in the gym timezone. */
+export function formatTimeFr(date: Date): string {
+  return format(date, { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
 /** "10/11/2026 à 18:00" in the gym timezone. */
 export function formatDateTimeFr(date: Date): string {
-  const day = format(date, { day: '2-digit', month: '2-digit', year: 'numeric' });
-  const time = format(date, { hour: '2-digit', minute: '2-digit', hour12: false });
-  return `${day} à ${time}`;
+  return `${formatDayFr(date)} à ${formatTimeFr(date)}`;
 }
