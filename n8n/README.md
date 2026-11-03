@@ -2,8 +2,8 @@
 
 Customer e-mails, owner reports and Instagram content ideas for Meliora Gym, built on n8n and the
 Meliora backend (webhook events + automation API, see [`docs/API.md`](../docs/API.md)). All e-mails
-are in French, in the Meliora look (black, white and red, logo, buttons, footer with the address and
-Instagram @gymmeliora).
+are in French, in the Meliora look (black, white and red, logo, buttons, footer with the address,
+Instagram @gymmeliora and Facebook).
 
 | # | Workflow | When | Data | Sends to |
 |---|---|---|---|---|

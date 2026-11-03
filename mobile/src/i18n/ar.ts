@@ -282,6 +282,7 @@ export const ar: Dictionary = {
     call: 'اتّصال',
     directions: 'الاتّجاهات',
     instagram: 'إنستغرام',
+    facebook: 'فيسبوك',
     logout: 'تسجيل الخروج',
     logoutConfirm: 'هل تريد تسجيل الخروج؟',
     version: 'الإصدار {version}',

@@ -277,6 +277,7 @@ export const fr = {
     call: 'Appeler',
     directions: 'Itinéraire',
     instagram: 'Instagram',
+    facebook: 'Facebook',
     logout: 'Se déconnecter',
     logoutConfirm: 'Voulez-vous vous déconnecter ?',
     version: 'Version {version}',

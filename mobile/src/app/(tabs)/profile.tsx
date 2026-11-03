@@ -197,31 +197,43 @@ export default function ProfileScreen() {
                 </View>
               ))}
             </View>
-            <View style={styles.gymActions}>
-              <Button
-                title={t('profile.directions')}
-                variant="secondary"
-                size="sm"
-                icon="navigate-outline"
-                style={styles.flex}
-                onPress={() => Linking.openURL(gym.data.mapsUrl)}
-              />
-              <Button
-                title={t('profile.call')}
-                variant="secondary"
-                size="sm"
-                icon="call-outline"
-                style={styles.flex}
-                onPress={() => Linking.openURL(`tel:${gym.data.phone.replace(/\s/g, '')}`)}
-              />
-              <Button
-                title={t('profile.instagram')}
-                variant="secondary"
-                size="sm"
-                icon="logo-instagram"
-                style={styles.flex}
-                onPress={() => Linking.openURL(gym.data.instagram)}
-              />
+            <View style={styles.gymLinks}>
+              <View style={styles.gymActions}>
+                <Button
+                  title={t('profile.directions')}
+                  variant="secondary"
+                  size="sm"
+                  icon="navigate-outline"
+                  style={styles.flex}
+                  onPress={() => Linking.openURL(gym.data.mapsUrl)}
+                />
+                <Button
+                  title={t('profile.call')}
+                  variant="secondary"
+                  size="sm"
+                  icon="call-outline"
+                  style={styles.flex}
+                  onPress={() => Linking.openURL(`tel:${gym.data.phone.replace(/\s/g, '')}`)}
+                />
+              </View>
+              <View style={styles.gymActions}>
+                <Button
+                  title={t('profile.instagram')}
+                  variant="secondary"
+                  size="sm"
+                  icon="logo-instagram"
+                  style={styles.flex}
+                  onPress={() => Linking.openURL(gym.data.instagram)}
+                />
+                <Button
+                  title={t('profile.facebook')}
+                  variant="secondary"
+                  size="sm"
+                  icon="logo-facebook"
+                  style={styles.flex}
+                  onPress={() => Linking.openURL(gym.data.facebook)}
+                />
+              </View>
             </View>
           </Card>
         </Animated.View>
@@ -264,5 +276,6 @@ const styles = StyleSheet.create({
   gymHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   hours: { gap: spacing.sm, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
   hoursRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  gymLinks: { gap: spacing.sm },
   gymActions: { flexDirection: 'row', gap: spacing.sm },
 });

@@ -14,6 +14,7 @@ export interface GymInfo {
   phone: string;
   email: string;
   instagram: string;
+  facebook: string;
   mapsUrl: string;
   location: { lat: number; lng: number };
   geofenceMeters: number;
@@ -30,6 +31,7 @@ export function gymInfo(): GymInfo {
     phone: env('GYM_PHONE', '+216 00 000 000'),
     email: env('GYM_EMAIL', 'contact@meliora-gym.tn'),
     instagram: env('GYM_INSTAGRAM', 'https://www.instagram.com/gymmeliora/'),
+    facebook: env('GYM_FACEBOOK', 'https://www.facebook.com/p/Meliora-Gym-61589769249533/'),
     mapsUrl: env('GYM_MAPS_URL', 'https://maps.app.goo.gl/CVWB98nx2RdSd8Mw8'),
     location: { lat: envFloat('GYM_LAT', 35.8456), lng: envFloat('GYM_LNG', 10.6178) },
     geofenceMeters: envInt('GEOFENCE_METERS', 150),

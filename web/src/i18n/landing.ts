@@ -111,6 +111,7 @@ export const landingFr = {
   'insta.title': 'Suis la team sur Instagram',
   'insta.lead': 'Transformations, nouveaux cours, coulisses : tout se passe sur @gymmeliora.',
   'insta.cta': 'Suivre @gymmeliora',
+  'insta.facebook': 'Aussi sur Facebook',
 
   'footer.rights': 'Tous droits réservés.',
   'footer.staff': 'Espace équipe',
@@ -243,6 +244,7 @@ export const landingEn: Record<LandingKey, string> = {
   'insta.title': 'Follow the team on Instagram',
   'insta.lead': 'Transformations, new classes, behind the scenes: it all happens on @gymmeliora.',
   'insta.cta': 'Follow @gymmeliora',
+  'insta.facebook': 'Also on Facebook',
 
   'footer.rights': 'All rights reserved.',
   'footer.staff': 'Staff area',
@@ -373,6 +375,7 @@ export const landingAr: Record<LandingKey, string> = {
   'insta.title': 'تابع الفريق على إنستغرام',
   'insta.lead': 'تحولات، حصص جديدة، كواليس: كل شيء على ‎@gymmeliora.',
   'insta.cta': 'تابع ‎@gymmeliora',
+  'insta.facebook': 'أيضًا على فيسبوك',
 
   'footer.rights': 'جميع الحقوق محفوظة.',
   'footer.staff': 'فضاء الفريق',

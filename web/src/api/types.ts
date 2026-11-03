@@ -43,6 +43,7 @@ export interface GymInfo {
   phone: string;
   email: string;
   instagram: string;
+  facebook: string;
   mapsUrl: string;
   location: { lat: number; lng: number };
   geofenceMeters: number;

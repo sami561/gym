@@ -279,6 +279,7 @@ export const en: Dictionary = {
     call: 'Call',
     directions: 'Directions',
     instagram: 'Instagram',
+    facebook: 'Facebook',
     logout: 'Sign out',
     logoutConfirm: 'Do you want to sign out?',
     version: 'Version {version}',
