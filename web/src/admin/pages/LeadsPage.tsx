@@ -29,7 +29,7 @@ function isDue(lead: LeadDto) {
 function leadFields(plans: { value: string; label: string }[]): FieldDef[] {
   return [
     { name: 'firstName', label: 'Prénom', required: true },
-    { name: 'lastName', label: 'Nom', required: true },
+    { name: 'lastName', label: 'Nom de famille', required: true },
     { name: 'phone', label: 'Téléphone', type: 'tel' },
     { name: 'email', label: 'E-mail', type: 'email' },
     { name: 'source', label: 'Source', type: 'select', required: true, options: enumOptions(LEAD_SOURCE_LABELS) },

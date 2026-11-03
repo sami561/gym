@@ -1,4 +1,5 @@
 import { PartialType } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
@@ -72,6 +73,7 @@ export class ListEquipmentQuery {
 
   /** Only equipment whose preventive maintenance is due within N days (or overdue). */
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(0)
   @Max(365)

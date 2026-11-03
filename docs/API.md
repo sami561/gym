@@ -28,6 +28,11 @@ source of truth for every payload. Web and mobile clients should mirror them in 
   limit: 429 `{ "statusCode": 429, "message": "ThrottlerException: Too Many Requests" }`.
 - Errors: `{ "statusCode": 404, "message": "Membre introuvable." }` — `message` may be a string or an
   array of validation messages (French, ready to display).
+- Validation: body fields must have their JSON type — `"30"` for a number, `"false"` for a boolean or an
+  object for a text field answers 400 (only the coordinates of `POST /api/me/doors/:doorId/open` also
+  accept numbers written as text); unknown fields are dropped. Query parameters are text: numeric ones
+  (`?days=30`, `?limit`, `?page`, `?pageSize`…) are read as numbers, boolean ones are true for `true`,
+  `1` or `yes` and false otherwise.
 - Roles: `ADMIN`, `STAFF` (reception), `COACH`, `MEMBER`. "staff" below = ADMIN or STAFF.
 
 ## Public (no auth)
@@ -255,7 +260,9 @@ Events and `data` (types in `libs/common/src/bus/events.ts`): `member.created` (
 `subscription.created` (SubscriptionCreatedEvent), `payment.received` (PaymentReceivedEvent),
 `subscription.expiring` (SubscriptionExpiringEvent — sent once, `EXPIRY_REMINDER_DAYS` before the end),
 `subscription.expired` (SubscriptionExpiredEvent), `booking.created` (BookingEvent).
-Failed deliveries are retried with backoff (up to 6 attempts).
+Failed deliveries are retried with backoff (up to 6 attempts). Redirects are not followed: a 3xx answer is a
+failed attempt (`lastError` `Redirection refusée (HTTP <status>)`), so `N8N_WEBHOOK_URL` must be the final
+address (for example `https://…`, not an `http://` URL that redirects to it).
 
 **Automation API** (header `x-api-key: <AUTOMATION_API_KEY>`), for scheduled n8n workflows:
 

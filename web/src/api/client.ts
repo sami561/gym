@@ -21,10 +21,13 @@ export class ApiError extends Error {
 type SessionListener = (session: AuthResult | null) => void;
 
 let accessToken: string | null = null;
+/** Refresh token the browser refused to store (private mode, blocked or full storage). */
+let unsavedRefreshToken: string | null = null;
 let refreshInFlight: Promise<AuthResult | null> | null = null;
 const listeners = new Set<SessionListener>();
 
 function readRefreshToken(): string | null {
+  if (unsavedRefreshToken) return unsavedRefreshToken;
   try {
     return localStorage.getItem(REFRESH_KEY);
   } catch {
@@ -33,11 +36,13 @@ function readRefreshToken(): string | null {
 }
 
 function writeRefreshToken(token: string | null): void {
+  unsavedRefreshToken = null;
   try {
     if (token) localStorage.setItem(REFRESH_KEY, token);
     else localStorage.removeItem(REFRESH_KEY);
   } catch {
-    /* storage unavailable (private mode): the session lasts for this tab only */
+    // Storage unavailable: keep the token in memory, the session lasts for this tab only.
+    unsavedRefreshToken = token;
   }
 }
 
@@ -63,7 +68,10 @@ export const session = {
   },
 };
 
-/** Single-flight refresh: concurrent 401s share one /auth/refresh call. */
+/**
+ * Single-flight refresh: concurrent 401s share one /auth/refresh call. Resolves the new session,
+ * or null when it was refused, could not be checked, or the session changed in the meantime.
+ */
 export function refreshSession(): Promise<AuthResult | null> {
   const refreshToken = readRefreshToken();
   if (!refreshToken) return Promise.resolve(null);
@@ -74,12 +82,13 @@ export function refreshSession(): Promise<AuthResult | null> {
       body: JSON.stringify({ refreshToken }),
     })
       .then(async (res) => {
-        if (!res.ok) {
-          if (res.status === 401 || res.status === 403) session.clear();
-          return null;
-        }
-        const result = (await res.json()) as AuthResult;
-        session.set(result);
+        const result = res.ok ? ((await res.json()) as AuthResult) : null;
+        // Checked after the last await. If the token sent was replaced meanwhile (sign-out, sign-in,
+        // password change, here or in another tab), the answer is about the old session: ignore it,
+        // so it neither signs the user back in nor ends the new session.
+        if (readRefreshToken() !== refreshToken) return null;
+        if (result) session.set(result);
+        else if (res.status === 401 || res.status === 403) session.clear();
         return result;
       })
       .catch(() => null)

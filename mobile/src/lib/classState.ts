@@ -22,7 +22,8 @@ export function classAction(session: ClassSessionDto, now: number, blocked: bool
   if (session.bookingOpensAt && now < new Date(session.bookingOpensAt).getTime()) {
     return { kind: 'notOpen', opensAt: session.bookingOpensAt };
   }
-  if (session.bookingClosesAt && now > new Date(session.bookingClosesAt).getTime()) return { kind: 'closed' };
+  // class-service refuses bookings from closesAt itself (assertBookingOpen: now >= closesAt).
+  if (session.bookingClosesAt && now >= new Date(session.bookingClosesAt).getTime()) return { kind: 'closed' };
   if (blocked) return { kind: 'blocked' };
   const spotsLeft = session.spotsLeft ?? Math.max(0, session.capacity - session.bookedCount);
   if (spotsLeft > 0) return session.spotSelection ? { kind: 'chooseSpot' } : { kind: 'book' };
@@ -42,6 +43,14 @@ export const bookingTone: Record<BookingStatus, Tone> = {
 /** Booking still holds a place or a waitlist position and can be cancelled. */
 export function isCancellable(status: BookingStatus | null | undefined): boolean {
   return status === 'BOOKED' || status === 'WAITLISTED';
+}
+
+/**
+ * A booked place cancelled now becomes LATE_CANCELLED, a strike: class-service decides it from the deadline
+ * itself (BookingsService.cancel: now >= cancelDeadline). Leaving the waitlist is never late.
+ */
+export function isLateCancellation(cancelDeadline: string, now: number): boolean {
+  return now >= new Date(cancelDeadline).getTime();
 }
 
 export function isBlocked(blockedUntil: string | null | undefined, now: number): boolean {

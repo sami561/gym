@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
-import { ConfigError, parseConfig } from '../src/config';
+import { ConfigError, parseConfig, ZK_TIMEOUT_MIN_MS } from '../src/config';
 
 const required = { SERVER_URL: 'https://api.meliora-gym.tn', AGENT_KEY: 'k'.repeat(32) };
 
@@ -21,7 +21,7 @@ test('integer settings accept their bounds and reject values just outside', () =
   const bounds: [name: string, min: number, max: number][] = [
     ['SYNC_INTERVAL_SECONDS', 30, 86_400],
     ['HEARTBEAT_SECONDS', 5, 3600],
-    ['ZK_TIMEOUT_MS', 500, 60_000],
+    ['ZK_TIMEOUT_MS', ZK_TIMEOUT_MIN_MS, 60_000], // zkteco-js needs more than 1 s to read the user list
     ['ZK_UDP_INPORT', 1, 65_535],
     ['ZK_KEEPALIVE_SECONDS', 10, 3600],
     ['EVENT_BUFFER_MAX', 10, 1_000_000],

@@ -4,6 +4,7 @@ import * as Haptics from 'expo-haptics';
 import type { BookingDto, BookingStatus, ClassSessionDto } from '@/api/types';
 import { useToast } from '@/components/Toast';
 import { useI18n } from '@/i18n';
+import { isLateCancellation } from '@/lib/classState';
 import { errorMessage } from '@/lib/errors';
 import { useBookClass, useBookingPolicy, useBookingStanding, useCancelBooking } from './queries';
 
@@ -42,7 +43,7 @@ export function useBookingActions() {
 
   const confirmCancel = (session: ClassSessionDto, bookingId: string, status: BookingStatus, onDone?: () => void) => {
     const waitlisted = status === 'WAITLISTED';
-    const late = status === 'BOOKED' && Date.now() > new Date(session.cancelDeadline).getTime();
+    const late = status === 'BOOKED' && isLateCancellation(session.cancelDeadline, Date.now());
     const limit = policy.data?.noShowLimit ?? 3;
     const message = waitlisted
       ? t('classes.leaveConfirm', { title: session.title })

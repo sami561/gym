@@ -1,11 +1,14 @@
 import { after, before, describe, it, mock, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
+import * as fs from 'fs';
+import * as path from 'path';
+import { ZK_TIMEOUT_MIN_MS } from '../src/config';
 import { ZK_PRIVILEGE } from '../src/doors/zk-protocol';
-import { ZktecoDriver } from '../src/doors/zkteco';
+import { parseZktecoConfig, ZktecoDriver } from '../src/doors/zkteco';
 import type { DeviceUserSync } from '../src/types/contracts';
 import { captureLogger } from './helpers/capture-logger';
-import { FakeZkTerminal, ZK, type TerminalUser } from './helpers/fake-zk-terminal';
-import { agentConfig, door, driverContext } from './helpers/fixtures';
+import { encodeUser, FakeZkTerminal, punchFrame, ZK, type TerminalUser } from './helpers/fake-zk-terminal';
+import { agentConfig, door, driverContext, tempDataDir } from './helpers/fixtures';
 import { freePort, waitFor } from './helpers/net';
 
 // zkteco-js prints every step and error to the console
@@ -20,13 +23,18 @@ interface Options {
   /** Door config on top of the fake terminal address. */
   config?: Record<string, unknown>;
   env?: Record<string, string>;
+  /** Terminal of a previous driver (a restarted agent); a new one by default. */
+  terminal?: FakeZkTerminal;
+  /** DATA_DIR of a previous driver; a fresh one by default. */
+  dataDir?: string;
 }
 
 /** Fake terminal + started driver, connected. timeoutMs well above 1 s: zkteco-js waits 1 s for CMD_DATA replies. */
 async function connectedDriver(t: TestContext, options: Options = {}) {
-  const terminal = await FakeZkTerminal.start(options.users);
+  const terminal = options.terminal ?? (await FakeZkTerminal.start(options.users));
+  const dataDir = options.dataDir ?? tempDataDir(t);
   const { logger, entries } = captureLogger();
-  const ctx = driverContext(logger, agentConfig(options.env));
+  const ctx = driverContext(logger, agentConfig({ DATA_DIR: dataDir, ...options.env }));
   const driver = new ZktecoDriver(
     door({
       id: 'door-zk',
@@ -37,14 +45,17 @@ async function connectedDriver(t: TestContext, options: Options = {}) {
   );
   t.after(async () => {
     await driver.stop();
-    await terminal.close();
+    if (!options.terminal) await terminal.close();
   });
   await driver.start();
   await waitFor(() => ctx.hooks.connected.length > 0, 'the terminal connection');
-  return { terminal, driver, ctx, entries };
+  return { terminal, driver, ctx, entries, dataDir };
 }
 
 const staff: TerminalUser = { uid: 1, role: ZK_PRIVILEGE.ADMIN, password: '4321', name: 'Reception', card: 0, userId: '900' };
+
+const managedFile = (dataDir: string) => path.join(dataDir, 'zkteco-users-door-zk.json');
+const readManaged = (dataDir: string) => JSON.parse(fs.readFileSync(managedFile(dataDir), 'utf8'));
 
 // Every test has its own terminal and driver, so they run concurrently.
 describe('ZktecoDriver', { concurrency: true }, () => {
@@ -70,22 +81,36 @@ describe('ZktecoDriver', { concurrency: true }, () => {
     );
   });
 
-  it(
-    'open fails when the terminal refuses the unlock (CMD_ACK_ERROR)',
-    {
-      todo:
-        'BUG src/doors/zkteco.ts: zkteco-js resolves executeCmd on any reply and open() never checks for CMD_ACK_OK (2000), ' +
-        'so a refused unlock is logged as done and acked { ok: true } to the server',
-    },
-    async (t) => {
-      const { terminal, driver } = await connectedDriver(t);
-      terminal.replies.set(ZK.UNLOCK, ZK.ACK_ERROR);
-      await assert.rejects(driver.open(5), /did not confirm the unlock/);
-    },
-  );
+  it('open fails when the terminal refuses the unlock (CMD_ACK_ERROR), and keeps the connection', async (t) => {
+    const { terminal, driver } = await connectedDriver(t);
+    terminal.replies.set(ZK.UNLOCK, ZK.ACK_ERROR);
+    await assert.rejects(driver.open(5), { message: 'Terminal did not confirm the unlock: the terminal answered CMD_ACK_ERROR (2001)' });
+    assert.deepEqual(driver.status(), { status: 'ok' }, 'a refusal is not a lost connection');
+
+    terminal.replies.delete(ZK.UNLOCK);
+    await driver.open(5);
+    assert.equal(terminal.connections, 1, 'no reconnection');
+    assert.equal(terminal.payloads(ZK.UNLOCK).length, 2);
+  });
+
+  it('a punch arriving just before the answer is neither taken for it nor lost', async (t) => {
+    const { terminal, driver, ctx } = await connectedDriver(t, { config: { realtime: true } });
+    const at = new Date(2026, 10, 2, 9, 15, 0);
+    terminal.preludes.set(ZK.UNLOCK, punchFrame('60', at));
+    terminal.replies.set(ZK.UNLOCK, ZK.ACK_ERROR);
+    await assert.rejects(driver.open(5), /CMD_ACK_ERROR/);
+
+    terminal.replies.delete(ZK.UNLOCK);
+    await driver.open(5);
+    assert.deepEqual(
+      ctx.hooks.punches.map((punch) => punch.event.deviceUserId),
+      ['60'],
+      'the same punch, resent, is forwarded once',
+    );
+  });
 
   it('an unanswered command fails the open, drops the connection and reconnects', async (t) => {
-    const { terminal, driver } = await connectedDriver(t, { config: { timeoutMs: 600 } });
+    const { terminal, driver } = await connectedDriver(t, { config: { timeoutMs: ZK_TIMEOUT_MIN_MS } });
     terminal.replies.set(ZK.UNLOCK, null);
     await assert.rejects(driver.open(3), /Terminal did not confirm the unlock/);
     assert.equal(driver.status().status, 'error');
@@ -99,7 +124,7 @@ describe('ZktecoDriver', { concurrency: true }, () => {
   it('an unreachable terminal fails fast with its address and the cause', async (t) => {
     const port = await freePort();
     const driver = new ZktecoDriver(
-      door({ id: 'door-zk', driver: 'ZKTECO', config: { ip: '127.0.0.1', port, timeoutMs: 600 } }),
+      door({ id: 'door-zk', driver: 'ZKTECO', config: { ip: '127.0.0.1', port, timeoutMs: ZK_TIMEOUT_MIN_MS } }),
       driverContext(captureLogger().logger),
     );
     t.after(() => driver.stop());
@@ -157,22 +182,38 @@ describe('live punches', { concurrency: true }, () => {
     ]);
   });
 
-  it(
-    'are all forwarded when the terminal sends several in one packet',
-    {
-      todo:
-        'BUG src/doors/zkteco.ts: zkteco-js getRealTimeLogs decodes one event per TCP read, ' +
-        'so a burst of badges read together loses every punch after the first',
-    },
-    async (t) => {
-      const { terminal, ctx } = await connectedDriver(t, { config: { realtime: true } });
-      terminal.sendPunches([
-        { userId: '50', at: new Date(2026, 10, 2, 9, 0, 0) },
-        { userId: '51', at: new Date(2026, 10, 2, 9, 0, 1) },
-      ]);
-      await waitFor(() => ctx.hooks.punches.length >= 2, 'both punches', 1000);
-    },
-  );
+  it('are all forwarded when the terminal sends several in one packet', async (t) => {
+    const { terminal, ctx } = await connectedDriver(t, { config: { realtime: true } });
+    terminal.sendPunches([
+      { userId: '50', at: new Date(2026, 10, 2, 9, 0, 0) },
+      { userId: '51', at: new Date(2026, 10, 2, 9, 0, 1) },
+      { userId: '52', at: new Date(2026, 10, 2, 9, 0, 2) },
+    ]);
+    await waitFor(() => ctx.hooks.punches.length >= 3, 'the three punches', 1000);
+    assert.deepEqual(
+      ctx.hooks.punches.map((punch) => punch.event.deviceUserId),
+      ['50', '51', '52'],
+    );
+  });
+
+  it('a punch cut across two socket reads is forwarded', async (t) => {
+    const { terminal, ctx } = await connectedDriver(t, { config: { realtime: true } });
+    const at = new Date(2026, 10, 2, 9, 30, 0);
+    const frame = punchFrame('53', at);
+    terminal.sendRaw(frame.subarray(0, 21));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    terminal.sendRaw(frame.subarray(21));
+    await waitFor(() => ctx.hooks.punches.length === 1, 'the punch', 1000);
+    assert.deepEqual(ctx.hooks.punches[0].event, { deviceUserId: '53', method: 'CARD', at: at.toISOString() });
+  });
+
+  it('are not forwarded with realtime: false', async (t) => {
+    const { terminal, ctx } = await connectedDriver(t);
+    assert.equal(terminal.payloads(ZK.REG_EVENT).length, 0, 'not subscribed');
+    terminal.sendPunch('54', new Date(2026, 10, 2, 9, 45, 0));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.deepEqual(ctx.hooks.punches, []);
+  });
 });
 
 describe('member sync', { concurrency: true }, () => {
@@ -235,51 +276,162 @@ describe('member sync', { concurrency: true }, () => {
     assert.equal(terminal.payloads(ZK.REFRESH_DATA).length, 1);
   });
 
-  it(
-    'a member with a 24-character name and a badge is not rewritten on every sync',
-    {
-      todo:
-        'BUG src/doors/zkteco.ts: zkteco-js decodeUserData72 reads the name past its 24-byte field into the card number, ' +
-        'so the unchanged check never matches and the user is rewritten (plus CMD_REFRESHDATA) on every sync',
-    },
-    async (t) => {
-      const { terminal, driver } = await connectedDriver(t, {
-        users: [{ uid: 2, role: 0, password: '', name: 'Rania Ben Hedi Ghannouch', card: 3_000_000_123, userId: '2' }],
-      });
-      const result = await driver.syncUsers([
-        { deviceUid: 2, name: 'Rania Ben Hédi Ghannouchi-Trabelsi', cardNumber: '3000000123', active: true },
-      ]);
-      assert.equal(result.unchanged, 1);
-      assert.equal(terminal.payloads(ZK.USER_WRQ).length, 0);
-    },
-  );
+  it('a member with a 24-character name and a badge is not rewritten on every sync', async (t) => {
+    const { terminal, driver } = await connectedDriver(t, {
+      users: [{ uid: 2, role: 0, password: '', name: 'Rania Ben Hedi Ghannouch', card: 3_000_000_123, userId: '2' }],
+    });
+    const result = await driver.syncUsers([
+      { deviceUid: 2, name: 'Rania Ben Hédi Ghannouchi-Trabelsi', cardNumber: '3000000123', active: true },
+    ]);
+    assert.equal(result.unchanged, 1);
+    assert.equal(terminal.payloads(ZK.USER_WRQ).length, 0);
+    assert.equal(terminal.payloads(ZK.REFRESH_DATA).length, 0);
+  });
 
-  it(
-    'a user created by hand on the terminal is left untouched when a member gets the same PIN',
-    {
-      todo:
-        'BUG src/doors/zkteco.ts (security): users are matched by PIN only and deviceUid starts at 1, so member #1 ' +
-        'overwrites a hand-made admin with PIN 1 and keeps its admin privilege (14); the README says such users are never modified',
-    },
-    async (t) => {
-      const installer: TerminalUser = { uid: 1, role: ZK_PRIVILEGE.ADMIN, password: '1234', name: 'Installer', card: 0, userId: '1' };
-      const { terminal, driver } = await connectedDriver(t, { users: [installer] });
-      await driver.syncUsers([{ deviceUid: 1, name: 'Sami Ben Ali', cardNumber: '12345', active: true }]);
-      assert.deepEqual(terminal.user('1'), installer);
-    },
-  );
+  it('a user created by hand on the terminal is left untouched when a member gets the same PIN', async (t) => {
+    const installer: TerminalUser = { uid: 1, role: ZK_PRIVILEGE.ADMIN, password: '1234', name: 'Installer', card: 0, userId: '1' };
+    const { terminal, driver, entries } = await connectedDriver(t, { users: [installer] });
+    const result = await driver.syncUsers([{ deviceUid: 1, name: 'Sami Ben Ali', cardNumber: '12345', active: true }]);
+    assert.deepEqual(terminal.user('1'), installer);
+    assert.deepEqual(result, { created: 0, updated: 0, disabled: 0, deleted: 0, unchanged: 0, skipped: 1 });
+    const warning = entries.find((entry) => entry.level === 'warn' && String(entry.msg).startsWith('members skipped'));
+    assert.deepEqual(warning?.users, [{ deviceUserId: '1', name: 'Installer', admin: true }]);
+  });
 
-  it(
-    'works with the shortest timeout the configuration accepts (500 ms)',
-    {
-      todo:
-        'BUG src/doors/zkteco.ts / src/config.ts: zkteco-js resolves a CMD_DATA reply after a fixed 1 s while its own ' +
-        'no-reply timer equals timeoutMs, so any timeoutMs <= 1000 makes every member sync fail',
-    },
-    async (t) => {
-      const { driver } = await connectedDriver(t, { config: { timeoutMs: 500 } });
-      const result = await driver.syncUsers([{ deviceUid: 1, name: 'Sami Ben Ali', cardNumber: null, active: true }]);
-      assert.equal(result.created, 1);
-    },
-  );
+  it('a plain user made by hand with a member PIN is never taken over, even when the member expires', async (t) => {
+    const cleaner: TerminalUser = { uid: 4, role: 0, password: '', name: 'Menage', card: 555, userId: '4' };
+    const { terminal, driver } = await connectedDriver(t, { users: [cleaner], env: { INACTIVE_POLICY: 'delete' } });
+    assert.equal((await driver.syncUsers([{ deviceUid: 4, name: 'Sami Ben Ali', cardNumber: '12345', active: true }])).skipped, 1);
+    assert.equal((await driver.syncUsers([{ deviceUid: 4, name: 'Sami Ben Ali', cardNumber: null, active: false }])).skipped, 1);
+    assert.deepEqual(terminal.users(), [cleaner]);
+    assert.equal(terminal.payloads(ZK.USER_WRQ).length + terminal.payloads(ZK.DELETE_USER).length, 0);
+  });
+
+  it('keeps managing the members it enrolled, after a rename and after a restart', async (t) => {
+    const first = await connectedDriver(t);
+    const karim: DeviceUserSync = { deviceUid: 3, name: 'Karim J.', cardNumber: null, active: true };
+    assert.equal((await first.driver.syncUsers([karim])).created, 1);
+    assert.deepEqual(readManaged(first.dataDir), { version: 1, doorId: 'door-zk', pins: ['3'] });
+    await first.driver.stop();
+
+    // Name changed and no badge: only the list kept in DATA_DIR says the user is the agent's.
+    const second = await connectedDriver(t, { terminal: first.terminal, dataDir: first.dataDir });
+    const result = await second.driver.syncUsers([{ ...karim, name: 'Karim Jaziri', active: false }]);
+    assert.deepEqual(result, { created: 0, updated: 0, disabled: 1, deleted: 0, unchanged: 0, skipped: 0 });
+    assert.deepEqual(first.terminal.user('3'), { uid: 3, role: ZK_PRIVILEGE.DISABLED, password: '', name: 'Karim Jaziri', card: 0, userId: '3' });
+    await second.driver.stop(); // before the shared terminal closes
+  });
+
+  it('a member user promoted on the terminal, or deleted there and replaced by hand, is no longer modified', async (t) => {
+    const { terminal, driver, dataDir } = await connectedDriver(t);
+    const members: DeviceUserSync[] = [
+      { deviceUid: 5, name: 'Coach Ali', cardNumber: null, active: true },
+      { deviceUid: 6, name: 'Rania Trabelsi', cardNumber: null, active: true },
+    ];
+    assert.equal((await driver.syncUsers(members)).created, 2);
+    const coach = terminal.user('5')!;
+    terminal.slots.set(coach.uid, encodeUser({ ...coach, role: ZK_PRIVILEGE.ADMIN })); // promoted on the terminal
+    terminal.slots.delete(terminal.user('6')!.uid); // deleted on the terminal...
+
+    const expired = members.map((member) => ({ ...member, active: false }));
+    assert.equal((await driver.syncUsers(expired)).skipped, 1);
+    assert.deepEqual(readManaged(dataDir).pins, ['5'], 'the deleted user is forgotten');
+    const reception: TerminalUser = { uid: 6, role: 0, password: '', name: 'Accueil', card: 0, userId: '6' };
+    terminal.slots.set(6, encodeUser(reception)); // ...and its PIN reused by hand
+
+    assert.equal((await driver.syncUsers(expired)).skipped, 2);
+    assert.deepEqual(terminal.user('5'), { ...coach, role: ZK_PRIVILEGE.ADMIN });
+    assert.deepEqual(terminal.user('6'), reception);
+  });
+
+  it('first sync after an upgrade: members written by the earlier version are taken over, nameless ones included', async (t) => {
+    const { terminal, driver, entries, dataDir } = await connectedDriver(t, {
+      users: [
+        { uid: 2, role: 0, password: '', name: '', card: 0, userId: '2' }, // name in Arabic letters only
+        { uid: 3, role: 0, password: '', name: 'Rania Trabelsi', card: 0, userId: '3' },
+      ],
+    });
+    const result = await driver.syncUsers([
+      { deviceUid: 2, name: 'محمد علي', cardNumber: null, active: false },
+      { deviceUid: 3, name: 'Rania Trabelsi', cardNumber: null, active: false },
+    ]);
+    assert.deepEqual(result, { created: 0, updated: 0, disabled: 2, deleted: 0, unchanged: 0, skipped: 0 });
+    assert.deepEqual(
+      terminal.users().map((user) => user.role),
+      [ZK_PRIVILEGE.DISABLED, ZK_PRIVILEGE.DISABLED],
+    );
+    assert.deepEqual(readManaged(dataDir).pins, ['2', '3']);
+    assert.ok(entries.some((entry) => entry.msg === 'terminal users recognised as members, now kept in sync' && entry.count === 2));
+  });
+
+  it('a nameless user made by hand on a terminal never synced before is left alone', async (t) => {
+    const keypadUser: TerminalUser = { uid: 2, role: 0, password: '', name: '', card: 0, userId: '2' };
+    const { terminal, driver, dataDir } = await connectedDriver(t, { users: [keypadUser] });
+    const result = await driver.syncUsers([{ deviceUid: 2, name: 'محمد علي', cardNumber: null, active: false }]);
+    assert.equal(result.skipped, 1);
+    assert.deepEqual(terminal.users(), [keypadUser]);
+    assert.deepEqual(readManaged(dataDir), { version: 1, doorId: 'door-zk', pins: [] }, 'later syncs are no longer the first');
+  });
+
+  it('an unreadable list of managed users is rebuilt from the terminal', async (t) => {
+    const dataDir = tempDataDir(t);
+    fs.writeFileSync(managedFile(dataDir), '{"version":1,"pins":');
+    const { driver, entries } = await connectedDriver(t, {
+      dataDir,
+      users: [{ uid: 7, role: 0, password: '', name: 'Sami Ben Ali', card: 0, userId: '7' }],
+    });
+    const result = await driver.syncUsers([{ deviceUid: 7, name: 'Sami Ben Ali', cardNumber: null, active: false }]);
+    assert.equal(result.disabled, 1);
+    assert.ok(entries.some((entry) => entry.level === 'warn' && entry.msg === 'managed terminal users unreadable, rebuilding the list'));
+    assert.deepEqual(readManaged(dataDir), { version: 1, doorId: 'door-zk', pins: ['7'] });
+  });
+
+  it('refused user writes skip the member, keep the connection and the other members', async (t) => {
+    const { terminal, driver, entries, dataDir } = await connectedDriver(t, {
+      env: { INACTIVE_POLICY: 'delete' },
+      users: [{ uid: 2, role: 0, password: '', name: 'Rania Trabelsi', card: 0, userId: '2' }],
+    });
+    terminal.replies.set(ZK.USER_WRQ, ZK.ACK_ERROR); // e.g. the terminal is full
+    terminal.replies.set(ZK.DELETE_USER, ZK.ACK_ERROR);
+    const result = await driver.syncUsers([
+      { deviceUid: 1, name: 'Sami Ben Ali', cardNumber: null, active: true },
+      { deviceUid: 2, name: 'Rania Trabelsi', cardNumber: null, active: false },
+    ]);
+    assert.deepEqual(result, { created: 0, updated: 0, disabled: 0, deleted: 0, unchanged: 0, skipped: 2 });
+    assert.deepEqual(driver.status(), { status: 'ok' });
+    assert.equal(terminal.connections, 1);
+    assert.equal(terminal.payloads(ZK.REFRESH_DATA).length, 0, 'nothing changed');
+    assert.deepEqual(readManaged(dataDir).pins, ['2'], 'the refused creation is not recorded');
+    const warning = entries.find((entry) => entry.msg === 'terminal refused member changes');
+    assert.deepEqual(warning?.changes, [
+      { deviceUserId: '1', change: 'create', reply: 'CMD_ACK_ERROR (2001)' },
+      { deviceUserId: '2', change: 'delete', reply: 'CMD_ACK_ERROR (2001)' },
+    ]);
+  });
+
+  it('a user list cut short fails the sync without writing anything', async (t) => {
+    const { terminal, driver } = await connectedDriver(t, { users: [staff] });
+    terminal.truncateUserList = true; // staff missing: its slot would look free
+    await assert.rejects(
+      driver.syncUsers([{ deviceUid: 1, name: 'Sami Ben Ali', cardNumber: null, active: true }]),
+      /Incomplete user list from the terminal \(0 of 72 bytes\)/,
+    );
+    assert.equal(terminal.payloads(ZK.USER_WRQ).length, 0);
+    assert.deepEqual(terminal.users(), [staff]);
+  });
+
+  it(`works with the shortest timeout the configuration accepts (${ZK_TIMEOUT_MIN_MS} ms)`, async (t) => {
+    const defaults = { timeoutMs: 5000, inport: 5200 };
+    assert.equal(parseZktecoConfig({ ip: 'x', timeoutMs: ZK_TIMEOUT_MIN_MS }, defaults).timeoutMs, ZK_TIMEOUT_MIN_MS);
+    assert.equal(parseZktecoConfig({ ip: 'x', timeoutMs: 1000 }, defaults).timeoutMs, 5000, 'too short for zkteco-js: the default');
+
+    const { driver } = await connectedDriver(t, { config: { timeoutMs: ZK_TIMEOUT_MIN_MS } });
+    const result = await driver.syncUsers([{ deviceUid: 1, name: 'Sami Ben Ali', cardNumber: null, active: true }]);
+    assert.equal(result.created, 1);
+  });
+
+  it('a door timeout below the minimum is replaced by the default, with a warning', async (t) => {
+    const { entries } = await connectedDriver(t, { config: { timeoutMs: 800 } });
+    assert.ok(entries.some((entry) => entry.msg === 'ignoring config.timeoutMs' && entry.timeoutMs === 800 && entry.using === 5000));
+  });
 });

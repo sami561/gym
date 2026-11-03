@@ -117,6 +117,7 @@ export class ListStockMovementsQuery {
   productId?: string;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(500)
@@ -169,11 +170,13 @@ export class ListSalesQuery {
   memberId?: string;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   page?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(200)
@@ -229,6 +232,7 @@ export class UpdateExpenseDto extends PartialType(CreateExpenseDto) {}
 
 export class FinanceQuery {
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(36)

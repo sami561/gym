@@ -138,7 +138,7 @@ function CreateMemberModal({ open, onClose, onCreated }: { open: boolean; onClos
       <div className="flex flex-col gap-6">
         <div className="grid gap-4 sm:grid-cols-2">
           <Input label={`${t('Prénom')} *`} required value={form.firstName} onChange={(e) => set('firstName', e.target.value)} />
-          <Input label={`${t('Nom')} *`} required value={form.lastName} onChange={(e) => set('lastName', e.target.value)} />
+          <Input label={`${t('Nom de famille')} *`} required value={form.lastName} onChange={(e) => set('lastName', e.target.value)} />
           <Input label={`${t('E-mail')} *`} type="email" required value={form.email} onChange={(e) => set('email', e.target.value)} />
           <Input label={t('Téléphone')} type="tel" placeholder="+216" value={form.phone} onChange={(e) => set('phone', e.target.value)} />
           <Input label={t('Date de naissance')} type="date" value={form.birthDate} onChange={(e) => set('birthDate', e.target.value)} />

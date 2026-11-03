@@ -15,7 +15,7 @@ import { useBookingPolicy, useBookingStanding, useClassSession } from '@/hooks/q
 import { useBookingActions } from '@/hooks/useBookingActions';
 import { useNow } from '@/hooks/useNow';
 import { useI18n } from '@/i18n';
-import { bookingTone, classAction, isBlocked, isCancellable } from '@/lib/classState';
+import { bookingTone, classAction, isBlocked, isCancellable, isLateCancellation } from '@/lib/classState';
 import { formatDate, formatTime } from '@/lib/format';
 import { colors, radius, spacing } from '@/theme';
 import { mirrorInRTL } from '@/lib/direction';
@@ -76,7 +76,7 @@ export default function ClassDetailScreen() {
   const accent = session.color || colors.red;
   const spotsLeft = session.spotsLeft ?? Math.max(0, session.capacity - session.bookedCount);
   const busy = busyId === session.id;
-  const cancelDeadlinePassed = now > new Date(session.cancelDeadline).getTime();
+  const cancelDeadlinePassed = isLateCancellation(session.cancelDeadline, now);
   const dateTime = (iso: string) => `${formatDate(iso, locale, { weekday: 'long', day: 'numeric', month: 'long' })} · ${formatTime(iso, locale)}`;
   const status = action.kind === 'mine' ? action.status : null;
   const showPicker = session.spotSelection && (action.kind === 'chooseSpot' || status === 'BOOKED');

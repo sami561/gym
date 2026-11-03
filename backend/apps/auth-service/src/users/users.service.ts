@@ -74,7 +74,7 @@ export class UsersService implements OnApplicationBootstrap {
 
   async create(req: CreateUserRequest): Promise<UserDto> {
     const email = normalizeEmail(req.email);
-    if (await this.users.exist({ where: { email } })) {
+    if (await this.users.exists({ where: { email } })) {
       throw new ConflictException('Un compte existe déjà avec cet e-mail.');
     }
     const user = await this.users.save(

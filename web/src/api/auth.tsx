@@ -42,7 +42,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!session.hasRefreshToken()) return;
     refreshSession().then((result) => {
-      if (!result) setStatus('anonymous');
+      // A sign-in made on the login page while this ran keeps its session (the answer was ignored).
+      if (!result && !session.getAccessToken()) setStatus('anonymous');
     });
   }, []);
 

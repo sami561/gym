@@ -126,10 +126,15 @@ export function formatWeekday(value: string | Date, style: 'long' | 'short' = 'l
 export function relativeTime(value: string | Date): string {
   const diff = (toDate(value).getTime() - Date.now()) / 1000;
   const abs = Math.abs(diff);
+  const sign = Math.sign(diff);
   if (abs < 45) return formatters.relative.format(0, 'second');
-  if (abs < 3600) return formatters.relative.format(Math.round(diff / 60), 'minute');
-  if (abs < 86400) return formatters.relative.format(Math.round(diff / 3600), 'hour');
-  if (abs < 7 * 86400) return formatters.relative.format(Math.round(diff / 86400), 'day');
+  // Round before picking the unit (59 min 40 s is "1 hour", not "60 minutes"), the same way past and future.
+  const minutes = Math.round(abs / 60);
+  if (minutes < 60) return formatters.relative.format(sign * minutes, 'minute');
+  const hours = Math.round(abs / 3600);
+  if (hours < 24) return formatters.relative.format(sign * hours, 'hour');
+  const days = Math.round(abs / 86400);
+  if (days < 7) return formatters.relative.format(sign * days, 'day');
   return formatDateTime(value);
 }
 

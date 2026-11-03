@@ -3,13 +3,19 @@
 One Vite app: `/` is the public site (`src/landing/`), `/admin` the staff back office (`src/admin/`,
 lazy-loaded with its own dictionary). Background and structure: `README.md`.
 
-- API: `src/api/client.ts` (access token in memory, refresh token in localStorage, single-flight
-  refresh — refresh tokens rotate, always keep the newest), `endpoints*.ts`, and `types*.ts`, which
-  mirror `backend/libs/common/src/contracts` **by hand**: change them with the contract and `docs/API.md`.
+- API: `src/api/client.ts` (access token in memory, refresh token in localStorage, or in memory for
+  the tab when storage is blocked; single-flight refresh — refresh tokens rotate, always keep the
+  newest), `endpoints*.ts`, and `types*.ts`, which mirror `backend/libs/common/src/contracts`
+  **by hand**: change them with the contract and `docs/API.md`. A refresh answer is ignored if the
+  stored refresh token changed while it ran (sign-out, sign-in, password change, another tab), and
+  the request waiting on it is not replayed under the new session.
 - i18n: public site uses keyed dictionaries (`src/i18n/landing.ts`); the back office uses the French
   text as the key with `{ en, ar }` in `src/i18n/messages/admin.ts` — `t()` only accepts known keys,
-  so a missing translation is a type error. Arabic is RTL: use logical classes (`ms/me`, `ps/pe`,
-  `start/end`, `text-start`), Latin digits, money and dates through `src/lib/format.ts`.
+  so a missing translation is a type error. Last-name fields use the key `'Nom de famille'`
+  (Last name / اللقب); `'Nom'` is the generic name (door agent, room, workflow, full-name
+  column) — `src/i18n/dictionaries.test.ts` checks every back-office lastName field. Arabic is
+  RTL: use logical classes (`ms/me`, `ps/pe`, `start/end`, `text-start`), Latin digits, money and
+  dates through `src/lib/format.ts`.
 - Charts (`src/admin/charts/`): dataviz rules — validated palette slots, table view on every chart,
   no dual axis.
 - The three.js ceiling (`src/landing/three/`) stays lazy, paused off-screen, with the static fallback.

@@ -35,7 +35,7 @@ function setup(stored: PromoCode | null, affected = 1) {
   update.execute.mockResolvedValue({ affected });
   const promos = {
     findOne: jest.fn().mockResolvedValue(stored),
-    exist: jest.fn().mockResolvedValue(false),
+    exists: jest.fn().mockResolvedValue(false),
     create: jest.fn((data: Partial<PromoCode>) => Object.assign(new PromoCode(), data)),
     save: jest.fn(async (row: PromoCode) => Object.assign(row, { id: row.id ?? 'promo-new' })),
     createQueryBuilder: jest.fn(() => qb),
@@ -115,7 +115,7 @@ describe('promo codes', () => {
     it('stores the code upper-cased with defaults', async () => {
       const { service, promos } = setup(null);
       const dto = await service.create({ code: ' rentree-26 ', type: PromoType.FIXED, value: 10 });
-      expect(promos.exist).toHaveBeenCalledWith({ where: { code: 'RENTREE-26' } });
+      expect(promos.exists).toHaveBeenCalledWith({ where: { code: 'RENTREE-26' } });
       expect(dto).toMatchObject({
         id: 'promo-new',
         code: 'RENTREE-26',
@@ -143,7 +143,7 @@ describe('promo codes', () => {
 
     it('refuses a code that already exists', async () => {
       const { service, promos } = setup(null);
-      promos.exist.mockResolvedValue(true);
+      promos.exists.mockResolvedValue(true);
       await expect(service.create({ code: 'ETE26', type: PromoType.PERCENT, value: 15 })).rejects.toThrow(
         new ConflictException('Ce code promo existe déjà.'),
       );

@@ -75,8 +75,10 @@ docker compose up -d --build                                      # everything (
   agents use :8080 (nginx). `NODE_ENV=production` refuses example, weak or reused secrets at startup, so
   the values of `backend/.env.example` only work in development.
 - `npm run rpc`, `npm run seed` and `npm run db:create` load `.env` with dotenv, not `loadEnv()`: no
-  production check, the seed falls back to `ADMIN_PASSWORD=Meliora2026!`, and `rpc.js` sends neither
-  `REDIS_PASSWORD` nor `NATS_TOKEN`, so it cannot reach a password-protected bus.
+  production check, and the seed falls back to `ADMIN_PASSWORD=Meliora2026!`. The Docker images do not
+  contain `scripts/`: seed a server from a one-off container (`deploy/README.md`, demo data).
+- Gateway validation converts nothing implicitly: bodies keep their JSON types (`"30"` for a number is a
+  400) and numeric query fields need `@Type(() => Number)` (`validation.spec.ts` checks every `*Query` DTO).
 - Gym phone, opening hours and exact GPS point are placeholders (env `GYM_*`) — confirm with the owner.
 - Pushing needs the SSH key loaded (`ssh-add --apple-use-keychain ~/.ssh/id_rsa`).
 - Logout does not yet remove the device's Expo push token.
@@ -88,17 +90,16 @@ Still open after the security review (not fixed):
 - Outbound guard: DNS rebinding between `assertOutboundAllowed` and `fetch` is not covered (needs a
   pinned-lookup dispatcher; undici is not a dependency), its DNS lookup has no timeout, and Azure's
   `168.63.129.16` counts as public. Every path of the trusted n8n host is open to automations.
-  notification-service (n8n webhooks, Expo push) still `fetch`es its env URLs with redirects followed, and
-  the door agent's HTTP relay driver follows redirects too (LAN, by design).
+  notification-service (n8n webhooks, Expo push) refuses redirects but does not run its env URLs through
+  the guard (the operator sets them); the door agent's HTTP relay driver follows redirects (LAN, by design).
 - Sessions: access tokens stay valid until they expire (≤ 15 min) after logout, password change,
   deactivation or demotion, on HTTP and on `/live`. A refresh answer lost and retried after the 30 s
   leeway signs the user out. A staff account signing in on the member app also ends its back-office
   sessions (the app logs it out).
 - QR rotation does not sign out a lost phone (no route yet to end a member's sessions), and the mobile
   pass does not refetch the key when the app comes back to the foreground.
-- Web client: `src/api/live.ts` reconnects even when the refresh failed (tight loop while auth-service is
-  down); `refreshSession` lacks the mobile guard, so a stale refresh after a password change in another
-  tab clears the new session.
+- Web client: a tab is not told when another tab signs out (no `storage` listener), so its live feed
+  stays offline and retries every 60 s until the page is reloaded.
 - Outside docker-compose, production does not require `REDIS_PASSWORD` / `NATS_TOKEN` (compose enforces
   bus auth), and a webhook delivery refused for missing keys is not resent once they are set. An old
   example `N8N_ENCRYPTION_KEY` is not detected (only n8n reads it).

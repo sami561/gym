@@ -52,6 +52,14 @@ Docs: https://docs.expo.dev/eas/index.md
   mirror directional glyphs with `mirrorInRTL`, and render text through `AppText` (it swaps in the Cairo
   font). Direction changes reload the app (`src/lib/direction.ts`); Expo Go cannot apply forced RTL.
 - Data access goes through the hooks in `src/hooks/queries.ts`; invalidate the related query keys after mutations.
+- Membership status (`membershipKind` in `src/components/MembershipCard.tsx`): `active`, `frozen`, `scheduled`
+  (paid in advance, not started yet: keys `membership.scheduled` and `membership.startsOn`), `expired`,
+  `suspended` or `none`. The card and the pass screen label it `membership.<kind>` (no placeholders) and colour
+  it with `membershipTone`. Once expired, the card shows the last non-cancelled subscription by end date
+  (`statusSubscription`), like the back-office member list.
+- Class booking follows class-service's boundaries: booking is closed from `bookingClosesAt` itself, and a
+  cancellation is late (a strike) from `cancelDeadline` itself (`now >=`). Use `classAction` and
+  `isLateCancellation` (`src/lib/classState.ts`), never an inline comparison.
 - Reanimated shared values: use `.get()` / `.set()` (React Compiler lint rule), and respect `useReducedMotion()`
   for looping animations.
 - Keep `src/lib/accessCode.ts` byte-for-byte compatible with `backend/libs/common/src/utils/access-code.ts`.

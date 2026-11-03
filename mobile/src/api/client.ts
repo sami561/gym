@@ -4,7 +4,10 @@ import type { AuthResult } from './types';
 
 const DEFAULT_URL = Platform.select({ android: 'http://10.0.2.2:4000', default: 'http://localhost:4000' });
 
-/** Gateway origin, e.g. http://192.168.1.20:4000 (all routes live under /api). */
+/**
+ * API origin, without /api (all routes live under it): the gateway itself (:4000) for a backend run locally, else
+ * the web container (http://<host>:8080) or the public HTTPS URL, whose nginx forwards /api to the gateway.
+ */
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL || DEFAULT_URL).replace(/\/+$/, '');
 
 export type ApiErrorKind = 'http' | 'network' | 'timeout' | 'session';

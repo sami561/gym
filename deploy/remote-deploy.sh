@@ -45,13 +45,23 @@ healthy() { # the gateway answers and every service is "up" (3 minutes max)
   return 1
 }
 
+prune_releases() { # older images of this environment only: the server may run other applications
+  local image tag
+  docker images --format '{{.Repository}}:{{.Tag}}' --filter "reference=$MELIORA_REGISTRY/meliora-*" |
+    while read -r image; do
+      tag=${image##*:}
+      [[ $tag == "${MELIORA_IMAGE_TAG%%-*}-"* && $tag != "$MELIORA_IMAGE_TAG" && $tag != "$previous" ]] || continue
+      docker rmi "$image" >/dev/null 2>&1 || true
+    done
+}
+
 previous=$(cat .deployed-tag 2>/dev/null || true)
 echo "Deploying $MELIORA_IMAGE_TAG as $COMPOSE_PROJECT_NAME (previous: ${previous:-none})"
 release "$MELIORA_IMAGE_TAG"
 if out=$(healthy); then
   echo "$MELIORA_IMAGE_TAG" > .deployed-tag
   echo "Healthy: $out"
-  docker image prune -af --filter "until=168h" >/dev/null || true
+  prune_releases
   exit 0
 fi
 
