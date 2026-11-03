@@ -1,4 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { formatDayFr, formatTimeFr } from './booking-policy';
 
 export const DAY_MS = 86_400_000;
 export const DEFAULT_CAPACITY = 20;
@@ -88,4 +89,82 @@ export function averageFillRate(sessions: { id: string; capacity: number }[], bo
   if (!sessions.length) return 0;
   const total = sessions.reduce((sum, s) => sum + Math.min(1, (booked.get(s.id) ?? 0) / Math.max(1, s.capacity)), 0);
   return Math.round((total / sessions.length) * 1000) / 1000;
+}
+
+/** Same minute: the back-office editor works to the minute, so seconds never count as a change. */
+export function sameMinute(a: Date, b: Date): boolean {
+  return Math.floor(a.getTime() / 60_000) === Math.floor(b.getTime() / 60_000);
+}
+
+export interface TimeSpan {
+  startsAt: Date;
+  endsAt: Date;
+}
+
+/**
+ * Moving or resizing a session: never one that already started (only the end of a session in progress
+ * may still move, and not into the past), never to a start in the past. Bookings that stay BOOKED after
+ * the end become NO_SHOW strikes, so a session must not be pushed back in time.
+ */
+export function assertReschedule(current: TimeSpan, next: TimeSpan, now: Date = new Date()): void {
+  const startMoves = !sameMinute(current.startsAt, next.startsAt);
+  const endMoves = !sameMinute(current.endsAt, next.endsAt);
+  if (!startMoves && !endMoves) return;
+  if (current.startsAt <= now) {
+    if (startMoves) throw new BadRequestException('Cette séance a déjà commencé : elle ne peut plus être déplacée.');
+    if (current.endsAt <= now) throw new BadRequestException('Cette séance est terminée : ses horaires ne peuvent plus changer.');
+    if (next.endsAt <= now) throw new BadRequestException('La fin de la séance ne peut pas être dans le passé.');
+    return;
+  }
+  if (next.startsAt <= now) throw new BadRequestException('Impossible de déplacer une séance dans le passé.');
+}
+
+/** What the planning needs to know about a session to detect a double booking. */
+export interface ScheduleSlot extends TimeSpan {
+  id?: string;
+  title: string;
+  room: string | null;
+  coachId: string | null;
+  coachName: string | null;
+}
+
+export interface ScheduleConflict {
+  kind: 'room' | 'coach';
+  other: ScheduleSlot;
+}
+
+/** Rooms are free text: compare without case, accents or extra spaces ("Studio " = "studio"). */
+export function roomKey(room: string | null | undefined): string {
+  return (room ?? '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function overlaps(a: TimeSpan, b: TimeSpan): boolean {
+  return a.startsAt < b.endsAt && b.startsAt < a.endsAt;
+}
+
+/**
+ * First session that overlaps `candidate` in the same room, else with the same coach (back-to-back
+ * sessions do not overlap). `others` may contain the candidate itself; it is skipped by id.
+ */
+export function findScheduleConflict(candidate: ScheduleSlot, others: ScheduleSlot[]): ScheduleConflict | null {
+  const clashing = others
+    .filter((other) => (candidate.id === undefined || other.id !== candidate.id) && overlaps(candidate, other))
+    .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  const room = roomKey(candidate.room);
+  const sameRoom = room ? clashing.find((other) => roomKey(other.room) === room) : undefined;
+  if (sameRoom) return { kind: 'room', other: sameRoom };
+  const sameCoach = candidate.coachId ? clashing.find((other) => other.coachId === candidate.coachId) : undefined;
+  return sameCoach ? { kind: 'coach', other: sameCoach } : null;
+}
+
+/** French message for a 409, with the other session's day and hours in the gym timezone. */
+export function scheduleConflictMessage({ kind, other }: ScheduleConflict): string {
+  const when = `le ${formatDayFr(other.startsAt)} de ${formatTimeFr(other.startsAt)} à ${formatTimeFr(other.endsAt)}`;
+  if (kind === 'room') return `La salle « ${(other.room ?? '').trim()} » est déjà prise par « ${other.title} » ${when}.`;
+  return `${other.coachName ?? 'Ce coach'} anime déjà « ${other.title} » ${when}.`;
 }
