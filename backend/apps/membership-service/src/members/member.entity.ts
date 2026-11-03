@@ -41,6 +41,14 @@ export class Member {
   @Column({ type: 'enum', enum: MemberStatus, default: MemberStatus.ACTIVE })
   status: MemberStatus;
 
+  /**
+   * Instant of the last photo upload (member_photos), null without photo. Written only by
+   * MemberPhotosService, in SQL: insert/update false keep save() from writing back a value loaded before a
+   * concurrent upload. Undefined on an entity just inserted.
+   */
+  @Column({ type: 'timestamptz', nullable: true, insert: false, update: false })
+  photoUpdatedAt: Date | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   joinedAt: Date;
 
