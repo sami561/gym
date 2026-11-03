@@ -36,6 +36,7 @@ fingerprints survive renewal. The agent only changes the users it manages
 taken over, administrators, enrollers and managers are never touched, and a member whose PIN belongs
 to another user is skipped (logged). Punch method per door (`punchMethod`). Terminals need Comm Key 0;
 ZK timeouts >= 2000 ms. Details: `door-agent/README.md` (ZKTECO).
+Turnstiles, face terminals (ZKTeco PUSH, Hikvision, Dahua), panels, QR readers at the lane and biometric-data rules: `docs/hardware/turnstile-integration.md`.
 
 ## Testing without hardware
 - `door-agent`: `npm run mock-server` (fake access-service + Shelly + ZKTeco) then `npm run dev`.
