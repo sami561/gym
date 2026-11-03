@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DndContext, useDraggable, useDroppable, type Announcements, type DragEndEvent, type DragMoveEvent } from '@dnd-kit/core';
 import { CalendarPlus, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -13,7 +13,7 @@ import { Tabs } from '../../../components/ui/Tabs';
 import { useToast } from '../../../components/ui/Toast';
 import { addDays, formatDate, formatNumber, formatTime, formatWeekday, fullName, isoDay, startOfWeek } from '../../../lib/format';
 import { POSITION_LABELS } from '../../../lib/labels-ops';
-import { DRAGGABLE_CLASS, pointerOrClosest, useCalendarSensors } from '../../calendar/dnd';
+import { DRAGGABLE_CLASS, fromKeyboard, pointerOrClosest, useCalendarSensors, useRefocusAfterDrop } from '../../calendar/dnd';
 import { hoursLabel, spanLabel } from '../../calendar/labels';
 import { minutesOfDay, moveSpan, sameSpan } from '../../calendar/slots';
 import { PositionLegend, ShiftTimeline, labelInk, usePositionColor, type ShiftMove } from './team';
@@ -248,6 +248,9 @@ function WeekBoard({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [target, setTarget] = useState<ShiftMove | null>(null);
   const targetRef = useRef<ShiftMove | null>(null);
+  // Shift dropped with the keyboard: its chip, created again in the new cell, takes the focus back.
+  const [refocusId, setRefocusId] = useState<string | null>(null);
+  const refocused = useCallback(() => setRefocusId(null), []);
 
   const compute = (event: DragMoveEvent | DragEndEvent): ShiftMove | null => {
     const shift = (event.active.data.current as { shift?: ShiftDto } | undefined)?.shift;
@@ -287,6 +290,7 @@ function WeekBoard({
       onDragStart={(event) => {
         targetRef.current = null;
         setTarget(null);
+        setRefocusId(null);
         setActiveId(String(event.active.id));
       }}
       onDragMove={(event) => remember(compute(event))}
@@ -295,7 +299,9 @@ function WeekBoard({
         const final = compute(event);
         targetRef.current = final;
         reset();
-        if (final) onMove(final);
+        if (!final) return;
+        if (fromKeyboard(event)) setRefocusId(final.shift.id);
+        onMove(final);
       }}
       onDragCancel={() => {
         targetRef.current = null;
@@ -350,12 +356,16 @@ function WeekBoard({
                             ink={labelInk(e.position)}
                             pending={pendingIds.has(s.id)}
                             dragging={activeId === s.id}
+                            refocus={refocusId === s.id}
+                            onRefocused={refocused}
                             onOpen={() => onOpen(s)}
                           />
                         ))}
+                        {/* Out of the flow: a ghost that made its row taller would move every row below
+                            away from the drop targets dnd-kit measured when the drag started. */}
                         {ghost && (
                           <span
-                            className="rounded-md px-1.5 py-1 text-[11px] leading-tight font-bold text-fg tabular"
+                            className="pointer-events-none absolute inset-x-0 bottom-0 z-10 rounded-md px-1.5 py-1 text-[11px] leading-tight font-bold text-fg tabular"
                             style={{ outline: `2px dashed ${color(e.position)}`, outlineOffset: -2, background: `color-mix(in srgb, ${color(e.position)} 25%, var(--card))` }}
                             aria-hidden
                           >
@@ -387,7 +397,7 @@ function WeekBoard({
 function DayCell({ employeeId, day, children }: { employeeId: string; day: Date; children: ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id: `cell:${employeeId}:${isoDay(day)}`, data: { employeeId, day } satisfies CellData });
   return (
-    <div ref={setNodeRef} className={clsx('flex h-full flex-col gap-1 rounded-md transition-shadow', isOver && 'ring-2 ring-fg-2/40')}>
+    <div ref={setNodeRef} className={clsx('relative flex h-full flex-col gap-1 rounded-md transition-shadow', isOver && 'ring-2 ring-fg-2/40')}>
       {children}
     </div>
   );
@@ -399,6 +409,8 @@ function ShiftChip({
   ink,
   pending,
   dragging,
+  refocus,
+  onRefocused,
   onOpen,
 }: {
   shift: ShiftDto;
@@ -406,15 +418,18 @@ function ShiftChip({
   ink: string;
   pending: boolean;
   dragging: boolean;
+  refocus: boolean;
+  onRefocused: () => void;
   onOpen: () => void;
 }) {
   const { t } = useI18n();
-  const { attributes, listeners, setNodeRef } = useDraggable({
+  const { attributes, listeners, setNodeRef, node } = useDraggable({
     id: shift.id,
     data: { shift },
     disabled: pending,
     attributes: { roleDescription: t('créneau déplaçable') },
   });
+  useRefocusAfterDrop(node, refocus, pending, onRefocused);
   const details = `${formatTime(shift.startsAt)}–${formatTime(shift.endsAt)}${shift.task ? `, ${shift.task}` : ''}${shift.roomName ? `, ${shift.roomName}` : ''}`;
   return (
     <button

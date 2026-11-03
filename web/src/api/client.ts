@@ -109,6 +109,8 @@ interface RequestOptions {
   /** Send the bearer token (default true). */
   auth?: boolean;
   signal?: AbortSignal;
+  /** Browser HTTP cache mode; 'no-store' keeps personal data (member photos) off the disk. */
+  cache?: RequestCache;
 }
 
 function buildUrl(path: string, query?: Query): string {
@@ -145,7 +147,7 @@ async function toApiError(res: Response): Promise<ApiError> {
  * replays it. Resolves the successful response, rejects with an ApiError.
  */
 async function request(path: string, options: RequestOptions): Promise<Response> {
-  const { method = 'GET', body, query, auth = true, signal } = options;
+  const { method = 'GET', body, query, auth = true, signal, cache } = options;
   const url = buildUrl(path, query);
   const form = body instanceof FormData ? body : null;
 
@@ -153,6 +155,7 @@ async function request(path: string, options: RequestOptions): Promise<Response>
     fetch(url, {
       method,
       signal,
+      cache,
       headers: {
         ...(body !== undefined && !form ? { 'Content-Type': 'application/json' } : {}),
         ...(auth && accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),

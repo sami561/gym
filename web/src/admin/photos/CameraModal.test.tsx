@@ -155,6 +155,55 @@ describe('CameraModal', () => {
     expect(screen.getByLabelText('dialog').textContent).toBe('open');
   });
 
+  it('stays open while the photo is being saved, so a late refusal is shown instead of lost', async () => {
+    let fail!: (reason: unknown) => void;
+    const onUse = vi.fn(
+      () =>
+        new Promise<void>((_, reject) => {
+          fail = reject;
+        }),
+    );
+    renderInLang(<Harness onUse={onUse} />);
+    await cameraShows();
+    fireEvent.click(button('Prendre la photo'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Utiliser cette photo' }));
+    await waitFor(() => expect(onUse).toHaveBeenCalled());
+
+    // Escape, the × button: ignored while the upload runs.
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Fermer' })[0]);
+    expect(screen.getByLabelText('dialog').textContent).toBe('open');
+
+    await act(async () => fail(new ApiError(0, ['Impossible de joindre le serveur. Vérifiez votre connexion.'])));
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Impossible de joindre le serveur.');
+    expect(screen.getByRole('img', { name: 'Photo prise' })).toBeTruthy();
+    // Once the refusal shows, the dialog closes again.
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByLabelText('dialog').textContent).toBe('closed');
+  });
+
+  it('gives the keyboard focus to the shutter once the camera shows', async () => {
+    renderInLang(<Harness />);
+    await cameraShows();
+
+    await waitFor(() => expect(document.activeElement).toBe(button('Prendre la photo')));
+    // Still there after the dialog's own first focus (next frame).
+    await act(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))));
+    expect(document.activeElement).toBe(button('Prendre la photo'));
+  });
+
+  it('keeps the focus in the dialog when the camera fails, then on the shutter after "Réessayer"', async () => {
+    getUserMedia.mockRejectedValueOnce(new DOMException('Permission denied', 'NotAllowedError'));
+    renderInLang(<Harness />);
+
+    await waitFor(() => expect(document.activeElement).toBe(button('Réessayer')));
+    fireEvent.click(button('Réessayer'));
+    await cameraShows();
+
+    await waitFor(() => expect(document.activeElement).toBe(button('Prendre la photo')));
+  });
+
   it('explains a refused permission, then tries again on request', async () => {
     getUserMedia.mockRejectedValueOnce(new DOMException('Permission denied', 'NotAllowedError'));
     renderInLang(<Harness onImport={() => undefined} />);

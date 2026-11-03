@@ -101,9 +101,13 @@ export const membersApi = {
     api<MemberAccessInfo>(`/api/members/${id}/card`, { method: 'PUT', body: { cardNumber } }),
   rotateAccessKey: (id: string) =>
     api<{ ok: true; rotatedAt: string }>(`/api/members/${id}/access-key/rotate`, { method: 'POST' }),
-  /** JPEG blob; `version` = Date.parse(photoUpdatedAt) makes the answer immutable. 404 = no photo. */
+  /**
+   * JPEG blob; `version` = Date.parse(photoUpdatedAt) makes the answer immutable. 404 = no photo. Never kept
+   * in the browser's HTTP cache (it would stay on disk, readable without a token, after sign-out): the
+   * react-query cache holds it in memory.
+   */
   photo: (id: string, version?: number, signal?: AbortSignal) =>
-    apiBlob(`/api/members/${id}/photo`, { query: { v: version }, signal }),
+    apiBlob(`/api/members/${id}/photo`, { query: { v: version }, signal, cache: 'no-store' }),
   /** A JPEG ≤ 512 KB prepared by src/lib/photo.ts, sent as the multipart field `photo`. */
   setPhoto: (id: string, photo: Blob) => {
     const form = new FormData();

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode } from 'react';
 import { DndContext, useDraggable, useDroppable, type Announcements, type DragEndEvent, type DragMoveEvent } from '@dnd-kit/core';
 import clsx from 'clsx';
 import type { AttendanceDto, EmployeePosition, ShiftDto } from '../../../api/types-ops';
@@ -7,9 +7,9 @@ import { POSITION_LABELS } from '../../../lib/labels-ops';
 import { ChartCard, DataTableMini, LegendKey } from '../../charts/ChartCard';
 import { useChartColors } from '../../charts/useChartColors';
 import { useI18n } from '../../../i18n';
-import { DRAGGABLE_CLASS, pointerOrClosest, useCalendarSensors } from '../../calendar/dnd';
+import { DRAGGABLE_CLASS, fromKeyboard, pointerOrClosest, useCalendarSensors, useRefocusAfterDrop } from '../../calendar/dnd';
 import { hoursLabel, spanLabel } from '../../calendar/labels';
-import { SLOT_MINUTES, dragStartMinute, durationMs, moveSpan, pxToMinutes, resizeSpan, type Move } from '../../calendar/slots';
+import { DAY_MINUTES, SLOT_MINUTES, dragStartMinute, durationMs, moveSpan, pxToMinutes, resizeSpan, type Move } from '../../calendar/slots';
 
 /** Fixed slot per position: colour follows the role, never the row order. */
 export const POSITION_ORDER: EmployeePosition[] = ['MANAGER', 'RECEPTION', 'COACH', 'CLEANING', 'MAINTENANCE', 'OTHER'];
@@ -128,6 +128,11 @@ export function ShiftTimeline({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [target, setTarget] = useState<ShiftMove | null>(null);
   const targetRef = useRef<ShiftMove | null>(null);
+  // Shift dropped with the keyboard on another row: its bar, created again there, takes the focus back.
+  const [refocusId, setRefocusId] = useState<string | null>(null);
+  const refocused = useCallback(() => setRefocusId(null), []);
+  // The shift editor works within one day: a drag never makes a shift end at midnight or later.
+  const lastEnd = Math.min(to * 60, DAY_MINUTES - SLOT_MINUTES);
   const pxPerMinute = () => {
     const track = listRef.current?.querySelector<HTMLElement>('[data-track]');
     return (track?.getBoundingClientRect().width || 600) / (span * 60);
@@ -141,10 +146,10 @@ export function ShiftTimeline({
     if (!data) return null;
     const { shift } = data;
     const deltaMinutes = pxToMinutes(event.delta.x, pxPerMinute(), 'x', axisDir());
-    if (data.resize) return { shift, employeeId: shift.employeeId, next: resizeSpan(shift, deltaMinutes, to * 60), resize: true };
+    if (data.resize) return { shift, employeeId: shift.employeeId, next: resizeSpan(shift, deltaMinutes, lastEnd), resize: true };
     const employeeId = event.over?.data.current?.employeeId as string | undefined;
     if (!employeeId) return null;
-    const minute = dragStartMinute(new Date(shift.startsAt), deltaMinutes, durationMs(shift) / 60_000, { min: from * 60, max: to * 60 });
+    const minute = dragStartMinute(new Date(shift.startsAt), deltaMinutes, durationMs(shift) / 60_000, { min: from * 60, max: lastEnd });
     return { shift, employeeId, next: moveSpan(shift, day, minute), resize: false };
   };
   const remember = (next: ShiftMove | null) => {
@@ -212,7 +217,14 @@ export function ShiftTimeline({
                   onClick: onShiftClick ? () => onShiftClick(s) : undefined,
                 };
                 return draggable ? (
-                  <DraggableBar key={s.id} {...bar} pending={pendingIds?.has(s.id) ?? false} dragging={activeId === s.id || activeId === `end:${s.id}`} />
+                  <DraggableBar
+                    key={s.id}
+                    {...bar}
+                    pending={pendingIds?.has(s.id) ?? false}
+                    dragging={activeId === s.id || activeId === `end:${s.id}`}
+                    refocus={refocusId === s.id}
+                    onRefocused={refocused}
+                  />
                 ) : (
                   <StaticBar key={s.id} {...bar} />
                 );
@@ -238,7 +250,7 @@ export function ShiftTimeline({
                 return (
                   <span
                     key={att.id}
-                    className="pointer-events-none absolute bottom-1.5 h-1 rounded-full"
+                    className="absolute bottom-1.5 h-1 rounded-full"
                     style={{ insetInlineStart: pct(a), width: width(a, Math.max(b, a + 0.05)), background: c.fg2 }}
                     title={t('Pointé {from}–{to}', { from: formatTime(att.clockIn), to: att.clockOut ? formatTime(att.clockOut) : t('en cours') })}
                   />
@@ -299,6 +311,7 @@ export function ShiftTimeline({
               onDragStart={(event) => {
                 targetRef.current = null;
                 setTarget(null);
+                setRefocusId(null);
                 setActiveId(String(event.active.id));
               }}
               onDragMove={(event) => remember(compute(event))}
@@ -307,7 +320,10 @@ export function ShiftTimeline({
                 const final = compute(event);
                 targetRef.current = final;
                 reset();
-                if (final) onShiftMove?.(final);
+                if (!final) return;
+                // A resize keeps the bar in its row: the end grip keeps the focus by itself.
+                if (!final.resize && fromKeyboard(event)) setRefocusId(final.shift.id);
+                onShiftMove?.(final);
               }}
               onDragCancel={() => {
                 targetRef.current = null;
@@ -382,14 +398,27 @@ function StaticBar({ label, title, style, fill, ink, onClick }: BarProps) {
   );
 }
 
-function DraggableBar({ shift, label, title, style, fill, ink, onClick, pending, dragging }: BarProps & { pending: boolean; dragging: boolean }) {
+function DraggableBar({
+  shift,
+  label,
+  title,
+  style,
+  fill,
+  ink,
+  onClick,
+  pending,
+  dragging,
+  refocus,
+  onRefocused,
+}: BarProps & { pending: boolean; dragging: boolean; refocus: boolean; onRefocused: () => void }) {
   const { t } = useI18n();
-  const { attributes, listeners, setNodeRef } = useDraggable({
+  const { attributes, listeners, setNodeRef, node } = useDraggable({
     id: shift.id,
     data: { shift } satisfies ShiftDragData,
     disabled: pending,
     attributes: { roleDescription: t('créneau déplaçable') },
   });
+  useRefocusAfterDrop(node, refocus, pending, onRefocused);
   return (
     <span className={clsx('group absolute top-1.5 h-5', dragging && 'opacity-35', pending && 'animate-pulse')} style={style}>
       <button

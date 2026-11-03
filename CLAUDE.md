@@ -83,6 +83,8 @@ docker compose up -d --build                                      # everything (
 - Gym phone, opening hours and exact GPS point are placeholders (env `GYM_*`) — confirm with the owner.
 - Pushing needs the SSH key loaded (`ssh-add --apple-use-keychain ~/.ssh/id_rsa`).
 - Logout does not yet remove the device's Expo push token.
+- Class reminders (`booking.reminder`) are an app push only: n8n workflow 01 has no branch for them, so a
+  member booked at the desk without the app is not reminded (nor told when the class moves).
 
 Still open after the security review (not fixed):
 - App door opening: `APP_OPEN_ALLOWED_NETWORKS` is empty by default (check off), so a faked GPS position

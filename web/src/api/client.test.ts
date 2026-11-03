@@ -510,6 +510,32 @@ describe('FormData bodies and binary answers', () => {
     const sentFile = (fetchMock.mock.calls[0][1]?.body as FormData).get('photo') as File;
     expect([sentFile.name, sentFile.type, sentFile.size]).toEqual(['photo.jpg', 'image/jpeg', 4]);
   });
+
+  it('keeps photos out of the browser HTTP cache, which would serve them without a token after sign-out', async () => {
+    const { membersApi } = await import('./endpoints');
+    client.session.set(tokens(1));
+    fetchMock.mockResolvedValueOnce(jpeg());
+    fetchMock.mockResolvedValueOnce(jpeg());
+    fetchMock.mockResolvedValueOnce(json(200, { data: [] }));
+
+    await membersApi.photo('m-1', 1793697300000);
+    await membersApi.photo('m-1');
+    await membersApi.list({ page: 1 });
+
+    expect(fetchMock.mock.calls.map(([, init]) => init?.cache)).toEqual(['no-store', 'no-store', undefined]);
+  });
+
+  it('also sends the replay of a photo request after a refresh with no-store', async () => {
+    const { membersApi } = await import('./endpoints');
+    client.session.set(tokens(1));
+    server.validToken = 'access-2';
+    server.refresh = () => json(200, tokens(2));
+
+    await membersApi.photo('m-1', 1793697300000);
+
+    const photoCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes('/photo'));
+    expect(photoCalls.map(([, init]) => init?.cache)).toEqual(['no-store', 'no-store']);
+  });
 });
 
 describe('errors', () => {

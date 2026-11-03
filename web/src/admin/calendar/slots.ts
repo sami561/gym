@@ -60,7 +60,9 @@ export function pxToMinutes(px: number, pxPerMinute: number, axis: 'x' | 'y' = '
 
 /**
  * Start minute (of the day) after dragging the start by `deltaMinutes`: snapped to a 15-minute slot and
- * kept inside [min, max − duration] so the span stays in the visible range of the day.
+ * kept inside [min, max − duration] so the span stays in the visible range of the day. A span that already
+ * ends after `max` (a night shift running past midnight) keeps its start as the latest one: picking it up
+ * never pulls it back into the day.
  */
 export function dragStartMinute(
   originalStart: Date,
@@ -68,9 +70,11 @@ export function dragStartMinute(
   durationMinutes: number,
   bounds: { min: number; max: number } = { min: 0, max: DAY_MINUTES },
 ): number {
-  const snapped = snapToSlot(minutesOfDay(originalStart) + deltaMinutes);
+  const start = minutesOfDay(originalStart);
+  const snapped = snapToSlot(start + deltaMinutes);
   const earliest = Math.ceil(bounds.min / SLOT_MINUTES) * SLOT_MINUTES;
-  const latest = Math.floor((bounds.max - durationMinutes) / SLOT_MINUTES) * SLOT_MINUTES;
+  const max = Math.max(bounds.max, start + durationMinutes);
+  const latest = Math.floor((max - durationMinutes) / SLOT_MINUTES) * SLOT_MINUTES;
   return Math.max(earliest, Math.min(Math.max(earliest, latest), snapped));
 }
 
@@ -82,7 +86,8 @@ export function moveSpan(span: Span, day: Date, startMinute: number): Move {
 
 /**
  * The span with its end dragged by `deltaMinutes`: snapped to a slot, at least one slot after the start
- * and at most `maxMinute` of the start's day (1440 = midnight).
+ * and at most `maxMinute` of the start's day (1440 = midnight), or its current end when that is later
+ * (a span past midnight can be shortened, never cut when its end is picked up).
  */
 export function resizeSpan(span: Span, deltaMinutes: number, maxMinute = DAY_MINUTES): Move {
   const startsAt = new Date(span.startsAt);
@@ -90,7 +95,7 @@ export function resizeSpan(span: Span, deltaMinutes: number, maxMinute = DAY_MIN
   const day = startOfLocalDay(startsAt);
   const endMinute = calendarDayDiff(day, end) * DAY_MINUTES + minutesOfDay(end);
   const shortest = minutesOfDay(startsAt) + SLOT_MINUTES;
-  const next = Math.max(shortest, Math.min(maxMinute, snapToSlot(endMinute + deltaMinutes)));
+  const next = Math.max(shortest, Math.min(Math.max(maxMinute, endMinute), snapToSlot(endMinute + deltaMinutes)));
   return { startsAt, endsAt: atDayMinutes(day, next) };
 }
 

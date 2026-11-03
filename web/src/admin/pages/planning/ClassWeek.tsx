@@ -390,13 +390,16 @@ function SessionBlock({
           </>
         )}
       </button>
-      {movable && height >= 30 && <EndHandle session={session} />}
+      {movable && <EndHandle session={session} thin={height < 30} />}
     </div>
   );
 }
 
-/** Bottom edge: drag (or Space then ↑ ↓) to change the end time. */
-function EndHandle({ session }: { session: ClassSessionDto }) {
+/**
+ * Bottom edge: drag (or Space then ↑ ↓) to change the end time. On short blocks (30 minutes or less) it is
+ * a thinner strip, so most of the block is still there to move it.
+ */
+function EndHandle({ session, thin }: { session: ClassSessionDto; thin: boolean }) {
   const { t } = useI18n();
   const { attributes, listeners, setNodeRef } = useDraggable({
     id: `end:${session.id}`,
@@ -411,11 +414,12 @@ function EndHandle({ session }: { session: ClassSessionDto }) {
       {...listeners}
       aria-label={t('Heure de fin de {title} : {time}', { title: session.title, time: formatTime(session.endsAt) })}
       className={clsx(
-        'absolute inset-x-1 bottom-0 flex h-2.5 cursor-ns-resize items-end justify-center rounded-b-md opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100',
+        'absolute inset-x-1 bottom-0 flex cursor-ns-resize items-end justify-center rounded-b-md opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100',
+        thin ? 'h-1.5' : 'h-2.5',
         DRAGGABLE_CLASS,
       )}
     >
-      <span className="mb-0.5 h-1 w-6 rounded-full bg-fg/45" aria-hidden />
+      <span className={clsx('w-6 rounded-full bg-fg/45', thin ? 'mb-px h-0.5' : 'mb-0.5 h-1')} aria-hidden />
     </button>
   );
 }

@@ -30,6 +30,20 @@ describe('todayHours (hero "open today" line)', () => {
     expect(todayHours(FALLBACK_GYM.openingHours)).toBe('06:00 – 22:00');
   });
 
+  // Tests run in Tunis (vite.config.ts), where the device day and the gym day are the same: these move the
+  // device elsewhere, so code reading the device's day fails here.
+  it('follows the day in Tunis on a device in Toronto', () => {
+    vi.stubEnv('TZ', 'America/Toronto');
+    at('2026-11-07T23:30:00Z'); // Saturday 18:30 in Toronto, Sunday 00:30 in Tunis
+    expect(todayHours(FALLBACK_GYM.openingHours)).toBe('08:00 – 14:00');
+  });
+
+  it('follows the day in Tunis on a device in Paris in summer', () => {
+    vi.stubEnv('TZ', 'Europe/Paris');
+    at('2026-06-27T22:30:00Z'); // Sunday 00:30 in Paris, still Saturday 23:30 in Tunis
+    expect(todayHours(FALLBACK_GYM.openingHours)).toBe('06:00 – 22:00');
+  });
+
   it('understands English day names from the API', () => {
     at('2026-03-15T09:00:00Z');
     const hours = [

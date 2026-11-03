@@ -1,16 +1,15 @@
 import { useMemo } from 'react';
 import { useI18n } from '../../lib/i18n';
 import { formatDate } from '../../lib/format';
-import { GYM_TIME_ZONE, gymClock, gymDay, gymNoon } from '../../lib/gymTime';
+import { GYM_TIME_ZONE, gymClock, gymNoon } from '../../lib/gymTime';
 import { scheduleDays } from '../scheduleDays';
-import { usePublicClasses } from '../useLandingData';
+import { useGymToday, usePublicClasses } from '../useLandingData';
 
 export function Schedule() {
   const { t } = useI18n();
-  const query = usePublicClasses();
-
-  // The page re-renders with each refetch (every minute), so the week also moves on after midnight.
-  const today = gymDay(new Date());
+  // One day for the request and the columns: both move on at midnight in Tunis, even with no new data.
+  const today = useGymToday();
+  const query = usePublicClasses(today);
   const days = useMemo(() => scheduleDays(query.data ?? [], gymNoon(today)), [query.data, today]);
 
   const total = days.reduce((sum, d) => sum + d.sessions.length, 0);
