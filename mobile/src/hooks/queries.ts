@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Image } from 'expo-image';
 import { meApi, publicApi } from '@/api/endpoints';
-import type { CreateBookingRequest, CreateMeasurementRequest, UpdateMeRequest } from '@/api/types';
+import type { CreateBookingRequest, CreateMeasurementRequest, MemberDto, MeResponse, UpdateMeRequest } from '@/api/types';
 import { addDays, startOfDay } from '@/lib/format';
+import { memberPhotoCacheKey } from '@/lib/memberPhoto';
 
 export const queryKeys = {
   me: ['me'] as const,
@@ -133,6 +135,38 @@ export function useUpdateMe() {
     mutationFn: (body: UpdateMeRequest) => meApi.update(body),
     onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.me }),
   });
+}
+
+/** A photo change answers the member: show it at once (new photoUpdatedAt), then refetch the profile. */
+function useSetMember() {
+  const client = useQueryClient();
+  return (member: MemberDto) => {
+    client.setQueryData<MeResponse>(
+      queryKeys.me,
+      (me) => me && { ...me, profile: { ...me.profile, member: { ...me.profile.member, ...member } } },
+    );
+    client.invalidateQueries({ queryKey: queryKeys.me });
+  };
+}
+
+/** PUT /api/me/photo with the local JPEG made by preparePhoto (src/lib/preparePhoto.ts). */
+export function useUploadPhoto() {
+  const setMember = useSetMember();
+  return useMutation({
+    mutationFn: async (uri: string) => {
+      const member = await meApi.uploadPhoto(uri);
+      // Seed expo-image's cache with the file just sent: the new photo shows at once, without downloading it back.
+      const cacheKey = memberPhotoCacheKey(member);
+      if (cacheKey) await Image.writeToCacheAsync(uri, cacheKey).catch(() => undefined);
+      return member;
+    },
+    onSuccess: setMember,
+  });
+}
+
+export function useDeletePhoto() {
+  const setMember = useSetMember();
+  return useMutation({ mutationFn: () => meApi.deletePhoto(), onSuccess: setMember });
 }
 
 export function useAddMeasurement() {

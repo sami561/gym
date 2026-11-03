@@ -1,3 +1,4 @@
+import { photoFormData } from '@/lib/memberPhoto';
 import { api } from './client';
 import type {
   AccessDecision,
@@ -66,6 +67,13 @@ export const meApi = {
   addMeasurement: (body: CreateMeasurementRequest) =>
     api<MeasurementDto>('/me/measurements', { method: 'POST', body }),
   ptSessions: () => api<PtSessionDto[]>('/me/pt-sessions'),
+  /**
+   * New photo from a local JPEG prepared by preparePhoto (600×600, at most 512 KB). The answer carries the new
+   * photoUpdatedAt; the photo itself is loaded through memberPhotoSource (src/lib/memberPhoto.ts).
+   */
+  uploadPhoto: async (uri: string) =>
+    api<MemberDto>('/me/photo', { method: 'PUT', form: await photoFormData(uri), timeoutMs: 30_000 }),
+  deletePhoto: () => api<MemberDto>('/me/photo', { method: 'DELETE' }),
 };
 
 export const publicApi = {
