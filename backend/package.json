@@ -32,7 +32,7 @@
     "@nestjs/websockets": "11.2.8",
     "bcryptjs": "^3.0.2",
     "class-transformer": "0.5.1",
-    "class-validator": "^0.14.2",
+    "class-validator": "^0.15.1",
     "cron": "4.4.0",
     "dotenv": "^16.4.7",
     "helmet": "^8.1.0",
@@ -54,8 +54,8 @@
     "@types/jest": "^29.5.14",
     "@types/node": "^20.17.0",
     "concurrently": "^9.1.2",
-    "eslint": "10.13.0",
-    "globals": "17.13.0",
+    "eslint": "10.14.0",
+    "globals": "17.14.0",
     "jest": "^29.7.0",
     "socket.io-client": "^4.8.1",
     "ts-jest": "^29.3.2",
@@ -63,7 +63,7 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.8.3",
-    "typescript-eslint": "8.72.0"
+    "typescript-eslint": "8.72.1"
   },
   "overrides": {
     "multer": "2.5.0",
